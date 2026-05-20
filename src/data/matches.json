@@ -1,0 +1,174 @@
+{
+  "matchDay": "2026-06-18",
+  "updatedAt": "2026-06-18T12:00:00+08:00",
+  "sourceNote": "MVP 本地模拟赛程、赔率与比分，不连接真实赔率 API。",
+  "matches": [
+    {
+      "id": "m-001",
+      "kickoff": "2026-06-18T10:00:00+08:00",
+      "status": "finished",
+      "stage": "小组赛 A 组",
+      "venue": "洛杉矶",
+      "homeTeamId": "france",
+      "awayTeamId": "usa",
+      "score": {
+        "home": 2,
+        "away": 0
+      },
+      "odds": {
+        "home": 1.55,
+        "draw": 4.1,
+        "away": 6.3,
+        "over25": 1.82,
+        "under25": 2.02
+      },
+      "contextRisk": 34,
+      "headline": "法国控制转换节奏，美国主场变量被压低"
+    },
+    {
+      "id": "m-002",
+      "kickoff": "2026-06-18T11:30:00+08:00",
+      "status": "finished",
+      "stage": "小组赛 B 组",
+      "venue": "休斯敦",
+      "homeTeamId": "brazil",
+      "awayTeamId": "japan",
+      "score": {
+        "home": 1,
+        "away": 1
+      },
+      "odds": {
+        "home": 1.62,
+        "draw": 4.0,
+        "away": 5.8,
+        "over25": 1.78,
+        "under25": 2.08
+      },
+      "contextRisk": 53,
+      "headline": "巴西热度偏高，日本反击效率制造冷门窗口"
+    },
+    {
+      "id": "m-003",
+      "kickoff": "2026-06-18T13:00:00+08:00",
+      "status": "finished",
+      "stage": "小组赛 C 组",
+      "venue": "墨西哥城",
+      "homeTeamId": "argentina",
+      "awayTeamId": "mexico",
+      "score": {
+        "home": 2,
+        "away": 1
+      },
+      "odds": {
+        "home": 1.68,
+        "draw": 3.8,
+        "away": 5.4,
+        "over25": 1.86,
+        "under25": 1.98
+      },
+      "contextRisk": 46,
+      "headline": "阿根廷经验优势明显，墨西哥主场情绪拉高波动"
+    },
+    {
+      "id": "m-004",
+      "kickoff": "2026-06-18T16:00:00+08:00",
+      "status": "live",
+      "stage": "小组赛 D 组",
+      "venue": "达拉斯",
+      "homeTeamId": "england",
+      "awayTeamId": "netherlands",
+      "score": {
+        "home": 1,
+        "away": 0
+      },
+      "odds": {
+        "home": 2.18,
+        "draw": 3.25,
+        "away": 3.45,
+        "over25": 1.92,
+        "under25": 1.92
+      },
+      "contextRisk": 58,
+      "headline": "英格兰中前场压制，荷兰防线仍有反击筹码"
+    },
+    {
+      "id": "m-005",
+      "kickoff": "2026-06-18T18:30:00+08:00",
+      "status": "scheduled",
+      "stage": "小组赛 E 组",
+      "venue": "西雅图",
+      "homeTeamId": "spain",
+      "awayTeamId": "germany",
+      "score": null,
+      "odds": {
+        "home": 2.55,
+        "draw": 3.2,
+        "away": 2.85,
+        "over25": 1.88,
+        "under25": 1.96
+      },
+      "contextRisk": 62,
+      "headline": "西班牙控球对德国反击，强强对话价格接近"
+    },
+    {
+      "id": "m-006",
+      "kickoff": "2026-06-18T20:00:00+08:00",
+      "status": "scheduled",
+      "stage": "小组赛 F 组",
+      "venue": "迈阿密",
+      "homeTeamId": "portugal",
+      "awayTeamId": "uruguay",
+      "score": null,
+      "odds": {
+        "home": 2.25,
+        "draw": 3.3,
+        "away": 3.25,
+        "over25": 1.84,
+        "under25": 2.0
+      },
+      "contextRisk": 49,
+      "headline": "葡萄牙阵容深度对乌拉圭高压，节奏强度偏高"
+    },
+    {
+      "id": "m-007",
+      "kickoff": "2026-06-18T22:00:00+08:00",
+      "status": "scheduled",
+      "stage": "小组赛 G 组",
+      "venue": "纽约",
+      "homeTeamId": "france",
+      "awayTeamId": "brazil",
+      "score": null,
+      "odds": {
+        "home": 2.65,
+        "draw": 3.2,
+        "away": 2.7,
+        "over25": 1.78,
+        "under25": 2.06
+      },
+      "contextRisk": 70,
+      "headline": "两大热门正面对冲，盘口价值需要严格过滤"
+    },
+    {
+      "id": "m-008",
+      "kickoff": "2026-06-18T23:30:00+08:00",
+      "status": "live",
+      "stage": "小组赛 H 组",
+      "venue": "温哥华",
+      "homeTeamId": "usa",
+      "awayTeamId": "japan",
+      "score": {
+        "home": 0,
+        "away": 0
+      },
+      "odds": {
+        "home": 2.9,
+        "draw": 3.1,
+        "away": 2.55,
+        "over25": 2.05,
+        "under25": 1.78
+      },
+      "contextRisk": 44,
+      "headline": "美国主场加成对日本体系稳定性，客队价格有观察价值"
+    }
+  ]
+}

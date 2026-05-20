@@ -1,0 +1,70 @@
+{
+  "updatedAt": "2026-06-18T12:00:00+08:00",
+  "sourceNote": "MVP 本地模拟赛前推荐与投注记录，不连接真实账户或数据库。",
+  "records": [
+    {
+      "id": "b-001",
+      "matchId": "m-001",
+      "preMatchRecommendation": "home",
+      "stakeUnits": 1,
+      "note": "法国综合强度和防守稳定性明显高于美国，主胜价值仍可接受。",
+      "reviewNote": "法国早段压制成功，模型对强弱差的判断有效。"
+    },
+    {
+      "id": "b-002",
+      "matchId": "m-002",
+      "preMatchRecommendation": "away",
+      "stakeUnits": 1,
+      "note": "日本客胜赔率偏高，模型识别到客队状态价值。",
+      "reviewNote": "日本没有赢球但打出冷门阻力，方向过于激进，后续应优先拆分到受让盘。"
+    },
+    {
+      "id": "b-003",
+      "matchId": "m-003",
+      "preMatchRecommendation": "home",
+      "stakeUnits": 1,
+      "note": "阿根廷经验优势明显，墨西哥伤病和状态波动偏高。",
+      "reviewNote": "阿根廷主胜命中，淘汰赛经验和比赛管理因子有效。"
+    },
+    {
+      "id": "b-004",
+      "matchId": "m-004",
+      "preMatchRecommendation": "home",
+      "stakeUnits": 0.8,
+      "note": "英格兰中前场状态更好，但荷兰防守强度使风险维持中等。",
+      "reviewNote": "比赛进行中，等待终场结算。"
+    },
+    {
+      "id": "b-005",
+      "matchId": "m-005",
+      "preMatchRecommendation": "noBet",
+      "stakeUnits": 0,
+      "note": "西班牙与德国盘口接近，最高价值差不足下注阈值。",
+      "reviewNote": "赛前观望。"
+    },
+    {
+      "id": "b-006",
+      "matchId": "m-006",
+      "preMatchRecommendation": "away",
+      "stakeUnits": 0.7,
+      "note": "乌拉圭高压和近期状态被盘口低估，小仓博取价值差。",
+      "reviewNote": "待赛后复盘。"
+    },
+    {
+      "id": "b-007",
+      "matchId": "m-007",
+      "preMatchRecommendation": "noBet",
+      "stakeUnits": 0,
+      "note": "法国与巴西强强对话波动大，价格未给出足够价值。",
+      "reviewNote": "赛前观望。"
+    },
+    {
+      "id": "b-008",
+      "matchId": "m-008",
+      "preMatchRecommendation": "away",
+      "stakeUnits": 0.6,
+      "note": "日本体系稳定性和疲劳优势优于美国，客胜方向有小仓价值。",
+      "reviewNote": "比赛进行中，等待终场结算。"
+    }
+  ]
+}
