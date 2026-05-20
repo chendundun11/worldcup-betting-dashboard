@@ -1,4 +1,4 @@
-﻿import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Activity,
   BarChart3,
@@ -12,8 +12,8 @@ import {
   WalletCards,
 } from 'lucide-react'
 import betHistoryData from './data/betHistory.json'
-import matchesData from './data/matches.json'
 import teamsData from './data/teams.json'
+import { getInitialMatchSnapshot, getMatches } from './services/matchApi'
 import {
   applyFinishedMatchAdjustments,
   applyFinishedMatchAdjustmentsBefore,
@@ -106,8 +106,15 @@ function cloneTeams(teams) {
 function cloneMatches(matches) {
   return matches.map((match) => ({
     ...match,
+    kickoff: match.kickoff ?? match.kickoffTime,
+    kickoffTime: match.kickoffTime ?? match.kickoff,
+    homeTeamId: match.homeTeamId ?? match.homeTeam,
+    awayTeamId: match.awayTeamId ?? match.awayTeam,
+    homeTeam: match.homeTeam ?? match.homeTeamId,
+    awayTeam: match.awayTeam ?? match.awayTeamId,
     odds: { ...DEFAULT_TOTAL_GOALS_ODDS, ...match.odds },
     score: match.score ? { ...match.score } : null,
+    contextRisk: match.contextRisk ?? 50,
   }))
 }
 
@@ -683,11 +690,26 @@ function App() {
   const [selectedMatchId, setSelectedMatchId] = useState('m-004')
   const [analysisPhase, setAnalysisPhase] = useState('done')
   const [lastAnalyzedAt, setLastAnalyzedAt] = useState(() => new Date())
+  const [matchDataset, setMatchDataset] = useState(() => getInitialMatchSnapshot())
+
+  useEffect(() => {
+    let isMounted = true
+
+    getMatches().then((nextMatchDataset) => {
+      if (isMounted) setMatchDataset(nextMatchDataset)
+    })
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   const dashboard = useMemo(() => {
     const baseTeams = cloneTeams(teamsData.teams)
-    const baseMatches = cloneMatches(matchesData.matches)
+    const baseMatches = cloneMatches(matchDataset.matches)
     const baseRecords = cloneRecords(betHistoryData.records)
+    const currentMatchDay =
+      matchDataset.matchDay || baseMatches[0]?.kickoff?.slice(0, 10) || ''
     const { adjustedTeams, adjustmentRows } = applyFinishedMatchAdjustments(
       baseTeams,
       baseMatches,
@@ -777,7 +799,7 @@ function App() {
       beginnerNotes: buildBeginnerNotes(match),
     }))
     const todayMatches = matchesWithNotes.filter((match) =>
-      match.kickoff.startsWith(matchesData.matchDay),
+      currentMatchDay ? match.kickoff.startsWith(currentMatchDay) : true,
     )
     const finishedMatches = todayMatches.filter((match) => match.status === 'finished')
     const settledBets = matchesWithNotes.filter(
@@ -812,11 +834,32 @@ function App() {
       adjustmentRows,
       reviewMatches: matchesWithNotes.filter((match) => match.status === 'finished'),
     }
-  }, [])
+  }, [matchDataset])
 
   const selectedMatch =
     dashboard.matches.find((match) => match.id === selectedMatchId) ??
     dashboard.matches[0]
+
+  if (!selectedMatch) {
+    return (
+      <main className="rookie-dashboard">
+        <section className="hero-card">
+          <div className="hero-copy">
+            <div className="eyebrow">
+              <Activity size={16} />
+              AI LIVE ENGINE
+            </div>
+            <h1>AI比赛分析引擎</h1>
+            <p>比赛数据暂时不可用，系统正在使用安全回退。</p>
+          </div>
+        </section>
+        <footer className="risk-footer">
+          本工具仅用于数据分析和娱乐参考，不构成投资或投注建议。请遵守当地法律法规，理性参与，控制风险。
+        </footer>
+      </main>
+    )
+  }
+
   const isAnalyzing = analysisPhase !== 'done'
   const selectedConfidence = getAiConfidence(selectedMatch)
   const selectedSignalStrength = getSignalStrength(selectedConfidence)
