@@ -379,6 +379,13 @@
   letter-spacing: -0.06em;
 }
 
+.quick-kickoff-time {
+  margin: 12px 0 0;
+  color: var(--text-soft);
+  font-size: 14px;
+  font-weight: 900;
+}
+
 .quick-recommendation {
   padding: 22px;
   border: 1px solid rgba(45, 212, 191, 0.28);

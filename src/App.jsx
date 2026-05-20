@@ -41,14 +41,16 @@ const DEFAULT_TOTAL_GOALS_ODDS = {
 }
 
 const riskProfiles = {
-  low: { label: '低风险', stake: '0.5u - 1u' },
-  medium: { label: '中风险', stake: '0.2u - 0.5u' },
-  high: { label: '高风险', stake: '0.1u - 0.2u' },
-  none: { label: '不下注', stake: '0u' },
+  low: { label: '低风险', stake: '中等参考' },
+  medium: { label: '中风险', stake: '中等参考' },
+  high: { label: '高风险', stake: '轻度参考' },
+  none: { label: '观望', stake: '参与建议：观望' },
 }
 
-const NO_ODDS_REASON = '暂无赔率，等待盘口数据'
-const NO_ODDS_RECOMMENDATION_LABEL = '暂不推荐'
+const NO_ODDS_REASON =
+  '暂无赔率，当前为赛前基础面初判，等待盘口确认后更新推荐强度。'
+const NO_ODDS_RECOMMENDATION_LABEL = '赛前初判，等待盘口确认'
+const SCORE_REFERENCE_NOTICE = '比分玩法波动大，仅适合极小仓娱乐参考。'
 
 const neutralTeamProfile = {
   confederation: '',
@@ -60,6 +62,57 @@ const neutralTeamProfile = {
   injuryRisk: 50,
   fatigue: 50,
   morale: 50,
+}
+
+const teamNameMap = {
+  Mexico: '墨西哥',
+  'South Africa': '南非',
+  'South Korea': '韩国',
+  Czechia: '捷克',
+  Canada: '加拿大',
+  'Bosnia-Herzegovina': '波黑',
+  'United States': '美国',
+  Paraguay: '巴拉圭',
+  Qatar: '卡塔尔',
+  Switzerland: '瑞士',
+  Brazil: '巴西',
+  Morocco: '摩洛哥',
+  Haiti: '海地',
+  Scotland: '苏格兰',
+  Australia: '澳大利亚',
+  Turkey: '土耳其',
+  Germany: '德国',
+  Curaçao: '库拉索',
+  Netherlands: '荷兰',
+  Japan: '日本',
+  'Ivory Coast': '科特迪瓦',
+  Ecuador: '厄瓜多尔',
+  Sweden: '瑞典',
+  Tunisia: '突尼斯',
+  Spain: '西班牙',
+  'Cape Verde Islands': '佛得角',
+  Belgium: '比利时',
+  Egypt: '埃及',
+  'Saudi Arabia': '沙特阿拉伯',
+  Uruguay: '乌拉圭',
+  Iran: '伊朗',
+  'New Zealand': '新西兰',
+  France: '法国',
+  Senegal: '塞内加尔',
+  Iraq: '伊拉克',
+  Norway: '挪威',
+  Argentina: '阿根廷',
+  Algeria: '阿尔及利亚',
+  Austria: '奥地利',
+  Jordan: '约旦',
+  Portugal: '葡萄牙',
+  'Congo DR': '刚果民主共和国',
+  England: '英格兰',
+  Croatia: '克罗地亚',
+  Ghana: '加纳',
+  Panama: '巴拿马',
+  Uzbekistan: '乌兹别克斯坦',
+  Colombia: '哥伦比亚',
 }
 
 const statusConfig = {
@@ -169,15 +222,21 @@ function hasVisibleTeams(match) {
   return Boolean(getTeamDisplaySeed(match, 'home') && getTeamDisplaySeed(match, 'away'))
 }
 
+function getDisplayTeamName(teamName) {
+  const name = String(teamName ?? '').trim()
+  return teamNameMap[name] ?? name
+}
+
 function createTeamProfile(teamId, displayName, localTeam) {
-  const name = displayName || localTeam?.name || teamId
+  const mappedDisplayName = getDisplayTeamName(displayName)
+  const name = mappedDisplayName || localTeam?.name || teamId
 
   return {
     ...neutralTeamProfile,
     ...localTeam,
     id: teamId,
     name,
-    shortName: displayName || localTeam?.shortName || name,
+    shortName: mappedDisplayName || localTeam?.shortName || name,
   }
 }
 
@@ -219,17 +278,29 @@ function formatPointDiff(value) {
 
 function formatUnits(value) {
   const sign = value > 0 ? '+' : ''
-  return `${sign}${value.toFixed(2)}u`
+  return `${sign}${value.toFixed(2)}`
 }
 
 function formatKickoff(value) {
-  return new Intl.DateTimeFormat('zh-CN', {
+  const kickoffDate = new Date(value)
+
+  if (Number.isNaN(kickoffDate.getTime())) return '北京时间 --/-- --:--'
+
+  const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: 'Asia/Shanghai',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
-  }).format(new Date(value))
+    hourCycle: 'h23',
+  }).formatToParts(kickoffDate)
+  const dateParts = Object.fromEntries(
+    parts
+      .filter((part) => part.type !== 'literal')
+      .map((part) => [part.type, part.value]),
+  )
+
+  return `北京时间 ${dateParts.month}/${dateParts.day} ${dateParts.hour}:${dateParts.minute}`
 }
 
 function formatClock(value) {
@@ -444,7 +515,7 @@ function calculateRisk(match, homeTeam, awayTeam, model, recommendation) {
       level: '高',
       tone: 'high',
       score,
-      note: '两队差距接近，伤病或赛程状态波动叠加，建议降低仓位。',
+      note: '两队差距接近，伤病或赛程状态波动叠加，建议降低参与强度。',
     }
   }
 
@@ -566,18 +637,18 @@ function buildMultiMarketSummary(
 ) {
   const primary =
     recommendation.direction !== 'noBet'
-      ? `${recommendation.label}（${wdlProfile.label} / ${wdlProfile.stake}）`
+      ? `${recommendation.label}（${wdlProfile.label}）`
       : totalGoalsRecommendation.direction !== 'noBet'
-        ? `${totalGoalsRecommendation.label}（${totalGoalsRecommendation.profile.label} / ${totalGoalsRecommendation.profile.stake}）`
-        : `不下注（${riskProfiles.none.stake}）`
+        ? `${totalGoalsRecommendation.label}（${totalGoalsRecommendation.profile.label}）`
+        : '观望为主'
   const secondary =
     totalGoalsRecommendation.direction !== 'noBet' &&
     recommendation.direction !== 'noBet'
-      ? `${totalGoalsRecommendation.label}可作次选（${totalGoalsRecommendation.profile.label} / ${totalGoalsRecommendation.profile.stake}）`
-      : `${conservativeAdvice.text}（${conservativeAdvice.profile.label} / ${conservativeAdvice.profile.stake}）`
+      ? `${totalGoalsRecommendation.label}可作次选（${totalGoalsRecommendation.profile.label}）`
+      : `${conservativeAdvice.text}（${conservativeAdvice.profile.label}）`
   const scoreEntertainment = `${scoreLeans
     .map((scoreLean) => scoreLean.score)
-    .join(' / ')}，比分玩法高赔率低命中，只适合极小仓娱乐，不建议重仓。`
+    .join(' / ')}，${SCORE_REFERENCE_NOTICE}`
   const warning = `${formatRiskLabel(risk)}；只做参考，不保证盈利；娱乐比分波动高。`
 
   return { primary, secondary, scoreEntertainment, warning }
@@ -627,7 +698,7 @@ function createNoOddsAnalysis(homeTeam, awayTeam) {
     note: NO_ODDS_REASON,
   }
   const conservativeAdvice = {
-    text: NO_ODDS_REASON,
+    text: '等待盘口确认后更新',
     riskTone: 'none',
     profile: riskProfiles.none,
   }
@@ -638,18 +709,15 @@ function createNoOddsAnalysis(homeTeam, awayTeam) {
     recommendation,
     risk,
     scoreLeans: [
-      {
-        score: NO_ODDS_RECOMMENDATION_LABEL,
-        tendency: '待观察',
-        riskTone: 'none',
-        profile: riskProfiles.none,
-      },
+      { score: '1-0', tendency: '赛前参考', riskTone: 'none', profile: riskProfiles.none },
+      { score: '1-1', tendency: '赛前参考', riskTone: 'none', profile: riskProfiles.none },
+      { score: '2-1', tendency: '赛前参考', riskTone: 'none', profile: riskProfiles.none },
     ],
     conservativeAdvice,
     multiMarketSummary: {
       primary: NO_ODDS_RECOMMENDATION_LABEL,
-      secondary: `${NO_ODDS_REASON}（${riskProfiles.none.label} / ${riskProfiles.none.stake}）`,
-      scoreEntertainment: NO_ODDS_REASON,
+      secondary: NO_ODDS_REASON,
+      scoreEntertainment: `1-0 / 1-1 / 2-1，${SCORE_REFERENCE_NOTICE}`,
       warning: `待观察；${NO_ODDS_REASON}。`,
     },
     totalGoals: {
@@ -696,13 +764,42 @@ function getScoreText(match) {
   return `${match.score.home} - ${match.score.away}`
 }
 
-function getPrimaryStake(match) {
-  if (!hasWdlOdds(match.odds)) return riskProfiles.none.stake
-  if (match.recommendation.direction !== 'noBet') return match.wdlProfile.stake
+function getRecommendationStrength(match) {
+  if (!hasWdlOdds(match.odds)) return '轻度参考 / 等待盘口确认'
+  if (match.recommendation.direction !== 'noBet') return '中等参考'
   if (match.totalGoals.recommendation.direction !== 'noBet') {
-    return match.totalGoals.recommendation.profile.stake
+    return '中等参考'
   }
-  return riskProfiles.none.stake
+  return '轻度参考 / 观望为主'
+}
+
+function getNoOddsWdlReference(match) {
+  const strengthGap = match.homeTeam.teamStrength - match.awayTeam.teamStrength
+  const powerDiff = match.model?.powerDiff ?? strengthGap
+
+  if (strengthGap >= 4 || powerDiff >= 3) return '主队不败'
+  if (strengthGap <= -4 || powerDiff <= -3) return '客队不败'
+  if (Math.abs(strengthGap) <= 2 && Math.abs(powerDiff) <= 2) return '暂无明显优势'
+  return '平局防范'
+}
+
+function getWdlReference(match) {
+  if (!hasWdlOdds(match.odds)) return NO_ODDS_RECOMMENDATION_LABEL
+  return match.recommendation.direction === 'noBet'
+    ? '观望为主'
+    : match.recommendation.label
+}
+
+function getTotalGoalsReference(match) {
+  if (!hasWdlOdds(match.odds)) return '2-3球区间参考'
+  return match.totalGoals.recommendation.direction === 'noBet'
+    ? '暂不明确'
+    : match.totalGoals.recommendation.label
+}
+
+function getScoreReference(match) {
+  if (!hasWdlOdds(match.odds)) return '1-0 / 1-1 / 2-1'
+  return match.scoreLeans.map((scoreLean) => scoreLean.score).join(' / ')
 }
 
 function isSkipPrimary(match) {
@@ -765,7 +862,7 @@ function buildMarketSentiment(match) {
   if (isSkipPrimary(match)) {
     hint = '盘口价值不足，等待更好机会。'
   } else if (hotDirection === match.recommendation.direction) {
-    hint = match.risk.tone === 'low' ? '可轻仓跟随，不追高。' : '不建议重仓追热。'
+    hint = match.risk.tone === 'low' ? '可轻仓跟随，不追高。' : '不建议追热扩大风险。'
   } else if (match.totalGoals.recommendation.direction !== 'noBet') {
     hint = `${match.totalGoals.recommendation.label}比胜平负更清晰。`
   } else {
@@ -808,10 +905,10 @@ function buildJudgementLine(match) {
 function buildBeginnerNotes(match) {
   if (!hasWdlOdds(match.odds)) {
     return [
-      '暂无赔率，暂不推荐',
+      `胜平负倾向：${getNoOddsWdlReference(match)}。`,
+      '大小球倾向：2-3球区间。',
+      '比分参考：1-0 / 1-1 / 2-1。',
       NO_ODDS_REASON,
-      '胜平负暂不生成推荐。',
-      '大小球暂不生成推荐。',
     ]
   }
 
@@ -1106,7 +1203,7 @@ function App() {
             AI LIVE ENGINE
           </div>
           <h1>AI比赛分析引擎</h1>
-          <p>实时赔率扫描 · 风险评估 · 仓位建议</p>
+          <p>实时赔率扫描 · 风险评估 · 推荐强度</p>
           <div className="hero-status-row" aria-live="polite">
             <span className={`ai-status-pill ${isAnalyzing ? 'running' : 'done'}`}>
               <i />
@@ -1204,10 +1301,13 @@ function App() {
               <h2>
                 {selectedMatch.homeTeam.name} vs {selectedMatch.awayTeam.name}
               </h2>
+              <p className="quick-kickoff-time">
+                {formatKickoff(selectedMatch.kickoff)}
+              </p>
             </div>
 
             <div className="quick-recommendation">
-              <span>主推荐</span>
+              <span>主推方向</span>
               <strong className={isSkipPrimary(selectedMatch) ? 'skip-primary' : ''}>
                 {getPrimaryDisplay(selectedMatch)}
               </strong>
@@ -1221,11 +1321,11 @@ function App() {
                 </em>
               </article>
               <article>
-                <span>建议仓位</span>
-                <strong>{getPrimaryStake(selectedMatch)}</strong>
+                <span>推荐强度</span>
+                <strong>{getRecommendationStrength(selectedMatch)}</strong>
               </article>
               <article>
-                <span>AI信心</span>
+                <span>信心指数</span>
                 <strong>{selectedConfidence}%</strong>
                 <small>信号强度：{selectedSignalStrength}</small>
               </article>
@@ -1307,41 +1407,58 @@ function App() {
             </article>
           </section>
 
-          <section className="play-grid">
-            <article className="play-card">
-              <Crosshair size={20} />
-              <span>胜平负</span>
-              <strong>{selectedMatch.recommendation.label}</strong>
-              <p>仓位：{selectedMatch.wdlProfile.stake}</p>
-              <em className={`risk-tag ${selectedMatch.recommendation.direction === 'noBet' ? 'none' : selectedMatch.risk.tone}`}>
-                {selectedMatch.wdlProfile.label}
-              </em>
-            </article>
+          <section className="play-reference-panel" aria-label="玩法参考">
+            <div className="section-title compact-title">
+              <span>玩法参考</span>
+              <h2>赛前倾向与比分参考</h2>
+            </div>
 
-            <article className="play-card">
-              <Gauge size={20} />
-              <span>大小球</span>
-              <strong>{selectedMatch.totalGoals.recommendation.label}</strong>
-              <p>仓位：{selectedMatch.totalGoals.recommendation.profile.stake}</p>
-              <em className={`risk-tag ${selectedMatch.totalGoals.recommendation.riskTone}`}>
-                {selectedMatch.totalGoals.recommendation.profile.label}
-              </em>
-            </article>
+            <div className="play-grid">
+              <article className="play-card">
+                <Crosshair size={20} />
+                <span>胜平负倾向</span>
+                <strong>{getWdlReference(selectedMatch)}</strong>
+                <p>
+                  {hasWdlOdds(selectedMatch.odds)
+                    ? '结合基础面与盘口价值。'
+                    : '基于球队强弱分的赛前初判。'}
+                </p>
+                <em className={`risk-tag ${selectedMatch.recommendation.direction === 'noBet' ? 'none' : selectedMatch.risk.tone}`}>
+                  {hasWdlOdds(selectedMatch.odds)
+                    ? selectedMatch.wdlProfile.label
+                    : '参与建议：观望'}
+                </em>
+              </article>
 
-            <article className="play-card score-card">
-              <Target size={20} />
-              <span>娱乐比分</span>
-              <strong>
-                {selectedMatch.scoreLeans.map((scoreLean) => scoreLean.score).join(' / ')}
-              </strong>
-              <p>比分玩法高赔率低命中，只适合极小仓娱乐，不建议重仓。</p>
-            </article>
+              <article className="play-card">
+                <Gauge size={20} />
+                <span>大小球倾向</span>
+                <strong>{getTotalGoalsReference(selectedMatch)}</strong>
+                <p>
+                  {hasWdlOdds(selectedMatch.odds)
+                    ? '结合进攻、防守和总进球盘口。'
+                    : '暂无赔率时使用基础面区间参考。'}
+                </p>
+                <em className={`risk-tag ${selectedMatch.totalGoals.recommendation.riskTone}`}>
+                  {hasWdlOdds(selectedMatch.odds)
+                    ? selectedMatch.totalGoals.recommendation.profile.label
+                    : '参与建议：观望'}
+                </em>
+              </article>
 
-            <article className="play-card steady-card">
-              <TrendingUp size={20} />
-              <span>稳健玩法</span>
-              <strong>{selectedMatch.conservativeAdvice.text}</strong>
-            </article>
+              <article className="play-card score-card">
+                <Target size={20} />
+                <span>比分参考</span>
+                <strong>{getScoreReference(selectedMatch)}</strong>
+                <p>{SCORE_REFERENCE_NOTICE}</p>
+              </article>
+
+              <article className="play-card steady-card">
+                <TrendingUp size={20} />
+                <span>稳健玩法</span>
+                <strong>{selectedMatch.conservativeAdvice.text}</strong>
+              </article>
+            </div>
           </section>
 
           <details className="detail-panel">
@@ -1466,7 +1583,7 @@ function App() {
             <span>赛前方向</span>
             <span>赛果</span>
             <span>是否命中</span>
-            <span>盈亏单位</span>
+            <span>盈亏参考</span>
             <span>复盘一句话</span>
           </div>
 
