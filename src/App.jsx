@@ -12,6 +12,7 @@ import {
   WalletCards,
 } from 'lucide-react'
 import betHistoryData from './data/betHistory.json'
+import { localOdds } from './data/localOdds'
 import teamsData from './data/teams.json'
 import { getInitialMatchSnapshot, getMatches } from './services/matchApi'
 import {
@@ -171,19 +172,63 @@ function cloneTeams(teams) {
   return teams.map((team) => ({ ...team }))
 }
 
+function getRawTeamName(match, side) {
+  return String(
+    match[`${side}TeamName`] ??
+      match[`${side}TeamDisplayName`] ??
+      match[`${side}Team`] ??
+      match[`${side}TeamId`] ??
+      '',
+  ).trim()
+}
+
+function getLocalOddsKey(match) {
+  const homeTeamName = getRawTeamName(match, 'home')
+  const awayTeamName = getRawTeamName(match, 'away')
+
+  if (!homeTeamName || !awayTeamName) return ''
+  return `${homeTeamName}__${awayTeamName}`
+}
+
+function normalizeLocalOdds(localOddsEntry) {
+  if (!localOddsEntry) return null
+
+  return {
+    home: localOddsEntry.homeWin,
+    draw: localOddsEntry.draw,
+    away: localOddsEntry.awayWin,
+    over25: localOddsEntry.over25,
+    under25: localOddsEntry.under25,
+  }
+}
+
 function cloneMatches(matches) {
-  return matches.map((match) => ({
-    ...match,
-    kickoff: match.kickoff ?? match.kickoffTime,
-    kickoffTime: match.kickoffTime ?? match.kickoff,
-    homeTeamId: match.homeTeamId ?? match.homeTeam,
-    awayTeamId: match.awayTeamId ?? match.awayTeam,
-    homeTeam: match.homeTeam ?? match.homeTeamId,
-    awayTeam: match.awayTeam ?? match.awayTeamId,
-    odds: match.odds ? { ...DEFAULT_TOTAL_GOALS_ODDS, ...match.odds } : null,
-    score: match.score ? { ...match.score } : null,
-    contextRisk: match.contextRisk ?? 50,
-  }))
+  return matches.map((match) => {
+    const localOddsKey = getLocalOddsKey(match)
+    const matchedLocalOdds = localOdds[localOddsKey] ?? null
+    const normalizedLocalOdds = normalizeLocalOdds(matchedLocalOdds)
+    const existingOdds = match.odds
+      ? { ...DEFAULT_TOTAL_GOALS_ODDS, ...match.odds }
+      : null
+
+    return {
+      ...match,
+      kickoff: match.kickoff ?? match.kickoffTime,
+      kickoffTime: match.kickoffTime ?? match.kickoff,
+      homeTeamId: match.homeTeamId ?? match.homeTeam,
+      awayTeamId: match.awayTeamId ?? match.awayTeam,
+      homeTeam: match.homeTeam ?? match.homeTeamId,
+      awayTeam: match.awayTeam ?? match.awayTeamId,
+      localOdds: matchedLocalOdds,
+      localOddsKey: matchedLocalOdds ? localOddsKey : null,
+      oddsSource: matchedLocalOdds ? 'local' : existingOdds ? 'embedded' : null,
+      odds: normalizedLocalOdds
+        ? { ...DEFAULT_TOTAL_GOALS_ODDS, ...normalizedLocalOdds }
+        : existingOdds,
+      score: match.score ? { ...match.score } : null,
+      contextRisk: match.contextRisk ?? 50,
+    }
+  })
 }
 
 function cloneRecords(records) {
@@ -206,6 +251,18 @@ function hasWdlOdds(odds) {
       getNumberValue(odds.draw) > 0 &&
       getNumberValue(odds.away) > 0,
   )
+}
+
+function hasLocalOdds(match) {
+  return Boolean(match.localOdds)
+}
+
+function formatOddsValue(value) {
+  return getNumberValue(value).toFixed(2)
+}
+
+function getMarketStatus(match) {
+  return hasLocalOdds(match) ? '已有本地赔率' : '等待盘口确认'
 }
 
 function getTeamDisplaySeed(match, side) {
@@ -790,7 +847,22 @@ function getWdlDirectionByStrength(match) {
   return '平局防范'
 }
 
+function getLocalOddsWdlDirection(localOddsEntry) {
+  const homeWin = getNumberValue(localOddsEntry.homeWin)
+  const draw = getNumberValue(localOddsEntry.draw)
+  const awayWin = getNumberValue(localOddsEntry.awayWin)
+  const teamsAreClose = Math.abs(homeWin - awayWin) <= 0.35
+  const drawIsLow = draw <= Math.min(homeWin, awayWin) + 1.15
+
+  if (teamsAreClose || drawIsLow) return '平局防范'
+  if (homeWin < awayWin) return '主队不败'
+  if (awayWin < homeWin) return '客队不败'
+  return '平局防范'
+}
+
 function getWdlDirection(match) {
+  if (hasLocalOdds(match)) return getLocalOddsWdlDirection(match.localOdds)
+
   if (hasWdlOdds(match.odds) && match.recommendation.direction !== 'noBet') {
     if (match.recommendation.direction === 'home') return '主胜方向'
     if (match.recommendation.direction === 'away') return '客胜方向'
@@ -801,6 +873,12 @@ function getWdlDirection(match) {
 }
 
 function getTotalGoalsDirection(match) {
+  if (hasLocalOdds(match)) {
+    if (match.localOdds.over25 < match.localOdds.under25) return '2.5球以上倾向'
+    if (match.localOdds.under25 < match.localOdds.over25) return '2.5球以下倾向'
+    return '2-3球区间'
+  }
+
   if (hasWdlOdds(match.odds) && match.totalGoals.recommendation.direction !== 'noBet') {
     return match.totalGoals.recommendation.direction === 'over25'
       ? '2.5球以上倾向'
@@ -1444,6 +1522,47 @@ function App() {
             </div>
 
             <div className="play-grid">
+              <article className="play-card odds-card">
+                <BarChart3 size={20} />
+                <span>盘口状态</span>
+                <strong>{getMarketStatus(selectedMatch)}</strong>
+                {hasLocalOdds(selectedMatch) ? (
+                  <>
+                    <div className="odds-reference-grid">
+                      <p>
+                        <span>主胜</span>
+                        <strong>{formatOddsValue(selectedMatch.localOdds.homeWin)}</strong>
+                      </p>
+                      <p>
+                        <span>平</span>
+                        <strong>{formatOddsValue(selectedMatch.localOdds.draw)}</strong>
+                      </p>
+                      <p>
+                        <span>客胜</span>
+                        <strong>{formatOddsValue(selectedMatch.localOdds.awayWin)}</strong>
+                      </p>
+                      <p>
+                        <span>大2.5</span>
+                        <strong>{formatOddsValue(selectedMatch.localOdds.over25)}</strong>
+                      </p>
+                      <p>
+                        <span>小2.5</span>
+                        <strong>{formatOddsValue(selectedMatch.localOdds.under25)}</strong>
+                      </p>
+                      <p>
+                        <span>让球</span>
+                        <strong>{selectedMatch.localOdds.handicap}</strong>
+                      </p>
+                    </div>
+                    <small className="odds-reference-note">
+                      {selectedMatch.localOdds.note}
+                    </small>
+                  </>
+                ) : (
+                  <p>{NO_ODDS_REASON}</p>
+                )}
+              </article>
+
               <article className="play-card">
                 <Crosshair size={20} />
                 <span>胜平负方向</span>

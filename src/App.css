@@ -752,6 +752,45 @@
   line-height: 1.7;
 }
 
+.odds-reference-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.odds-reference-grid p {
+  margin: 0;
+  padding: 9px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 14px;
+  background: rgba(2, 6, 14, 0.24);
+}
+
+.odds-reference-grid span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.odds-reference-grid strong {
+  margin: 4px 0 0;
+  color: var(--text-strong);
+  font-family: var(--number);
+  font-size: 17px;
+  line-height: 1.1;
+}
+
+.odds-reference-note {
+  display: block;
+  margin-top: 10px;
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.6;
+}
+
 .score-reference-list {
   display: grid;
   gap: 8px;
