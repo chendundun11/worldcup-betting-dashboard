@@ -50,7 +50,7 @@ const riskProfiles = {
 const NO_ODDS_REASON =
   '暂无赔率，当前为赛前基础面初判，等待盘口确认后更新推荐强度。'
 const NO_ODDS_RECOMMENDATION_LABEL = '赛前初判，等待盘口确认'
-const SCORE_REFERENCE_NOTICE = '比分玩法波动大，仅适合极小仓娱乐参考。'
+const SCORE_REFERENCE_NOTICE = '比分波动较大，适合小额娱乐参考。'
 
 const neutralTeamProfile = {
   confederation: '',
@@ -773,33 +773,75 @@ function getRecommendationStrength(match) {
   return '轻度参考 / 观望为主'
 }
 
-function getNoOddsWdlReference(match) {
-  const strengthGap = match.homeTeam.teamStrength - match.awayTeam.teamStrength
-  const powerDiff = match.model?.powerDiff ?? strengthGap
+function getStrengthGap(match) {
+  return match.homeTeam.teamStrength - match.awayTeam.teamStrength
+}
+
+function getPowerDiff(match) {
+  return match.model?.powerDiff ?? getStrengthGap(match)
+}
+
+function getWdlDirectionByStrength(match) {
+  const strengthGap = getStrengthGap(match)
+  const powerDiff = getPowerDiff(match)
 
   if (strengthGap >= 4 || powerDiff >= 3) return '主队不败'
   if (strengthGap <= -4 || powerDiff <= -3) return '客队不败'
-  if (Math.abs(strengthGap) <= 2 && Math.abs(powerDiff) <= 2) return '暂无明显优势'
   return '平局防范'
 }
 
-function getWdlReference(match) {
-  if (!hasWdlOdds(match.odds)) return NO_ODDS_RECOMMENDATION_LABEL
-  return match.recommendation.direction === 'noBet'
-    ? '观望为主'
-    : match.recommendation.label
+function getWdlDirection(match) {
+  if (hasWdlOdds(match.odds) && match.recommendation.direction !== 'noBet') {
+    if (match.recommendation.direction === 'home') return '主胜方向'
+    if (match.recommendation.direction === 'away') return '客胜方向'
+    return '平局防范'
+  }
+
+  return getWdlDirectionByStrength(match)
 }
 
-function getTotalGoalsReference(match) {
-  if (!hasWdlOdds(match.odds)) return '2-3球区间参考'
-  return match.totalGoals.recommendation.direction === 'noBet'
-    ? '暂不明确'
-    : match.totalGoals.recommendation.label
+function getTotalGoalsDirection(match) {
+  if (hasWdlOdds(match.odds) && match.totalGoals.recommendation.direction !== 'noBet') {
+    return match.totalGoals.recommendation.direction === 'over25'
+      ? '2.5球以上倾向'
+      : '2.5球以下倾向'
+  }
+
+  const strengthGap = match.homeTeam.teamStrength - match.awayTeam.teamStrength
+  const powerDiff = getPowerDiff(match)
+  const gap = Math.max(Math.abs(strengthGap), Math.abs(powerDiff))
+
+  if (gap >= 8) return '2.5球以上倾向'
+  if (gap <= 3) return '2.5球以下倾向'
+  return '2-3球区间'
 }
 
-function getScoreReference(match) {
-  if (!hasWdlOdds(match.odds)) return '1-0 / 1-1 / 2-1'
-  return match.scoreLeans.map((scoreLean) => scoreLean.score).join(' / ')
+function getScoreReferencePair(match) {
+  if (!hasWdlOdds(match.odds)) {
+    return { main: '1-1', backup: '2-1' }
+  }
+
+  const scores = getUniqueScores(match.scoreLeans.map((scoreLean) => scoreLean.score))
+
+  return {
+    main: scores[0] ?? '1-1',
+    backup: scores[1] ?? '2-1',
+  }
+}
+
+function hasScoutedTeam(match) {
+  return Boolean(match.homeTeam.confederation || match.awayTeam.confederation)
+}
+
+function shouldShowUpsetScore(match) {
+  if (!hasScoutedTeam(match)) return false
+
+  const strengthGap = Math.abs(getStrengthGap(match))
+  const powerGap = Math.abs(getPowerDiff(match))
+  const awayCounterEdge = match.awayTeam.attackRating - match.homeTeam.defenseRating
+  const awayWinModel = match.model?.away ?? 0
+
+  return strengthGap <= 3 || powerGap <= 3 || awayCounterEdge >= 3 || awayWinModel >= 0.34
 }
 
 function isSkipPrimary(match) {
@@ -905,9 +947,9 @@ function buildJudgementLine(match) {
 function buildBeginnerNotes(match) {
   if (!hasWdlOdds(match.odds)) {
     return [
-      `胜平负倾向：${getNoOddsWdlReference(match)}。`,
-      '大小球倾向：2-3球区间。',
-      '比分参考：1-0 / 1-1 / 2-1。',
+      `胜平负方向：${getWdlDirection(match)}。`,
+      `大小球方向：${getTotalGoalsDirection(match)}。`,
+      '主比分：1-1；备选比分：2-1。',
       NO_ODDS_REASON,
     ]
   }
@@ -1370,18 +1412,6 @@ function App() {
             </div>
           </section>
 
-          <section className="explain-card">
-            <div className="section-title">
-              <span>AI判断依据</span>
-              <h2>为什么这样看</h2>
-            </div>
-            <ul>
-              {selectedMatch.beginnerNotes.map((note) => (
-                <li key={note}>{note}</li>
-              ))}
-            </ul>
-          </section>
-
           <section className="ai-insight-grid">
             <article className="market-sentiment-card">
               <div className="section-title compact-title">
@@ -1409,15 +1439,15 @@ function App() {
 
           <section className="play-reference-panel" aria-label="玩法参考">
             <div className="section-title compact-title">
-              <span>玩法参考</span>
-              <h2>赛前倾向与比分参考</h2>
+              <span>赛前结论</span>
+              <h2>AI玩法参考</h2>
             </div>
 
             <div className="play-grid">
               <article className="play-card">
                 <Crosshair size={20} />
-                <span>胜平负倾向</span>
-                <strong>{getWdlReference(selectedMatch)}</strong>
+                <span>胜平负方向</span>
+                <strong>{getWdlDirection(selectedMatch)}</strong>
                 <p>
                   {hasWdlOdds(selectedMatch.odds)
                     ? '结合基础面与盘口价值。'
@@ -1432,8 +1462,8 @@ function App() {
 
               <article className="play-card">
                 <Gauge size={20} />
-                <span>大小球倾向</span>
-                <strong>{getTotalGoalsReference(selectedMatch)}</strong>
+                <span>大小球方向</span>
+                <strong>{getTotalGoalsDirection(selectedMatch)}</strong>
                 <p>
                   {hasWdlOdds(selectedMatch.odds)
                     ? '结合进攻、防守和总进球盘口。'
@@ -1449,8 +1479,23 @@ function App() {
               <article className="play-card score-card">
                 <Target size={20} />
                 <span>比分参考</span>
-                <strong>{getScoreReference(selectedMatch)}</strong>
-                <p>{SCORE_REFERENCE_NOTICE}</p>
+                <div className="score-reference-list">
+                  <p>
+                    <span>主比分</span>
+                    <strong>{getScoreReferencePair(selectedMatch).main}</strong>
+                  </p>
+                  <p>
+                    <span>备选比分</span>
+                    <strong>{getScoreReferencePair(selectedMatch).backup}</strong>
+                  </p>
+                  {shouldShowUpsetScore(selectedMatch) && (
+                    <p>
+                      <span>小冷门</span>
+                      <strong>0-1</strong>
+                    </p>
+                  )}
+                </div>
+                <small className="score-reference-note">{SCORE_REFERENCE_NOTICE}</small>
               </article>
 
               <article className="play-card steady-card">
