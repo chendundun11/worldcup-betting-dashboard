@@ -47,6 +47,12 @@ function createLocalMatchLookup(mockMatches) {
   )
 }
 
+function createFallbackError(fallbackReason) {
+  const error = new Error(fallbackReason)
+  error.fallbackReason = fallbackReason
+  return error
+}
+
 function mergeRemoteMatch(remoteMatch, localMatch) {
   const homeTeam = resolveTeamId(remoteMatch.homeTeam)
   const awayTeam = resolveTeamId(remoteMatch.awayTeam)
@@ -73,15 +79,18 @@ function mergeRemoteMatch(remoteMatch, localMatch) {
 
 export async function fetchMatches() {
   const response = await fetch('/api/matches')
+  const payload = await response.json().catch(() => null)
 
   if (!response.ok) {
-    throw new Error(`/api/matches failed with status ${response.status}`)
+    throw createFallbackError(payload?.fallbackReason ?? 'API_FAILED')
   }
 
-  const payload = await response.json()
+  if (!payload || !Array.isArray(payload.matches)) {
+    throw createFallbackError(payload?.fallbackReason ?? 'INVALID_RESPONSE')
+  }
 
-  if (!Array.isArray(payload.matches)) {
-    throw new Error('/api/matches returned an invalid payload')
+  if (payload.fallbackReason === 'COMPETITION_NO_DATA' || !payload.matches.length) {
+    throw createFallbackError(payload.fallbackReason ?? 'COMPETITION_NO_DATA')
   }
 
   const mockSnapshot = getMockMatchSnapshot()
@@ -98,7 +107,7 @@ export async function fetchMatches() {
     .filter(Boolean)
 
   if (!matches.length) {
-    throw new Error('/api/matches returned no matches that can use local odds')
+    throw createFallbackError('NO_ODDS_MATCH')
   }
 
   return {
@@ -107,6 +116,14 @@ export async function fetchMatches() {
       mockSnapshot.matchDay,
     updatedAt: payload.updatedAt ?? new Date().toISOString(),
     source: payload.source ?? 'remote',
+    dataSource: 'real',
+    fallbackReason: null,
+    provider: payload.provider ?? payload.meta?.provider ?? 'football-data',
+    meta: {
+      dataSource: 'real',
+      fallbackReason: null,
+      provider: payload.provider ?? payload.meta?.provider ?? 'football-data',
+    },
     matches,
   }
 }

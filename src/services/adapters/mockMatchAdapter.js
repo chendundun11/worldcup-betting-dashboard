@@ -49,6 +49,14 @@ export function getMockMatchSnapshot() {
     matchDay: matchesData.matchDay,
     updatedAt: matchesData.updatedAt,
     source: 'mock',
+    dataSource: 'mock',
+    fallbackReason: null,
+    provider: 'mock',
+    meta: {
+      dataSource: 'mock',
+      fallbackReason: null,
+      provider: 'mock',
+    },
     matches: matchesData.matches.map(normalizeMatch),
   }
 }

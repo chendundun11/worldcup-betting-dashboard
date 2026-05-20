@@ -686,6 +686,16 @@ function getReviewText(match) {
   return '赛前观望，不强行出手。'
 }
 
+function formatDataSource(meta) {
+  if (meta?.dataSource === 'real') return 'real'
+  if (meta?.dataSource === 'fallback') return 'fallback'
+  return 'mock'
+}
+
+function formatFallbackReason(meta) {
+  return meta?.fallbackReason || '无'
+}
+
 function App() {
   const [selectedMatchId, setSelectedMatchId] = useState('m-004')
   const [analysisPhase, setAnalysisPhase] = useState('done')
@@ -857,7 +867,13 @@ function App() {
           </div>
         </section>
         <footer className="risk-footer">
-          本工具仅用于数据分析和娱乐参考，不构成投资或投注建议。请遵守当地法律法规，理性参与，控制风险。
+          <span>
+            本工具仅用于数据分析和娱乐参考，不构成投资或投注建议。请遵守当地法律法规，理性参与，控制风险。
+          </span>
+          <small>
+            数据源：{formatDataSource(matchDataset.meta)} · fallback 原因：
+            {formatFallbackReason(matchDataset.meta)}
+          </small>
         </footer>
       </main>
     )
@@ -1282,7 +1298,13 @@ function App() {
       </section>
 
       <footer className="risk-footer">
-        本工具仅用于数据分析和娱乐参考，不构成投资或投注建议。请遵守当地法律法规，理性参与，控制风险。
+        <span>
+          本工具仅用于数据分析和娱乐参考，不构成投资或投注建议。请遵守当地法律法规，理性参与，控制风险。
+        </span>
+        <small>
+          数据源：{formatDataSource(matchDataset.meta)} · fallback 原因：
+          {formatFallbackReason(matchDataset.meta)}
+        </small>
       </footer>
     </main>
   )

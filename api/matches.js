@@ -1,5 +1,20 @@
 const FOOTBALL_DATA_BASE_URL = 'https://api.football-data.org/v4'
 
+function createMeta(dataSource, fallbackReason = null) {
+  return {
+    dataSource,
+    fallbackReason,
+    provider: process.env.FOOTBALL_API_PROVIDER || 'football-data',
+  }
+}
+
+function sendJson(response, statusCode, body) {
+  response.status(statusCode).json({
+    ...body,
+    meta: createMeta(body.dataSource, body.fallbackReason),
+  })
+}
+
 function normalizeStatus(status) {
   if (status === 'FINISHED' || status === 'AWARDED') return 'finished'
   if (status === 'IN_PLAY' || status === 'PAUSED' || status === 'LIVE') {
@@ -79,14 +94,28 @@ function buildFootballDataUrl() {
 export default async function handler(request, response) {
   if (request.method !== 'GET') {
     response.setHeader('Allow', 'GET')
-    response.status(405).json({ error: 'Method not allowed' })
+    sendJson(response, 405, {
+      dataSource: 'fallback',
+      fallbackReason: 'API_FAILED',
+      provider: process.env.FOOTBALL_API_PROVIDER || 'football-data',
+      updatedAt: new Date().toISOString(),
+      matches: [],
+      error: 'Method not allowed',
+    })
     return
   }
 
   const token = process.env.FOOTBALL_API_KEY
 
   if (!token) {
-    response.status(500).json({ error: 'FOOTBALL_API_KEY is not configured' })
+    sendJson(response, 500, {
+      dataSource: 'fallback',
+      fallbackReason: 'API_KEY_MISSING',
+      provider: process.env.FOOTBALL_API_PROVIDER || 'football-data',
+      updatedAt: new Date().toISOString(),
+      matches: [],
+      error: 'FOOTBALL_API_KEY is not configured',
+    })
     return
   }
 
@@ -99,7 +128,12 @@ export default async function handler(request, response) {
 
     if (!footballResponse.ok) {
       const details = await footballResponse.text()
-      response.status(footballResponse.status).json({
+      sendJson(response, footballResponse.status, {
+        dataSource: 'fallback',
+        fallbackReason: 'API_FAILED',
+        provider: process.env.FOOTBALL_API_PROVIDER || 'football-data',
+        updatedAt: new Date().toISOString(),
+        matches: [],
         error: 'football-data.org request failed',
         details,
       })
@@ -107,19 +141,37 @@ export default async function handler(request, response) {
     }
 
     const payload = await footballResponse.json()
-    const matches = Array.isArray(payload.matches)
-      ? payload.matches.map(normalizeMatch)
-      : []
+
+    if (!Array.isArray(payload.matches)) {
+      sendJson(response, 502, {
+        dataSource: 'fallback',
+        fallbackReason: 'INVALID_RESPONSE',
+        provider: process.env.FOOTBALL_API_PROVIDER || 'football-data',
+        updatedAt: new Date().toISOString(),
+        matches: [],
+        error: 'football-data.org returned an invalid response',
+      })
+      return
+    }
+
+    const matches = payload.matches.map(normalizeMatch)
+    const fallbackReason = matches.length ? null : 'COMPETITION_NO_DATA'
 
     response.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300')
-    response.status(200).json({
+    sendJson(response, 200, {
+      dataSource: 'real',
+      fallbackReason,
       provider: process.env.FOOTBALL_API_PROVIDER || 'football-data',
-      source: 'football-data',
       updatedAt: new Date().toISOString(),
       matches,
     })
   } catch (error) {
-    response.status(500).json({
+    sendJson(response, 500, {
+      dataSource: 'fallback',
+      fallbackReason: 'API_FAILED',
+      provider: process.env.FOOTBALL_API_PROVIDER || 'football-data',
+      updatedAt: new Date().toISOString(),
+      matches: [],
       error: 'Unable to fetch football-data.org matches',
       details: error instanceof Error ? error.message : String(error),
     })

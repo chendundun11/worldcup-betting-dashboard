@@ -14,10 +14,20 @@ const adapters = {
 const defaultAdapter = import.meta.env.VITE_MATCH_API_ADAPTER || 'remote'
 
 function createEmptySnapshot(source = 'empty') {
+  const meta = {
+    dataSource: 'fallback',
+    fallbackReason: 'INVALID_RESPONSE',
+    provider: source,
+  }
+
   return {
     matchDay: '',
     updatedAt: new Date().toISOString(),
     source,
+    dataSource: meta.dataSource,
+    fallbackReason: meta.fallbackReason,
+    provider: meta.provider,
+    meta,
     matches: [],
   }
 }
@@ -36,12 +46,34 @@ export async function getMatches(options = {}) {
   const fetchAdapter = adapters[adapterName] || fetchMockMatches
 
   try {
-    return await fetchAdapter()
+    const snapshot = await fetchAdapter()
+    return {
+      ...snapshot,
+      meta: snapshot.meta ?? {
+        dataSource: snapshot.dataSource ?? 'real',
+        fallbackReason: snapshot.fallbackReason ?? null,
+        provider: snapshot.provider ?? adapterName,
+      },
+    }
   } catch (error) {
     console.warn(`Match adapter "${adapterName}" failed, falling back to mock data.`, error)
 
     try {
-      return await fetchMockMatches()
+      const fallbackReason = error?.fallbackReason ?? 'API_FAILED'
+      const mockSnapshot = await fetchMockMatches()
+
+      return {
+        ...mockSnapshot,
+        source: 'mock',
+        dataSource: 'fallback',
+        fallbackReason,
+        provider: 'mock',
+        meta: {
+          dataSource: 'fallback',
+          fallbackReason,
+          provider: 'mock',
+        },
+      }
     } catch (fallbackError) {
       console.warn('Mock match fallback failed, using empty match list.', fallbackError)
       return createEmptySnapshot('empty-fallback')
