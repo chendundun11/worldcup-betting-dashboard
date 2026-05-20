@@ -725,6 +725,9 @@ function App() {
       )
       const homeTeam = matchTeamMap.get(match.homeTeamId)
       const awayTeam = matchTeamMap.get(match.awayTeamId)
+      if (!homeTeam || !awayTeam || !match.odds?.home || !match.odds?.draw || !match.odds?.away) {
+        return null
+      }
       const model = calculateModelProbabilities(homeTeam, awayTeam)
       const market = calculateMarketProbabilities(match.odds)
       const valueDiffs = {
@@ -792,7 +795,7 @@ function App() {
         valueDiffs,
         wdlProfile,
       }
-    })
+    }).filter(Boolean)
 
     const matchesWithNotes = enrichedMatches.map((match) => ({
       ...match,

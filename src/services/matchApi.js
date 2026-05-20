@@ -2,14 +2,16 @@ import {
   fetchMatches as fetchMockMatches,
   getMockMatchSnapshot,
 } from './adapters/mockMatchAdapter'
+import { fetchMatches as fetchRemoteMatches } from './adapters/remoteMatchAdapter'
 import { fetchMatches as fetchFootballDataMatches } from './adapters/footballDataAdapter'
 
 const adapters = {
   mock: fetchMockMatches,
+  remote: fetchRemoteMatches,
   footballData: fetchFootballDataMatches,
 }
 
-const defaultAdapter = import.meta.env.VITE_MATCH_API_ADAPTER || 'mock'
+const defaultAdapter = import.meta.env.VITE_MATCH_API_ADAPTER || 'remote'
 
 function createEmptySnapshot(source = 'empty') {
   return {
