@@ -31,6 +31,10 @@ function resolveTeamId(team) {
   return teamAliases[normalizeKey(team)] ?? normalizeKey(team)
 }
 
+function hasTeamName(team) {
+  return normalizeKey(team).length > 0
+}
+
 function getResult(status, score) {
   if (status !== 'finished' || !score) return null
   if (score.home > score.away) return 'home'
@@ -54,26 +58,36 @@ function createFallbackError(fallbackReason) {
 }
 
 function mergeRemoteMatch(remoteMatch, localMatch) {
-  const homeTeam = resolveTeamId(remoteMatch.homeTeam)
-  const awayTeam = resolveTeamId(remoteMatch.awayTeam)
+  const homeTeamName = String(remoteMatch.homeTeam ?? '').trim()
+  const awayTeamName = String(remoteMatch.awayTeam ?? '').trim()
+  const homeTeam = resolveTeamId(homeTeamName)
+  const awayTeam = resolveTeamId(awayTeamName)
   const score = remoteMatch.score
     ? {
         home: Number(remoteMatch.score.home) || 0,
         away: Number(remoteMatch.score.away) || 0,
       }
     : null
+  const fallbackId = `${homeTeam}-${awayTeam}-${remoteMatch.kickoffTime ?? 'match'}`
 
   return {
     ...localMatch,
-    id: String(remoteMatch.id ?? localMatch.id),
+    id: String(remoteMatch.id ?? localMatch?.id ?? fallbackId),
     homeTeam,
     awayTeam,
-    kickoffTime: remoteMatch.kickoffTime ?? localMatch.kickoffTime,
-    status: remoteMatch.status ?? localMatch.status,
+    homeTeamName,
+    awayTeamName,
+    kickoffTime: remoteMatch.kickoffTime ?? localMatch?.kickoffTime,
+    status: remoteMatch.status ?? localMatch?.status ?? 'scheduled',
     minute: remoteMatch.minute ?? null,
     score,
     result: remoteMatch.result ?? getResult(remoteMatch.status, score),
     source: remoteMatch.source ?? 'remote',
+    odds: localMatch?.odds ?? null,
+    contextRisk: localMatch?.contextRisk ?? 50,
+    stage: localMatch?.stage ?? remoteMatch.stage ?? '',
+    venue: localMatch?.venue ?? remoteMatch.venue ?? '',
+    headline: localMatch?.headline ?? '',
   }
 }
 
@@ -89,39 +103,33 @@ export async function fetchMatches() {
     throw createFallbackError(payload?.fallbackReason ?? 'INVALID_RESPONSE')
   }
 
-  if (payload.fallbackReason === 'COMPETITION_NO_DATA' || !payload.matches.length) {
-    throw createFallbackError(payload.fallbackReason ?? 'COMPETITION_NO_DATA')
-  }
-
   const mockSnapshot = getMockMatchSnapshot()
   const localMatchLookup = createLocalMatchLookup(mockSnapshot.matches)
   const matches = payload.matches
+    .filter((remoteMatch) =>
+      hasTeamName(remoteMatch.homeTeam) && hasTeamName(remoteMatch.awayTeam),
+    )
     .map((remoteMatch) => {
       const homeTeam = resolveTeamId(remoteMatch.homeTeam)
       const awayTeam = resolveTeamId(remoteMatch.awayTeam)
       const localMatch = localMatchLookup.get(`${homeTeam}|${awayTeam}`)
 
-      if (!localMatch?.odds) return null
-      return mergeRemoteMatch({ ...remoteMatch, homeTeam, awayTeam }, localMatch)
+      return mergeRemoteMatch(remoteMatch, localMatch)
     })
-    .filter(Boolean)
-
-  if (!matches.length) {
-    throw createFallbackError('NO_ODDS_MATCH')
-  }
 
   return {
     matchDay:
       matches[0]?.kickoffTime?.slice(0, 10) ??
-      mockSnapshot.matchDay,
+      payload.matchDay ??
+      '',
     updatedAt: payload.updatedAt ?? new Date().toISOString(),
     source: payload.source ?? 'remote',
     dataSource: 'real',
-    fallbackReason: null,
+    fallbackReason: payload.fallbackReason ?? null,
     provider: payload.provider ?? payload.meta?.provider ?? 'football-data',
     meta: {
       dataSource: 'real',
-      fallbackReason: null,
+      fallbackReason: payload.fallbackReason ?? null,
       provider: payload.provider ?? payload.meta?.provider ?? 'football-data',
     },
     matches,

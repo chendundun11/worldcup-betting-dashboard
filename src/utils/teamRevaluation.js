@@ -22,8 +22,11 @@ function getChangeWithinRange(rawValue, min, max) {
 }
 
 function getUpsetBonus(winnerOdds, loserOdds) {
-  if (winnerOdds <= loserOdds) return 0
-  return Math.min((winnerOdds - loserOdds) / 1.6, 2.4)
+  const winner = Number(winnerOdds) || 1
+  const loser = Number(loserOdds) || 1
+
+  if (winner <= loser) return 0
+  return Math.min((winner - loser) / 1.6, 2.4)
 }
 
 function getStrengthBonus(winnerStrength, loserStrength) {
@@ -101,8 +104,8 @@ function applyAdjustmentsFromMatches(teams, finishedMatches) {
 
     const winner = outcome === 'home' ? homeTeam : awayTeam
     const loser = outcome === 'home' ? awayTeam : homeTeam
-    const winnerOdds = outcome === 'home' ? match.odds.home : match.odds.away
-    const loserOdds = outcome === 'home' ? match.odds.away : match.odds.home
+    const winnerOdds = outcome === 'home' ? match.odds?.home : match.odds?.away
+    const loserOdds = outcome === 'home' ? match.odds?.away : match.odds?.home
     const upsetBonus = getUpsetBonus(winnerOdds, loserOdds)
     const strengthBonus = getStrengthBonus(winner.teamStrength, loser.teamStrength)
     const marginBonus = goalDiff >= 2 ? 1 : 0

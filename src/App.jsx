@@ -47,6 +47,21 @@ const riskProfiles = {
   none: { label: '不下注', stake: '0u' },
 }
 
+const NO_ODDS_REASON = '暂无赔率，等待盘口数据'
+const NO_ODDS_RECOMMENDATION_LABEL = '暂不推荐'
+
+const neutralTeamProfile = {
+  confederation: '',
+  teamStrength: 50,
+  recentForm: 50,
+  attackRating: 50,
+  defenseRating: 50,
+  starPlayerForm: 50,
+  injuryRisk: 50,
+  fatigue: 50,
+  morale: 50,
+}
+
 const statusConfig = {
   scheduled: { label: '未开赛', tone: 'scheduled' },
   live: { label: '进行中', tone: 'live' },
@@ -112,7 +127,7 @@ function cloneMatches(matches) {
     awayTeamId: match.awayTeamId ?? match.awayTeam,
     homeTeam: match.homeTeam ?? match.homeTeamId,
     awayTeam: match.awayTeam ?? match.awayTeamId,
-    odds: { ...DEFAULT_TOTAL_GOALS_ODDS, ...match.odds },
+    odds: match.odds ? { ...DEFAULT_TOTAL_GOALS_ODDS, ...match.odds } : null,
     score: match.score ? { ...match.score } : null,
     contextRisk: match.contextRisk ?? 50,
   }))
@@ -129,6 +144,68 @@ function getNumberValue(value, fallback = 0) {
 
 function getOddsValue(value) {
   return Math.max(getNumberValue(value, 1.01), 1.01)
+}
+
+function hasWdlOdds(odds) {
+  return Boolean(
+    odds &&
+      getNumberValue(odds.home) > 0 &&
+      getNumberValue(odds.draw) > 0 &&
+      getNumberValue(odds.away) > 0,
+  )
+}
+
+function getTeamDisplaySeed(match, side) {
+  return String(
+    match[`${side}TeamName`] ??
+      match[`${side}TeamDisplayName`] ??
+      match[`${side}Team`] ??
+      match[`${side}TeamId`] ??
+      '',
+  ).trim()
+}
+
+function hasVisibleTeams(match) {
+  return Boolean(getTeamDisplaySeed(match, 'home') && getTeamDisplaySeed(match, 'away'))
+}
+
+function createTeamProfile(teamId, displayName, localTeam) {
+  const name = displayName || localTeam?.name || teamId
+
+  return {
+    ...neutralTeamProfile,
+    ...localTeam,
+    id: teamId,
+    name,
+    shortName: displayName || localTeam?.shortName || name,
+  }
+}
+
+function buildTeamsForMatches(localTeams, matches) {
+  const localTeamMap = new Map(localTeams.map((team) => [team.id, team]))
+  const teamMap = new Map(localTeams.map((team) => [team.id, team]))
+
+  matches.forEach((match) => {
+    for (const side of ['home', 'away']) {
+      const teamId = match[`${side}TeamId`]
+      if (!teamId) continue
+
+      const displayName = String(match[`${side}TeamName`] ?? '').trim()
+      if (!displayName && teamMap.has(teamId)) continue
+
+      teamMap.set(
+        teamId,
+        createTeamProfile(teamId, displayName, localTeamMap.get(teamId)),
+      )
+    }
+  })
+
+  return Array.from(teamMap.values())
+}
+
+function formatRiskLabel(risk) {
+  if (risk?.level === '待观察') return '待观察'
+  return `${risk?.level ?? '中'}风险`
 }
 
 function formatPercent(value, digits = 1) {
@@ -501,9 +578,88 @@ function buildMultiMarketSummary(
   const scoreEntertainment = `${scoreLeans
     .map((scoreLean) => scoreLean.score)
     .join(' / ')}，比分玩法高赔率低命中，只适合极小仓娱乐，不建议重仓。`
-  const warning = `${risk.level}风险；只做参考，不保证盈利；娱乐比分波动高。`
+  const warning = `${formatRiskLabel(risk)}；只做参考，不保证盈利；娱乐比分波动高。`
 
   return { primary, secondary, scoreEntertainment, warning }
+}
+
+function createUnavailableMarket() {
+  return {
+    probabilities: {
+      home: 0,
+      draw: 0,
+      away: 0,
+      over25: 0,
+      under25: 0,
+    },
+    raw: {
+      home: 0,
+      draw: 0,
+      away: 0,
+      over25: 0,
+      under25: 0,
+    },
+    overround: 0,
+    unavailableReason: NO_ODDS_REASON,
+  }
+}
+
+function createNoOddsAnalysis(homeTeam, awayTeam) {
+  const model = calculateModelProbabilities(homeTeam, awayTeam)
+  const totalGoalsModel = calculateTotalGoalsModel(homeTeam, awayTeam)
+  const recommendation = {
+    direction: 'noBet',
+    label: NO_ODDS_RECOMMENDATION_LABEL,
+    value: 0,
+  }
+  const totalGoalsRecommendation = {
+    direction: 'noBet',
+    label: NO_ODDS_RECOMMENDATION_LABEL,
+    value: 0,
+    valueDiffs: { over25: 0, under25: 0 },
+    riskTone: 'none',
+    profile: riskProfiles.none,
+  }
+  const risk = {
+    level: '待观察',
+    tone: 'none',
+    score: 0,
+    note: NO_ODDS_REASON,
+  }
+  const conservativeAdvice = {
+    text: NO_ODDS_REASON,
+    riskTone: 'none',
+    profile: riskProfiles.none,
+  }
+
+  return {
+    market: createUnavailableMarket(),
+    model,
+    recommendation,
+    risk,
+    scoreLeans: [
+      {
+        score: NO_ODDS_RECOMMENDATION_LABEL,
+        tendency: '待观察',
+        riskTone: 'none',
+        profile: riskProfiles.none,
+      },
+    ],
+    conservativeAdvice,
+    multiMarketSummary: {
+      primary: NO_ODDS_RECOMMENDATION_LABEL,
+      secondary: `${NO_ODDS_REASON}（${riskProfiles.none.label} / ${riskProfiles.none.stake}）`,
+      scoreEntertainment: NO_ODDS_REASON,
+      warning: `待观察；${NO_ODDS_REASON}。`,
+    },
+    totalGoals: {
+      market: createUnavailableMarket(),
+      model: totalGoalsModel,
+      recommendation: totalGoalsRecommendation,
+    },
+    valueDiffs: { home: 0, draw: 0, away: 0 },
+    wdlProfile: riskProfiles.none,
+  }
 }
 
 function getFinishedOutcome(match) {
@@ -541,6 +697,7 @@ function getScoreText(match) {
 }
 
 function getPrimaryStake(match) {
+  if (!hasWdlOdds(match.odds)) return riskProfiles.none.stake
   if (match.recommendation.direction !== 'noBet') return match.wdlProfile.stake
   if (match.totalGoals.recommendation.direction !== 'noBet') {
     return match.totalGoals.recommendation.profile.stake
@@ -549,14 +706,17 @@ function getPrimaryStake(match) {
 }
 
 function isSkipPrimary(match) {
-  return match.multiMarketSummary.primary.includes('不下注')
+  return !hasWdlOdds(match.odds) || match.multiMarketSummary.primary.includes('不下注')
 }
 
 function getPrimaryDisplay(match) {
+  if (!hasWdlOdds(match.odds)) return NO_ODDS_RECOMMENDATION_LABEL
   return isSkipPrimary(match) ? '跳过本场' : match.multiMarketSummary.primary
 }
 
 function getAiConfidence(match) {
+  if (!hasWdlOdds(match.odds)) return 58
+
   const strongestSignal = Math.max(
     match.recommendation.value,
     match.totalGoals.recommendation.value,
@@ -585,6 +745,13 @@ function getFlowStepStatus(index, analysisPhase) {
 }
 
 function buildMarketSentiment(match) {
+  if (!hasWdlOdds(match.odds)) {
+    return {
+      heat: '暂无赔率',
+      hint: NO_ODDS_REASON,
+    }
+  }
+
   const hotDirection = outcomes.reduce((best, outcome) =>
     match.odds[outcome] < match.odds[best] ? outcome : best,
   )
@@ -622,6 +789,8 @@ function buildAnalysisTimeline(lastAnalyzedAt) {
 }
 
 function buildJudgementLine(match) {
+  if (!hasWdlOdds(match.odds)) return NO_ODDS_REASON
+
   if (
     match.recommendation.direction === 'noBet' &&
     match.totalGoals.recommendation.direction === 'noBet'
@@ -630,13 +799,22 @@ function buildJudgementLine(match) {
   }
 
   if (match.recommendation.direction !== 'noBet') {
-    return `${match.recommendation.label}更清晰，按${match.risk.level}风险轻仓。`
+    return `${match.recommendation.label}更清晰，按${formatRiskLabel(match.risk)}轻仓。`
   }
 
   return `${match.totalGoals.recommendation.label}更清晰，胜平负先观望。`
 }
 
 function buildBeginnerNotes(match) {
+  if (!hasWdlOdds(match.odds)) {
+    return [
+      '暂无赔率，暂不推荐',
+      NO_ODDS_REASON,
+      '胜平负暂不生成推荐。',
+      '大小球暂不生成推荐。',
+    ]
+  }
+
   const notes = []
   const strengthGap = match.homeTeam.teamStrength - match.awayTeam.teamStrength
   const homeAttackEdge = match.homeTeam.attackRating - match.awayTeam.defenseRating
@@ -715,8 +893,8 @@ function App() {
   }, [])
 
   const dashboard = useMemo(() => {
-    const baseTeams = cloneTeams(teamsData.teams)
-    const baseMatches = cloneMatches(matchDataset.matches)
+    const baseMatches = cloneMatches(matchDataset.matches).filter(hasVisibleTeams)
+    const baseTeams = cloneTeams(buildTeamsForMatches(teamsData.teams, baseMatches))
     const baseRecords = cloneRecords(betHistoryData.records)
     const currentMatchDay =
       matchDataset.matchDay || baseMatches[0]?.kickoff?.slice(0, 10) || ''
@@ -735,9 +913,30 @@ function App() {
       )
       const homeTeam = matchTeamMap.get(match.homeTeamId)
       const awayTeam = matchTeamMap.get(match.awayTeamId)
-      if (!homeTeam || !awayTeam || !match.odds?.home || !match.odds?.draw || !match.odds?.away) {
+      if (!homeTeam || !awayTeam) {
         return null
       }
+
+      if (!hasWdlOdds(match.odds)) {
+        const noOddsAnalysis = createNoOddsAnalysis(homeTeam, awayTeam)
+        const history = historyMap.get(match.id)
+        const settlement = settleRecord(match, history)
+
+        return {
+          ...match,
+          odds: null,
+          globalHomeTeam: globalTeamMap.get(match.homeTeamId),
+          globalAwayTeam: globalTeamMap.get(match.awayTeamId),
+          homeTeam,
+          awayTeam,
+          history,
+          settlement,
+          beginnerNotes: null,
+          hasOdds: false,
+          ...noOddsAnalysis,
+        }
+      }
+
       const model = calculateModelProbabilities(homeTeam, awayTeam)
       const market = calculateMarketProbabilities(match.odds)
       const valueDiffs = {
@@ -802,6 +1001,7 @@ function App() {
           model: totalGoalsModel,
           recommendation: totalGoalsRecommendation,
         },
+        hasOdds: true,
         valueDiffs,
         wdlProfile,
       }
@@ -988,7 +1188,9 @@ function App() {
                   <span className={isSkipPrimary(match) ? 'skip-text' : ''}>
                     {getPrimaryDisplay(match)}
                   </span>
-                  <em className={`risk-tag ${match.risk.tone}`}>{match.risk.level}风险</em>
+                  <em className={`risk-tag ${match.risk.tone}`}>
+                    {formatRiskLabel(match.risk)}
+                  </em>
                 </div>
               </button>
             ))}
@@ -1015,7 +1217,7 @@ function App() {
               <article>
                 <span>风险等级</span>
                 <em className={`risk-tag ${selectedMatch.risk.tone}`}>
-                  {selectedMatch.risk.level}风险
+                  {formatRiskLabel(selectedMatch.risk)}
                 </em>
               </article>
               <article>

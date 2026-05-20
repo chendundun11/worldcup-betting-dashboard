@@ -12,11 +12,16 @@ const adapters = {
 }
 
 const defaultAdapter = import.meta.env.VITE_MATCH_API_ADAPTER || 'remote'
+const mockFallbackReasons = new Set([
+  'API_KEY_MISSING',
+  'API_FAILED',
+  'INVALID_RESPONSE',
+])
 
-function createEmptySnapshot(source = 'empty') {
+function createEmptySnapshot(source = 'empty', fallbackReason = 'INVALID_RESPONSE') {
   const meta = {
     dataSource: 'fallback',
-    fallbackReason: 'INVALID_RESPONSE',
+    fallbackReason,
     provider: source,
   }
 
@@ -56,10 +61,19 @@ export async function getMatches(options = {}) {
       },
     }
   } catch (error) {
-    console.warn(`Match adapter "${adapterName}" failed, falling back to mock data.`, error)
+    console.warn(`Match adapter "${adapterName}" failed.`, error)
 
     try {
       const fallbackReason = error?.fallbackReason ?? 'API_FAILED'
+
+      if (!mockFallbackReasons.has(fallbackReason)) {
+        console.warn(
+          `Fallback reason "${fallbackReason}" does not use mock match data.`,
+        )
+        return createEmptySnapshot('empty-fallback', fallbackReason)
+      }
+
+      console.warn(`Using mock match fallback for reason "${fallbackReason}".`)
       const mockSnapshot = await fetchMockMatches()
 
       return {
