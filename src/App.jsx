@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import betHistoryData from './data/betHistory.json'
 import { localOdds } from './data/localOdds'
+import { TEAM_PROFILES } from './data/teamProfiles'
 import teamsData from './data/teams.json'
 import { getInitialMatchSnapshot, getMatches } from './services/matchApi'
 import {
@@ -64,6 +65,24 @@ const neutralTeamProfile = {
   fatigue: 50,
   morale: 50,
 }
+
+const DEFAULT_TEAM_STATUS_PROFILE = {
+  recentForm: '待观察',
+  attackState: '待评估',
+  defenseState: '待评估',
+  fitness: '正常',
+  morale: '中性',
+  injuryRisk: '待确认',
+}
+
+const teamStatusFields = [
+  { key: 'recentForm', label: '近期状态' },
+  { key: 'attackState', label: '进攻状态' },
+  { key: 'defenseState', label: '防守状态' },
+  { key: 'fitness', label: '体能状态' },
+  { key: 'morale', label: '士气' },
+  { key: 'injuryRisk', label: '伤停风险' },
+]
 
 const teamNameMap = {
   Mexico: '墨西哥',
@@ -180,6 +199,53 @@ function getRawTeamName(match, side) {
       match[`${side}TeamId`] ??
       '',
   ).trim()
+}
+
+function getTeamStatusProfile(match, side) {
+  const rawTeamName = getRawTeamName(match, side)
+
+  return {
+    ...DEFAULT_TEAM_STATUS_PROFILE,
+    ...(TEAM_PROFILES[rawTeamName] ?? {}),
+  }
+}
+
+function getInjuryRiskTone(value) {
+  if (value === '高') return 'high'
+  if (value === '中') return 'medium'
+  return 'normal'
+}
+
+function TeamStatusCard({ sideLabel, teamName, profile }) {
+  return (
+    <article className="team-status-card">
+      <div className="team-status-card-header">
+        <span>{sideLabel}</span>
+        <h3>{teamName}</h3>
+      </div>
+      <div className="team-status-list">
+        {teamStatusFields.map((field) => {
+          const value = profile[field.key] ?? DEFAULT_TEAM_STATUS_PROFILE[field.key]
+          const isInjuryRisk = field.key === 'injuryRisk'
+
+          return (
+            <p className="team-status-row" key={field.key}>
+              <span>{field.label}</span>
+              <strong
+                className={
+                  isInjuryRisk
+                    ? `injury-risk-tag ${getInjuryRiskTone(value)}`
+                    : undefined
+                }
+              >
+                {value}
+              </strong>
+            </p>
+          )
+        })}
+      </div>
+    </article>
+  )
 }
 
 function getLocalOddsKey(match) {
@@ -1082,9 +1148,8 @@ function getReviewText(match) {
 }
 
 function formatDataSource(meta) {
-  if (meta?.dataSource === 'real') return 'real'
-  if (meta?.dataSource === 'fallback') return 'fallback'
-  return 'mock'
+  if (meta?.dataSource === 'real') return '真实API'
+  return '本地模拟'
 }
 
 function formatFallbackReason(meta) {
@@ -1301,6 +1366,8 @@ function App() {
   const selectedSignalStrength = getSignalStrength(selectedConfidence)
   const marketSentiment = buildMarketSentiment(selectedMatch)
   const analysisTimeline = buildAnalysisTimeline(lastAnalyzedAt)
+  const homeTeamStatus = getTeamStatusProfile(selectedMatch, 'home')
+  const awayTeamStatus = getTeamStatusProfile(selectedMatch, 'away')
 
   function handleReanalyze() {
     if (isAnalyzing) return
@@ -1330,6 +1397,7 @@ function App() {
               模型状态：{analysisPhaseConfig[analysisPhase].label}
             </span>
             <span>最近更新时间：{formatUpdateTime(lastAnalyzedAt)}</span>
+            <span>数据源：{formatDataSource(matchDataset.meta)}</span>
           </div>
         </div>
         <div className="hero-pick">
@@ -1513,6 +1581,25 @@ function App() {
                 ))}
               </div>
             </article>
+          </section>
+
+          <section className="team-status-panel" aria-label="球队状态">
+            <div className="section-title compact-title">
+              <span>赛前情报</span>
+              <h2>球队状态</h2>
+            </div>
+            <div className="team-status-grid">
+              <TeamStatusCard
+                profile={homeTeamStatus}
+                sideLabel="主队"
+                teamName={selectedMatch.homeTeam.name}
+              />
+              <TeamStatusCard
+                profile={awayTeamStatus}
+                sideLabel="客队"
+                teamName={selectedMatch.awayTeam.name}
+              />
+            </div>
           </section>
 
           <section className="play-reference-panel" aria-label="玩法参考">

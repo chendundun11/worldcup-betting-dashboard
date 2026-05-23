@@ -13,6 +13,7 @@
 .ai-flow-panel,
 .market-sentiment-card,
 .analysis-log-card,
+.team-status-panel,
 .play-card,
 .detail-panel,
 .review-panel,
@@ -339,6 +340,7 @@
 .ai-flow-panel,
 .market-sentiment-card,
 .analysis-log-card,
+.team-status-panel,
 .detail-panel,
 .review-panel,
 .risk-footer {
@@ -648,6 +650,108 @@
 .analysis-timeline {
   display: grid;
   gap: 10px;
+}
+
+.team-status-panel {
+  overflow: hidden;
+  border-color: rgba(45, 212, 191, 0.18);
+  background:
+    radial-gradient(circle at 10% 0%, rgba(45, 212, 191, 0.12), transparent 30%),
+    linear-gradient(180deg, rgba(9, 17, 32, 0.96), rgba(5, 10, 22, 0.94));
+}
+
+.team-status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.team-status-card {
+  min-height: 220px;
+  padding: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, rgba(45, 212, 191, 0.06), rgba(2, 6, 14, 0.3)),
+    rgba(2, 6, 14, 0.32);
+}
+
+.team-status-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.team-status-card-header span {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 8px;
+  border-radius: 999px;
+  color: var(--mint);
+  background: rgba(45, 212, 191, 0.1);
+  font-size: 12px;
+  font-weight: 1000;
+}
+
+.team-status-card h3 {
+  margin: 0;
+  color: var(--text-strong);
+  font-family: var(--display);
+  font-size: clamp(22px, 2.8vw, 34px);
+  line-height: 1.05;
+  text-align: right;
+}
+
+.team-status-list {
+  display: grid;
+  gap: 8px;
+}
+
+.team-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  padding: 9px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 14px;
+  background: rgba(2, 6, 14, 0.24);
+}
+
+.team-status-row span {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.team-status-row strong {
+  color: var(--text-strong);
+  font-size: 13px;
+  font-weight: 1000;
+}
+
+.injury-risk-tag {
+  width: fit-content;
+  padding: 4px 8px;
+  border-radius: 999px;
+}
+
+.injury-risk-tag.high {
+  color: var(--red);
+  background: rgba(251, 113, 133, 0.14);
+}
+
+.injury-risk-tag.medium {
+  color: var(--gold);
+  background: rgba(251, 191, 36, 0.14);
+}
+
+.injury-risk-tag.normal {
+  color: var(--text-strong);
+  background: rgba(148, 163, 184, 0.08);
 }
 
 .timeline-item {
@@ -1050,6 +1154,7 @@
   .quick-meta-grid,
   .ai-flow-steps,
   .ai-insight-grid,
+  .team-status-grid,
   .summary-grid,
   .play-grid,
   .team-compare-list,
@@ -1070,6 +1175,7 @@
   .ai-flow-panel,
   .market-sentiment-card,
   .analysis-log-card,
+  .team-status-panel,
   .match-list-panel,
   .detail-panel,
   .review-panel,
@@ -1083,6 +1189,7 @@
   .ai-flow-panel,
   .market-sentiment-card,
   .analysis-log-card,
+  .team-status-panel,
   .match-list-panel,
   .detail-panel,
   .review-panel {
