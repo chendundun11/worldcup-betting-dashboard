@@ -660,6 +660,13 @@
     linear-gradient(180deg, rgba(9, 17, 32, 0.96), rgba(5, 10, 22, 0.94));
 }
 
+.squad-insight-panel {
+  border-color: rgba(96, 165, 250, 0.18);
+  background:
+    radial-gradient(circle at 88% 0%, rgba(96, 165, 250, 0.12), transparent 30%),
+    linear-gradient(180deg, rgba(9, 17, 32, 0.96), rgba(5, 10, 22, 0.94));
+}
+
 .team-status-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -673,6 +680,13 @@
   border-radius: 22px;
   background:
     linear-gradient(180deg, rgba(45, 212, 191, 0.06), rgba(2, 6, 14, 0.3)),
+    rgba(2, 6, 14, 0.32);
+}
+
+.squad-insight-card {
+  border-color: rgba(96, 165, 250, 0.14);
+  background:
+    linear-gradient(180deg, rgba(96, 165, 250, 0.06), rgba(2, 6, 14, 0.3)),
     rgba(2, 6, 14, 0.32);
 }
 

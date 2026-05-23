@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import betHistoryData from './data/betHistory.json'
 import { localOdds } from './data/localOdds'
+import { SQUAD_INSIGHTS } from './data/squadInsights'
 import { TEAM_PROFILES } from './data/teamProfiles'
 import teamsData from './data/teams.json'
 import { getInitialMatchSnapshot, getMatches } from './services/matchApi'
@@ -82,6 +83,22 @@ const teamStatusFields = [
   { key: 'fitness', label: '体能状态' },
   { key: 'morale', label: '士气' },
   { key: 'injuryRisk', label: '伤停风险' },
+]
+
+const DEFAULT_SQUAD_INSIGHT = {
+  coreLineup: '待确认',
+  benchDepth: '待评估',
+  attackingOptions: '待观察',
+  defensiveStability: '待评估',
+  injuryNote: '暂无明确情报',
+}
+
+const squadInsightFields = [
+  { key: 'coreLineup', label: '主力完整度' },
+  { key: 'benchDepth', label: '替补深度' },
+  { key: 'attackingOptions', label: '进攻变化' },
+  { key: 'defensiveStability', label: '防线稳定' },
+  { key: 'injuryNote', label: '伤停说明' },
 ]
 
 const teamNameMap = {
@@ -210,6 +227,15 @@ function getTeamStatusProfile(match, side) {
   }
 }
 
+function getSquadInsight(match, side) {
+  const rawTeamName = getRawTeamName(match, side)
+
+  return {
+    ...DEFAULT_SQUAD_INSIGHT,
+    ...(SQUAD_INSIGHTS[rawTeamName] ?? {}),
+  }
+}
+
 function getInjuryRiskTone(value) {
   if (value === '高') return 'high'
   if (value === '中') return 'medium'
@@ -243,6 +269,25 @@ function TeamStatusCard({ sideLabel, teamName, profile }) {
             </p>
           )
         })}
+      </div>
+    </article>
+  )
+}
+
+function SquadInsightCard({ sideLabel, teamName, insight }) {
+  return (
+    <article className="team-status-card squad-insight-card">
+      <div className="team-status-card-header">
+        <span>{sideLabel}</span>
+        <h3>{teamName}</h3>
+      </div>
+      <div className="team-status-list">
+        {squadInsightFields.map((field) => (
+          <p className="team-status-row" key={field.key}>
+            <span>{field.label}</span>
+            <strong>{insight[field.key] ?? DEFAULT_SQUAD_INSIGHT[field.key]}</strong>
+          </p>
+        ))}
       </div>
     </article>
   )
@@ -1368,6 +1413,8 @@ function App() {
   const analysisTimeline = buildAnalysisTimeline(lastAnalyzedAt)
   const homeTeamStatus = getTeamStatusProfile(selectedMatch, 'home')
   const awayTeamStatus = getTeamStatusProfile(selectedMatch, 'away')
+  const homeSquadInsight = getSquadInsight(selectedMatch, 'home')
+  const awaySquadInsight = getSquadInsight(selectedMatch, 'away')
 
   function handleReanalyze() {
     if (isAnalyzing) return
@@ -1596,6 +1643,25 @@ function App() {
               />
               <TeamStatusCard
                 profile={awayTeamStatus}
+                sideLabel="客队"
+                teamName={selectedMatch.awayTeam.name}
+              />
+            </div>
+          </section>
+
+          <section className="team-status-panel squad-insight-panel" aria-label="阵容情报">
+            <div className="section-title compact-title">
+              <span>赛前情报</span>
+              <h2>阵容情报</h2>
+            </div>
+            <div className="team-status-grid">
+              <SquadInsightCard
+                insight={homeSquadInsight}
+                sideLabel="主队"
+                teamName={selectedMatch.homeTeam.name}
+              />
+              <SquadInsightCard
+                insight={awaySquadInsight}
                 sideLabel="客队"
                 teamName={selectedMatch.awayTeam.name}
               />
