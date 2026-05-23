@@ -44,10 +44,10 @@ const DEFAULT_TOTAL_GOALS_ODDS = {
 }
 
 const riskProfiles = {
-  low: { label: '低风险', stake: '中等参考' },
-  medium: { label: '中风险', stake: '中等参考' },
-  high: { label: '高风险', stake: '轻度参考' },
-  none: { label: '观望', stake: '参与建议：观望' },
+  low: { label: '稳健参考', stake: '稳健参考' },
+  medium: { label: '中等参考', stake: '中等参考' },
+  high: { label: '谨慎参考', stake: '谨慎参考' },
+  none: { label: '观察为主', stake: '观察为主' },
 }
 
 const NO_ODDS_REASON =
@@ -431,8 +431,7 @@ function buildTeamsForMatches(localTeams, matches) {
 }
 
 function formatRiskLabel(risk) {
-  if (risk?.level === '待观察') return '待观察'
-  return `${risk?.level ?? '中'}风险`
+  return riskProfiles[risk?.tone]?.label ?? riskProfiles.none.label
 }
 
 function formatPercent(value, digits = 1) {
@@ -781,7 +780,7 @@ function buildConservativeAdvice(
     text = `${favoriteTeam.name}优势清楚，主胜低就看不败/小球。`
     riskTone = 'medium'
   } else if (recommendation.direction !== 'noBet' && risk.tone === 'low') {
-    text = `${recommendation.label}更顺，轻仓更稳。`
+    text = `${getOutcomeDirectionLabel(recommendation.direction)}更顺，控制参与强度。`
     riskTone = 'low'
   } else if (totalGoalsRecommendation.direction !== 'noBet') {
     text = `胜平负不清晰，先看${totalGoalsRecommendation.label}。`
@@ -805,15 +804,15 @@ function buildMultiMarketSummary(
 ) {
   const primary =
     recommendation.direction !== 'noBet'
-      ? `${recommendation.label}（${wdlProfile.label}）`
+      ? `${getOutcomeDirectionLabel(recommendation.direction)}｜${wdlProfile.label}`
       : totalGoalsRecommendation.direction !== 'noBet'
-        ? `${totalGoalsRecommendation.label}（${totalGoalsRecommendation.profile.label}）`
+        ? `${totalGoalsRecommendation.label}｜${totalGoalsRecommendation.profile.label}`
         : '观望为主'
   const secondary =
     totalGoalsRecommendation.direction !== 'noBet' &&
     recommendation.direction !== 'noBet'
-      ? `${totalGoalsRecommendation.label}可作次选（${totalGoalsRecommendation.profile.label}）`
-      : `${conservativeAdvice.text}（${conservativeAdvice.profile.label}）`
+      ? `${totalGoalsRecommendation.label}可作次选｜${totalGoalsRecommendation.profile.label}`
+      : `${conservativeAdvice.text}｜${conservativeAdvice.profile.label}`
   const scoreEntertainment = `${scoreLeans
     .map((scoreLean) => scoreLean.score)
     .join(' / ')}，${SCORE_REFERENCE_NOTICE}`
@@ -932,13 +931,122 @@ function getScoreText(match) {
   return `${match.score.home} - ${match.score.away}`
 }
 
-function getRecommendationStrength(match) {
-  if (!hasWdlOdds(match.odds)) return '轻度参考 / 等待盘口确认'
-  if (match.recommendation.direction !== 'noBet') return '中等参考'
-  if (match.totalGoals.recommendation.direction !== 'noBet') {
-    return '中等参考'
+function getLocalOddsSnapshot(match) {
+  if (!hasLocalOdds(match)) return null
+
+  const homeWin = getNumberValue(match.localOdds.homeWin)
+  const draw = getNumberValue(match.localOdds.draw)
+  const awayWin = getNumberValue(match.localOdds.awayWin)
+
+  if (!homeWin || !draw || !awayWin) return null
+
+  const favoriteDirection = homeWin <= awayWin ? 'home' : 'away'
+  const favoriteOdd = favoriteDirection === 'home' ? homeWin : awayWin
+  const opponentOdd = favoriteDirection === 'home' ? awayWin : homeWin
+  const range = Math.max(homeWin, draw, awayWin) - Math.min(homeWin, draw, awayWin)
+
+  return {
+    homeWin,
+    draw,
+    awayWin,
+    favoriteDirection,
+    favoriteOdd,
+    opponentOdd,
+    range,
   }
-  return '轻度参考 / 观望为主'
+}
+
+function getMatchType(match) {
+  const oddsSnapshot = getLocalOddsSnapshot(match)
+
+  if (!oddsSnapshot) {
+    return {
+      id: 'caution',
+      label: '谨慎观察局',
+      tone: 'none',
+      favoriteDirection: null,
+    }
+  }
+
+  const { favoriteDirection, favoriteOdd, opponentOdd, draw, range } = oddsSnapshot
+
+  if (favoriteOdd <= 1.8 && opponentOdd - favoriteOdd >= 1.2) {
+    return {
+      id: 'strongFavorite',
+      label: '强队优势局',
+      tone: 'low',
+      favoriteDirection,
+    }
+  }
+
+  if (favoriteOdd >= 1.9 && range <= 1.3) {
+    return {
+      id: 'balanced',
+      label: '实力接近局',
+      tone: 'medium',
+      favoriteDirection,
+    }
+  }
+
+  if (favoriteOdd <= 2.15 && opponentOdd <= 4.4 && draw <= 3.6) {
+    return {
+      id: 'upsetWatch',
+      label: '防冷观察局',
+      tone: 'high',
+      favoriteDirection,
+    }
+  }
+
+  return {
+    id: 'caution',
+    label: '谨慎观察局',
+    tone: 'none',
+    favoriteDirection,
+  }
+}
+
+function getOutcomeDirectionLabel(direction) {
+  if (direction === 'home') return '主胜方向'
+  if (direction === 'away') return '客胜方向'
+  if (direction === 'draw') return '平局防范'
+  return '等待盘口确认'
+}
+
+function getPrimaryDirectionDisplay(match) {
+  const matchType = getMatchType(match)
+
+  if (!hasWdlOdds(match.odds) || matchType.id === 'caution') {
+    return '等待盘口确认'
+  }
+
+  if (matchType.id === 'balanced') return '平局防范'
+
+  if (matchType.favoriteDirection) {
+    return getOutcomeDirectionLabel(matchType.favoriteDirection)
+  }
+
+  return getOutcomeDirectionLabel(match.recommendation.direction)
+}
+
+function getRecommendationStrength(match) {
+  if (!hasWdlOdds(match.odds)) return '观察为主'
+
+  const matchType = getMatchType(match)
+
+  if (matchType.id === 'caution') return '观察为主'
+  if (matchType.id === 'balanced' || matchType.id === 'upsetWatch') {
+    return '谨慎参考'
+  }
+  if (
+    matchType.id === 'strongFavorite' &&
+    match.recommendation.direction !== 'noBet'
+  ) {
+    const oddsSnapshot = getLocalOddsSnapshot(match)
+    return oddsSnapshot?.favoriteOdd <= 1.7 ? '稳健参考' : '中等参考'
+  }
+  if (match.totalGoals.recommendation.direction !== 'noBet') return '中等参考'
+
+  return '观察为主'
 }
 
 function getStrengthGap(match) {
@@ -972,7 +1080,19 @@ function getLocalOddsWdlDirection(localOddsEntry) {
 }
 
 function getWdlDirection(match) {
-  if (hasLocalOdds(match)) return getLocalOddsWdlDirection(match.localOdds)
+  const matchType = getMatchType(match)
+
+  if (matchType.id === 'strongFavorite') {
+    return getOutcomeDirectionLabel(matchType.favoriteDirection)
+  }
+
+  if (matchType.id === 'balanced') return '平局防范'
+
+  if (matchType.id === 'upsetWatch') {
+    return `${getOutcomeDirectionLabel(matchType.favoriteDirection)}，但防平`
+  }
+
+  if (matchType.id === 'caution') return '等待盘口确认'
 
   if (hasWdlOdds(match.odds) && match.recommendation.direction !== 'noBet') {
     if (match.recommendation.direction === 'home') return '主胜方向'
@@ -984,11 +1104,24 @@ function getWdlDirection(match) {
 }
 
 function getTotalGoalsDirection(match) {
-  if (hasLocalOdds(match)) {
-    if (match.localOdds.over25 < match.localOdds.under25) return '2.5球以上倾向'
-    if (match.localOdds.under25 < match.localOdds.over25) return '2.5球以下倾向'
+  const matchType = getMatchType(match)
+
+  if (matchType.id === 'strongFavorite') {
+    return match.localOdds?.over25 < match.localOdds?.under25
+      ? '2.5球以上倾向'
+      : '2-3球区间'
+  }
+
+  if (matchType.id === 'balanced') return '2-3球区间'
+
+  if (matchType.id === 'upsetWatch') {
+    if (match.localOdds?.under25 <= match.localOdds?.over25) {
+      return '2.5球以下倾向'
+    }
     return '2-3球区间'
   }
+
+  if (matchType.id === 'caution') return '2-3球区间'
 
   if (hasWdlOdds(match.odds) && match.totalGoals.recommendation.direction !== 'noBet') {
     return match.totalGoals.recommendation.direction === 'over25'
@@ -1006,8 +1139,20 @@ function getTotalGoalsDirection(match) {
 }
 
 function getScoreReferencePair(match) {
-  if (!hasWdlOdds(match.odds)) {
+  const matchType = getMatchType(match)
+
+  if (matchType.id === 'strongFavorite') {
+    return matchType.favoriteDirection === 'away'
+      ? { main: '0-2', backup: '1-2' }
+      : { main: '2-0', backup: '2-1' }
+  }
+
+  if (matchType.id === 'balanced' || matchType.id === 'upsetWatch') {
     return { main: '1-1', backup: '2-1' }
+  }
+
+  if (matchType.id === 'caution' || !hasWdlOdds(match.odds)) {
+    return { main: '1-1', backup: '1-0' }
   }
 
   const scores = getUniqueScores(match.scoreLeans.map((scoreLean) => scoreLean.score))
@@ -1023,23 +1168,18 @@ function hasScoutedTeam(match) {
 }
 
 function shouldShowUpsetScore(match) {
-  if (!hasScoutedTeam(match)) return false
-
-  const strengthGap = Math.abs(getStrengthGap(match))
-  const powerGap = Math.abs(getPowerDiff(match))
-  const awayCounterEdge = match.awayTeam.attackRating - match.homeTeam.defenseRating
-  const awayWinModel = match.model?.away ?? 0
-
-  return strengthGap <= 3 || powerGap <= 3 || awayCounterEdge >= 3 || awayWinModel >= 0.34
+  return getMatchType(match).id === 'upsetWatch'
 }
 
 function isSkipPrimary(match) {
-  return !hasWdlOdds(match.odds) || match.multiMarketSummary.primary.includes('不下注')
+  return !hasWdlOdds(match.odds) || getMatchType(match).id === 'caution'
 }
 
 function getPrimaryDisplay(match) {
-  if (!hasWdlOdds(match.odds)) return NO_ODDS_RECOMMENDATION_LABEL
-  return isSkipPrimary(match) ? '跳过本场' : match.multiMarketSummary.primary
+  const direction = getPrimaryDirectionDisplay(match)
+  const strength = getRecommendationStrength(match)
+
+  return `${direction}｜${strength}`
 }
 
 function getAiConfidence(match) {
@@ -1093,11 +1233,11 @@ function buildMarketSentiment(match) {
   if (isSkipPrimary(match)) {
     hint = '盘口价值不足，等待更好机会。'
   } else if (hotDirection === match.recommendation.direction) {
-    hint = match.risk.tone === 'low' ? '可轻仓跟随，不追高。' : '不建议追热扩大风险。'
+    hint = match.risk.tone === 'low' ? '可中等参考，不追高。' : '不建议追热放大波动。'
   } else if (match.totalGoals.recommendation.direction !== 'noBet') {
     hint = `${match.totalGoals.recommendation.label}比胜平负更清晰。`
   } else {
-    hint = '热度与建议不完全一致，控仓。'
+    hint = '热度与建议不完全一致，控制参与强度。'
   }
 
   return {
@@ -1127,7 +1267,7 @@ function buildJudgementLine(match) {
   }
 
   if (match.recommendation.direction !== 'noBet') {
-    return `${match.recommendation.label}更清晰，按${formatRiskLabel(match.risk)}轻仓。`
+    return `${getPrimaryDirectionDisplay(match)}更清晰，${getRecommendationStrength(match)}。`
   }
 
   return `${match.totalGoals.recommendation.label}更清晰，胜平负先观望。`
@@ -1177,9 +1317,9 @@ function buildBeginnerNotes(match) {
   } else if (match.recommendation.direction === 'away' && awayAttackEdge >= 4) {
     notes.push('主队防守抗压一般。')
   } else if (match.risk.tone === 'high') {
-    notes.push('风险偏高，少碰或放弃。')
+    notes.push('波动偏大，少碰或放弃。')
   } else {
-    notes.push('信号明确，也要控仓。')
+    notes.push('信号明确，也要控制参与强度。')
   }
 
   return notes.slice(0, 4)
@@ -1415,6 +1555,7 @@ function App() {
   const awayTeamStatus = getTeamStatusProfile(selectedMatch, 'away')
   const homeSquadInsight = getSquadInsight(selectedMatch, 'home')
   const awaySquadInsight = getSquadInsight(selectedMatch, 'away')
+  const selectedMatchType = getMatchType(selectedMatch)
 
   function handleReanalyze() {
     if (isAnalyzing) return
@@ -1518,10 +1659,10 @@ function App() {
                 </div>
                 <div className="match-card-bottom">
                   <span className={isSkipPrimary(match) ? 'skip-text' : ''}>
-                    {getPrimaryDisplay(match)}
+                    {getPrimaryDirectionDisplay(match)}
                   </span>
-                  <em className={`risk-tag ${match.risk.tone}`}>
-                    {formatRiskLabel(match.risk)}
+                  <em className={`risk-tag ${getMatchType(match).tone}`}>
+                    {getRecommendationStrength(match)}
                   </em>
                 </div>
               </button>
@@ -1550,9 +1691,9 @@ function App() {
 
             <div className="quick-meta-grid">
               <article>
-                <span>风险等级</span>
-                <em className={`risk-tag ${selectedMatch.risk.tone}`}>
-                  {formatRiskLabel(selectedMatch.risk)}
+                <span>比赛类型</span>
+                <em className={`risk-tag ${selectedMatchType.tone}`}>
+                  {selectedMatchType.label}
                 </em>
               </article>
               <article>
@@ -1725,10 +1866,8 @@ function App() {
                     ? '结合基础面与盘口价值。'
                     : '基于球队强弱分的赛前初判。'}
                 </p>
-                <em className={`risk-tag ${selectedMatch.recommendation.direction === 'noBet' ? 'none' : selectedMatch.risk.tone}`}>
-                  {hasWdlOdds(selectedMatch.odds)
-                    ? selectedMatch.wdlProfile.label
-                    : '参与建议：观望'}
+                <em className={`risk-tag ${selectedMatchType.tone}`}>
+                  {getRecommendationStrength(selectedMatch)}
                 </em>
               </article>
 
@@ -1741,10 +1880,8 @@ function App() {
                     ? '结合进攻、防守和总进球盘口。'
                     : '暂无赔率时使用基础面区间参考。'}
                 </p>
-                <em className={`risk-tag ${selectedMatch.totalGoals.recommendation.riskTone}`}>
-                  {hasWdlOdds(selectedMatch.odds)
-                    ? selectedMatch.totalGoals.recommendation.profile.label
-                    : '参与建议：观望'}
+                <em className={`risk-tag ${selectedMatchType.tone}`}>
+                  {getRecommendationStrength(selectedMatch)}
                 </em>
               </article>
 
@@ -1762,8 +1899,8 @@ function App() {
                   </p>
                   {shouldShowUpsetScore(selectedMatch) && (
                     <p>
-                      <span>小冷门</span>
-                      <strong>0-1</strong>
+                      <span>冷门观察</span>
+                      <strong>1-1 小防</strong>
                     </p>
                   )}
                 </div>
