@@ -1332,6 +1332,10 @@ function getPrimaryDisplay(match) {
   return `${direction}｜${strength}`
 }
 
+function getCompactDirectionDisplay(match) {
+  return getPrimaryDirectionDisplay(match).replace('等待盘口确认', '等待盘口')
+}
+
 function getAiConfidence(match) {
   if (!hasWdlOdds(match.odds)) return 58
 
@@ -1898,39 +1902,52 @@ function App() {
           </div>
 
           <div className="simple-match-list">
-            {dashboard.matches.map((match) => (
-              <button
-                className={
-                  selectedMatch.id === match.id
-                    ? 'simple-match-card active'
-                    : 'simple-match-card'
-                }
-                key={match.id}
-                onClick={() => setSelectedMatchId(match.id)}
-                type="button"
-              >
-                <div className="match-card-top">
-                  <strong>
-                    {match.homeTeam.shortName} vs {match.awayTeam.shortName}
-                  </strong>
-                  <span className={`status-pill ${statusConfig[match.status].tone}`}>
-                    {statusConfig[match.status].label}
-                  </span>
-                </div>
-                <div className="match-card-mid">
-                  <span>{formatKickoff(match.kickoff)}</span>
-                  <b>{getScoreText(match)}</b>
-                </div>
-                <div className="match-card-bottom">
-                  <span className={isSkipPrimary(match) ? 'skip-text' : ''}>
-                    {getPrimaryDirectionDisplay(match)}
-                  </span>
-                  <em className={`risk-tag ${getMatchType(match).tone}`}>
-                    {getRecommendationStrength(match)}
-                  </em>
-                </div>
-              </button>
-            ))}
+            {dashboard.matches.map((match) => {
+              const matchType = getMatchType(match)
+              const scoreReference = getScoreReferencePair(match)
+
+              return (
+                <button
+                  className={
+                    selectedMatch.id === match.id
+                      ? 'simple-match-card active'
+                      : 'simple-match-card'
+                  }
+                  key={match.id}
+                  onClick={() => setSelectedMatchId(match.id)}
+                  type="button"
+                >
+                  <div className="match-card-top">
+                    <strong>
+                      {match.homeTeam.shortName} vs {match.awayTeam.shortName}
+                    </strong>
+                    <span className={`status-pill ${statusConfig[match.status].tone}`}>
+                      {statusConfig[match.status].label}
+                    </span>
+                  </div>
+                  <span className="match-card-time">{formatKickoff(match.kickoff)}</span>
+                  <div className="match-card-signal">
+                    <strong>{getCompactDirectionDisplay(match)}</strong>
+                    <span>{getAiConfidence(match)}%</span>
+                    <em>{getRecommendationStrength(match)}</em>
+                  </div>
+                  <div className="match-card-detail">
+                    <span>
+                      比分：<strong>{scoreReference.main} / {scoreReference.backup}</strong>
+                    </span>
+                    <span>
+                      大小球：<strong>{getTotalGoalsDirection(match)}</strong>
+                    </span>
+                  </div>
+                  <div className="match-card-tags">
+                    <em className={`match-type-pill ${matchType.tone}`}>
+                      {matchType.label}
+                    </em>
+                    <b>{getScoreText(match)}</b>
+                  </div>
+                </button>
+              )
+            })}
           </div>
         </aside>
 

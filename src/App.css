@@ -364,7 +364,7 @@
 
 .simple-match-card {
   width: 100%;
-  padding: 14px;
+  padding: 13px;
   border: 1px solid rgba(148, 163, 184, 0.12);
   border-radius: 20px;
   color: var(--text-soft);
@@ -385,8 +385,8 @@
 }
 
 .match-card-top,
-.match-card-mid,
-.match-card-bottom {
+.match-card-signal,
+.match-card-tags {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -394,27 +394,114 @@
 }
 
 .match-card-top strong {
+  min-width: 0;
   color: var(--text-strong);
   font-size: 16px;
+  line-height: 1.3;
 }
 
-.match-card-mid {
-  margin: 10px 0;
+.match-card-time {
+  display: block;
+  margin-top: 8px;
   color: var(--text-muted);
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 900;
 }
 
-.match-card-mid b {
+.match-card-signal {
+  margin-top: 10px;
+  padding: 9px 10px;
+  border: 1px solid rgba(45, 212, 191, 0.14);
+  border-radius: 14px;
+  background: rgba(45, 212, 191, 0.06);
+}
+
+.match-card-signal strong,
+.match-card-signal span,
+.match-card-signal em {
+  min-width: 0;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 1000;
+  line-height: 1.2;
+}
+
+.match-card-signal strong {
   color: var(--mint);
-  font-family: var(--number);
-  font-size: 16px;
 }
 
-.match-card-bottom span {
+.match-card-signal span {
+  color: var(--text-strong);
+  font-family: var(--number);
+}
+
+.match-card-signal em {
+  color: var(--gold);
+  text-align: right;
+}
+
+.match-card-detail {
+  display: grid;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.match-card-detail span {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.4;
+}
+
+.match-card-detail strong {
+  min-width: 0;
   color: var(--text-soft);
   font-size: 13px;
+  font-weight: 1000;
   line-height: 1.5;
+  text-align: right;
+}
+
+.match-card-tags {
+  margin-top: 10px;
+}
+
+.match-card-tags b {
+  color: var(--mint);
+  font-family: var(--number);
+  font-size: 14px;
+}
+
+.match-type-pill {
+  width: fit-content;
+  padding: 5px 8px;
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: rgba(148, 163, 184, 0.1);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 1000;
+  white-space: nowrap;
+}
+
+.match-type-pill.low {
+  color: var(--green);
+  background: rgba(74, 222, 128, 0.1);
+}
+
+.match-type-pill.medium {
+  color: var(--gold);
+  background: rgba(251, 191, 36, 0.1);
+}
+
+.match-type-pill.high {
+  color: var(--red);
+  background: rgba(251, 113, 133, 0.1);
 }
 
 .status-pill,
