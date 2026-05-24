@@ -306,9 +306,7 @@ function hasUsableMatchId(value) {
   return Boolean(id && id !== 'undefined' && id !== 'null')
 }
 
-function createStableMatchId(match, index) {
-  if (hasUsableMatchId(match.id)) return String(match.id).trim()
-
+function createFallbackMatchId(match, index) {
   const homeTeamName = getRawTeamName(match, 'home') || 'home'
   const awayTeamName = getRawTeamName(match, 'away') || 'away'
   const kickoff = String(match.kickoffTime ?? match.kickoff ?? 'kickoff')
@@ -318,6 +316,23 @@ function createStableMatchId(match, index) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
+}
+
+function createStableMatchId(match, index, usedIds = new Set()) {
+  const preferredId = hasUsableMatchId(match.id)
+    ? String(match.id).trim()
+    : createFallbackMatchId(match, index)
+  const baseId = preferredId || `match-${index + 1}`
+  let stableId = baseId
+  let suffix = 2
+
+  while (usedIds.has(stableId)) {
+    stableId = `${baseId}-${suffix}`
+    suffix += 1
+  }
+
+  usedIds.add(stableId)
+  return stableId
 }
 
 function normalizeLocalOdds(localOddsEntry) {
@@ -333,6 +348,8 @@ function normalizeLocalOdds(localOddsEntry) {
 }
 
 function cloneMatches(matches) {
+  const usedIds = new Set()
+
   return matches.map((match, index) => {
     const localOddsKey = getLocalOddsKey(match)
     const matchedLocalOdds = localOdds[localOddsKey] ?? null
@@ -343,7 +360,7 @@ function cloneMatches(matches) {
 
     return {
       ...match,
-      id: createStableMatchId(match, index),
+      id: createStableMatchId(match, index, usedIds),
       kickoff: match.kickoff ?? match.kickoffTime,
       kickoffTime: match.kickoffTime ?? match.kickoff,
       homeTeamId: match.homeTeamId ?? match.homeTeam,
@@ -1720,9 +1737,29 @@ function App() {
     }
   }, [matchDataset])
 
+  useEffect(() => {
+    if (!dashboard.matches.length) return
+
+    setSelectedMatchId((currentId) => {
+      const normalizedId = String(currentId ?? '')
+      const hasCurrentMatch = dashboard.matches.some(
+        (match) => String(match.id) === normalizedId,
+      )
+
+      return hasCurrentMatch ? normalizedId : String(dashboard.matches[0].id)
+    })
+  }, [dashboard.matches])
+
+  const normalizedSelectedMatchId = String(selectedMatchId ?? '')
   const selectedMatch =
-    dashboard.matches.find((match) => match.id === selectedMatchId) ??
-    dashboard.matches[0]
+    dashboard.matches.find(
+      (match) => String(match.id) === normalizedSelectedMatchId,
+    ) ?? dashboard.matches[0]
+  const selectMatch = (match) => {
+    setSelectedMatchId(String(match.id))
+  }
+  const isSelectedMatch = (match) =>
+    selectedMatch ? String(selectedMatch.id) === String(match.id) : false
 
   if (!selectedMatch) {
     return (
@@ -1847,12 +1884,12 @@ function App() {
               return (
                 <button
                   className={
-                    selectedMatch.id === match.id
+                    isSelectedMatch(match)
                       ? 'featured-match-card active'
                       : 'featured-match-card'
                   }
                   key={match.id}
-                  onClick={() => setSelectedMatchId(match.id)}
+                  onClick={() => selectMatch(match)}
                   type="button"
                 >
                   <div className="featured-card-head">
@@ -1909,12 +1946,12 @@ function App() {
               return (
                 <button
                   className={
-                    selectedMatch.id === match.id
+                    isSelectedMatch(match)
                       ? 'simple-match-card active'
                       : 'simple-match-card'
                   }
                   key={match.id}
-                  onClick={() => setSelectedMatchId(match.id)}
+                  onClick={() => selectMatch(match)}
                   type="button"
                 >
                   <div className="match-card-top">
