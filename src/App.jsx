@@ -1198,6 +1198,56 @@ function getAiConfidence(match) {
   )
 }
 
+function getFeaturedMatchScore(match, index) {
+  const strength = getRecommendationStrength(match)
+  const matchType = getMatchType(match)
+  const strengthWeight = {
+    稳健参考: 34,
+    中等参考: 28,
+    谨慎参考: 16,
+    观察为主: 0,
+  }[strength] ?? 0
+  const typeWeight = {
+    strongFavorite: 22,
+    balanced: 14,
+    upsetWatch: 12,
+    caution: 0,
+  }[matchType.id] ?? 0
+
+  return (
+    (hasLocalOdds(match) ? 120 : 0) +
+    (strength !== '观察为主' ? 36 : 0) +
+    getAiConfidence(match) * 1.2 +
+    strengthWeight +
+    typeWeight -
+    index * 0.25
+  )
+}
+
+function getFeaturedMatches(matches) {
+  if (!matches.length) return []
+
+  const rankedMatches = matches
+    .map((match, index) => ({
+      match,
+      score: getFeaturedMatchScore(match, index),
+    }))
+    .sort((current, next) => next.score - current.score)
+    .map((item) => item.match)
+
+  const featuredMatches = rankedMatches.slice(0, 3)
+  const firstLocalOddsMatch = matches.find(hasLocalOdds)
+
+  if (
+    firstLocalOddsMatch &&
+    !featuredMatches.some((match) => match.id === firstLocalOddsMatch.id)
+  ) {
+    return [firstLocalOddsMatch, ...featuredMatches.slice(0, 2)]
+  }
+
+  return featuredMatches
+}
+
 function getSignalStrength(confidence) {
   if (confidence >= 80) return '强'
   if (confidence >= 70) return '中'
@@ -1556,6 +1606,7 @@ function App() {
   const homeSquadInsight = getSquadInsight(selectedMatch, 'home')
   const awaySquadInsight = getSquadInsight(selectedMatch, 'away')
   const selectedMatchType = getMatchType(selectedMatch)
+  const featuredMatches = getFeaturedMatches(dashboard.matches)
 
   function handleReanalyze() {
     if (isAnalyzing) return
@@ -1624,6 +1675,69 @@ function App() {
           <strong>{formatPercent(dashboard.metrics.roi)}</strong>
           <p>累计盈亏 {formatUnits(dashboard.metrics.totalProfit)}</p>
         </article>
+      </section>
+
+      <section className="featured-matches-panel" aria-label="今日重点场次">
+        <div className="section-title featured-title">
+          <span>重点筛选</span>
+          <h2>今日重点场次</h2>
+          <p>系统优先筛选有盘口、有方向、有参考价值的比赛。</p>
+        </div>
+
+        {featuredMatches.length ? (
+          <div className="featured-match-grid">
+            {featuredMatches.map((match) => {
+              const matchType = getMatchType(match)
+              const scoreReference = getScoreReferencePair(match)
+
+              return (
+                <button
+                  className={
+                    selectedMatch.id === match.id
+                      ? 'featured-match-card active'
+                      : 'featured-match-card'
+                  }
+                  key={match.id}
+                  onClick={() => setSelectedMatchId(match.id)}
+                  type="button"
+                >
+                  <div className="featured-card-head">
+                    <span>{matchType.label}</span>
+                    <strong>
+                      {match.homeTeam.name} vs {match.awayTeam.name}
+                    </strong>
+                    <small>{formatKickoff(match.kickoff)}</small>
+                  </div>
+
+                  <div className="featured-card-main">
+                    <p>
+                      <span>AI方向</span>
+                      <strong>{getPrimaryDirectionDisplay(match)}</strong>
+                    </p>
+                    <p>
+                      <span>推荐强度</span>
+                      <strong>{getRecommendationStrength(match)}</strong>
+                    </p>
+                    <p>
+                      <span>信心指数</span>
+                      <strong>{getAiConfidence(match)}%</strong>
+                    </p>
+                    <p>
+                      <span>比分参考</span>
+                      <strong>{scoreReference.main} / {scoreReference.backup}</strong>
+                    </p>
+                    <p>
+                      <span>大小球方向</span>
+                      <strong>{getTotalGoalsDirection(match)}</strong>
+                    </p>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        ) : (
+          <p className="featured-empty">暂无重点场次，等待赛程与盘口更新。</p>
+        )}
       </section>
 
       <section className="main-layout">
