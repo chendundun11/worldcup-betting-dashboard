@@ -335,6 +335,15 @@ function createStableMatchId(match, index, usedIds = new Set()) {
   return stableId
 }
 
+function createMatchUiKey(match, index) {
+  const homeTeamName = getRawTeamName(match, 'home') || 'home'
+  const awayTeamName = getRawTeamName(match, 'away') || 'away'
+  const kickoff = String(match.kickoffTime ?? match.kickoff ?? '').trim()
+  const kickoffPart = kickoff || index
+
+  return `${homeTeamName}__${awayTeamName}__${kickoffPart}`
+}
+
 function normalizeLocalOdds(localOddsEntry) {
   if (!localOddsEntry) return null
 
@@ -360,6 +369,7 @@ function cloneMatches(matches) {
 
     return {
       ...match,
+      uiKey: createMatchUiKey(match, index),
       id: createStableMatchId(match, index, usedIds),
       kickoff: match.kickoff ?? match.kickoffTime,
       kickoffTime: match.kickoffTime ?? match.kickoff,
@@ -1411,7 +1421,7 @@ function getFeaturedMatches(matches) {
 
   if (
     firstLocalOddsMatch &&
-    !featuredMatches.some((match) => match.id === firstLocalOddsMatch.id)
+    !featuredMatches.some((match) => match.uiKey === firstLocalOddsMatch.uiKey)
   ) {
     return [firstLocalOddsMatch, ...featuredMatches.slice(0, 2)]
   }
@@ -1563,7 +1573,7 @@ function formatFallbackReason(meta) {
 }
 
 function App() {
-  const [selectedMatchId, setSelectedMatchId] = useState('')
+  const [selectedMatchKey, setSelectedMatchKey] = useState('')
   const [analysisPhase, setAnalysisPhase] = useState('done')
   const [lastAnalyzedAt, setLastAnalyzedAt] = useState(() => new Date())
   const [matchDataset, setMatchDataset] = useState(() => getInitialMatchSnapshot())
@@ -1740,26 +1750,26 @@ function App() {
   useEffect(() => {
     if (!dashboard.matches.length) return
 
-    setSelectedMatchId((currentId) => {
-      const normalizedId = String(currentId ?? '')
+    setSelectedMatchKey((currentKey) => {
+      const normalizedKey = String(currentKey ?? '')
       const hasCurrentMatch = dashboard.matches.some(
-        (match) => String(match.id) === normalizedId,
+        (match) => match.uiKey === normalizedKey,
       )
 
-      return hasCurrentMatch ? normalizedId : String(dashboard.matches[0].id)
+      return hasCurrentMatch ? normalizedKey : dashboard.matches[0].uiKey
     })
   }, [dashboard.matches])
 
-  const normalizedSelectedMatchId = String(selectedMatchId ?? '')
+  const normalizedSelectedMatchKey = String(selectedMatchKey ?? '')
   const selectedMatch =
     dashboard.matches.find(
-      (match) => String(match.id) === normalizedSelectedMatchId,
+      (match) => match.uiKey === normalizedSelectedMatchKey,
     ) ?? dashboard.matches[0]
   const selectMatch = (match) => {
-    setSelectedMatchId(String(match.id))
+    setSelectedMatchKey(match.uiKey)
   }
   const isSelectedMatch = (match) =>
-    selectedMatch ? String(selectedMatch.id) === String(match.id) : false
+    selectedMatch ? selectedMatch.uiKey === match.uiKey : false
 
   if (!selectedMatch) {
     return (
@@ -1888,7 +1898,7 @@ function App() {
                       ? 'featured-match-card active'
                       : 'featured-match-card'
                   }
-                  key={match.id}
+                  key={match.uiKey}
                   onClick={() => selectMatch(match)}
                   type="button"
                 >
@@ -1950,7 +1960,7 @@ function App() {
                       ? 'simple-match-card active'
                       : 'simple-match-card'
                   }
-                  key={match.id}
+                  key={match.uiKey}
                   onClick={() => selectMatch(match)}
                   type="button"
                 >
