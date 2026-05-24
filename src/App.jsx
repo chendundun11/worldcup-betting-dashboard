@@ -301,6 +301,25 @@ function getLocalOddsKey(match) {
   return `${homeTeamName}__${awayTeamName}`
 }
 
+function hasUsableMatchId(value) {
+  const id = String(value ?? '').trim()
+  return Boolean(id && id !== 'undefined' && id !== 'null')
+}
+
+function createStableMatchId(match, index) {
+  if (hasUsableMatchId(match.id)) return String(match.id).trim()
+
+  const homeTeamName = getRawTeamName(match, 'home') || 'home'
+  const awayTeamName = getRawTeamName(match, 'away') || 'away'
+  const kickoff = String(match.kickoffTime ?? match.kickoff ?? 'kickoff')
+  const stableSeed = `${homeTeamName}-${awayTeamName}-${kickoff}-${index}`
+
+  return stableSeed
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
 function normalizeLocalOdds(localOddsEntry) {
   if (!localOddsEntry) return null
 
@@ -314,7 +333,7 @@ function normalizeLocalOdds(localOddsEntry) {
 }
 
 function cloneMatches(matches) {
-  return matches.map((match) => {
+  return matches.map((match, index) => {
     const localOddsKey = getLocalOddsKey(match)
     const matchedLocalOdds = localOdds[localOddsKey] ?? null
     const normalizedLocalOdds = normalizeLocalOdds(matchedLocalOdds)
@@ -324,6 +343,7 @@ function cloneMatches(matches) {
 
     return {
       ...match,
+      id: createStableMatchId(match, index),
       kickoff: match.kickoff ?? match.kickoffTime,
       kickoffTime: match.kickoffTime ?? match.kickoff,
       homeTeamId: match.homeTeamId ?? match.homeTeam,
@@ -1138,29 +1158,159 @@ function getTotalGoalsDirection(match) {
   return '2-3球区间'
 }
 
+function getTotalGoalsLean(match) {
+  if (hasLocalOdds(match)) {
+    if (match.localOdds.over25 < match.localOdds.under25) return 'over'
+    if (match.localOdds.under25 < match.localOdds.over25) return 'under'
+  }
+
+  const direction = getTotalGoalsDirection(match)
+
+  if (direction.includes('以上')) return 'over'
+  if (direction.includes('以下')) return 'under'
+  return 'range'
+}
+
+function getFavoriteDirection(match, matchType, oddsSnapshot) {
+  if (matchType.favoriteDirection) return matchType.favoriteDirection
+  if (oddsSnapshot?.favoriteDirection) return oddsSnapshot.favoriteDirection
+  if (match.recommendation.direction === 'away') return 'away'
+  return 'home'
+}
+
+function isStrongAttackState(value) {
+  return value === '强' || value === '较强'
+}
+
+function isWeakDefenseState(value) {
+  return value === '弱' || value === '偏弱'
+}
+
+function isStrongDefenseState(value) {
+  return value === '强' || value === '较强'
+}
+
+function hasHighInjuryRisk(match) {
+  return (
+    getTeamStatusProfile(match, 'home').injuryRisk === '高' ||
+    getTeamStatusProfile(match, 'away').injuryRisk === '高'
+  )
+}
+
+function bothTeamsDefendWell(match) {
+  return (
+    isStrongDefenseState(getTeamStatusProfile(match, 'home').defenseState) &&
+    isStrongDefenseState(getTeamStatusProfile(match, 'away').defenseState)
+  )
+}
+
+function getDefensiveScorePair(favoriteDirection) {
+  if (favoriteDirection === 'away') return { main: '0-1', backup: '1-1' }
+  return { main: '1-0', backup: '1-1' }
+}
+
+function raiseHomeScore(score) {
+  const scoreLiftMap = {
+    '1-0': '2-0',
+    '1-1': '2-1',
+    '2-0': '3-0',
+    '2-1': '3-1',
+  }
+
+  return scoreLiftMap[score] ?? score
+}
+
+function raiseAwayScore(score) {
+  const scoreLiftMap = {
+    '0-1': '0-2',
+    '1-1': '1-2',
+    '0-2': '0-3',
+    '1-2': '1-3',
+  }
+
+  return scoreLiftMap[score] ?? score
+}
+
+function applyTeamStatusScoreTilt(match, pair, favoriteDirection) {
+  if (hasHighInjuryRisk(match)) return pair
+
+  const homeProfile = getTeamStatusProfile(match, 'home')
+  const awayProfile = getTeamStatusProfile(match, 'away')
+
+  if (bothTeamsDefendWell(match)) {
+    return getDefensiveScorePair(favoriteDirection)
+  }
+
+  if (
+    favoriteDirection === 'home' &&
+    isStrongAttackState(homeProfile.attackState) &&
+    isWeakDefenseState(awayProfile.defenseState)
+  ) {
+    return {
+      main: raiseHomeScore(pair.main),
+      backup: raiseHomeScore(pair.backup),
+    }
+  }
+
+  if (
+    favoriteDirection === 'away' &&
+    isStrongAttackState(awayProfile.attackState) &&
+    isWeakDefenseState(homeProfile.defenseState)
+  ) {
+    return {
+      main: raiseAwayScore(pair.main),
+      backup: raiseAwayScore(pair.backup),
+    }
+  }
+
+  return pair
+}
+
 function getScoreReferencePair(match) {
   const matchType = getMatchType(match)
+  const oddsSnapshot = getLocalOddsSnapshot(match)
+  const totalGoalsLean = getTotalGoalsLean(match)
+  const favoriteDirection = getFavoriteDirection(match, matchType, oddsSnapshot)
 
-  if (matchType.id === 'strongFavorite') {
-    return matchType.favoriteDirection === 'away'
-      ? { main: '0-2', backup: '1-2' }
-      : { main: '2-0', backup: '2-1' }
-  }
-
-  if (matchType.id === 'balanced' || matchType.id === 'upsetWatch') {
-    return { main: '1-1', backup: '2-1' }
-  }
-
-  if (matchType.id === 'caution' || !hasWdlOdds(match.odds)) {
+  if (matchType.id === 'caution' || !hasLocalOdds(match)) {
     return { main: '1-1', backup: '1-0' }
   }
 
-  const scores = getUniqueScores(match.scoreLeans.map((scoreLean) => scoreLean.score))
-
-  return {
-    main: scores[0] ?? '1-1',
-    backup: scores[1] ?? '2-1',
+  if (matchType.id === 'balanced') {
+    if (totalGoalsLean === 'over') return { main: '2-2', backup: '2-1' }
+    if (totalGoalsLean === 'under') return { main: '1-1', backup: '0-0' }
+    return { main: '1-1', backup: '2-1' }
   }
+
+  if (matchType.id === 'upsetWatch') {
+    if (oddsSnapshot?.draw <= 3.4) return { main: '1-1', backup: '0-0' }
+    if (favoriteDirection === 'away') return { main: '1-1', backup: '1-2' }
+    if (totalGoalsLean === 'under') return { main: '1-1', backup: '0-1' }
+    return { main: '1-1', backup: '2-1' }
+  }
+
+  let scorePair = { main: '1-1', backup: '1-0' }
+
+  if (oddsSnapshot?.favoriteOdd <= 1.65) {
+    if (favoriteDirection === 'away') {
+      if (totalGoalsLean === 'over') scorePair = { main: '0-2', backup: '1-3' }
+      else if (totalGoalsLean === 'under') scorePair = { main: '0-1', backup: '0-2' }
+      else scorePair = { main: '0-2', backup: '1-2' }
+    } else if (totalGoalsLean === 'over') {
+      scorePair = { main: '2-0', backup: '3-1' }
+    } else if (totalGoalsLean === 'under') {
+      scorePair = { main: '1-0', backup: '2-0' }
+    } else {
+      scorePair = { main: '2-0', backup: '2-1' }
+    }
+  } else if (oddsSnapshot?.favoriteOdd <= 2.05) {
+    scorePair =
+      favoriteDirection === 'away'
+        ? { main: '1-2', backup: '0-1' }
+        : { main: '2-1', backup: '1-0' }
+  }
+
+  return applyTeamStatusScoreTilt(match, scorePair, favoriteDirection)
 }
 
 function hasScoutedTeam(match) {
@@ -1392,7 +1542,7 @@ function formatFallbackReason(meta) {
 }
 
 function App() {
-  const [selectedMatchId, setSelectedMatchId] = useState('m-004')
+  const [selectedMatchId, setSelectedMatchId] = useState('')
   const [analysisPhase, setAnalysisPhase] = useState('done')
   const [lastAnalyzedAt, setLastAnalyzedAt] = useState(() => new Date())
   const [matchDataset, setMatchDataset] = useState(() => getInitialMatchSnapshot())
