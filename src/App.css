@@ -1370,6 +1370,10 @@
   line-height: 1.6;
 }
 
+.debug-selection-line {
+  opacity: 0.72;
+}
+
 @media (max-width: 1180px) {
   .hero-card,
   .main-layout {

@@ -1418,20 +1418,23 @@ function getFeaturedMatchScore(match, index) {
 function getFeaturedMatches(matches) {
   if (!matches.length) return []
 
-  const rankedMatches = matches
-    .map((match, index) => ({
+  const featuredItems = matches.map((match, index) => ({
       match,
+      sourceIndex: index,
       score: getFeaturedMatchScore(match, index),
     }))
     .sort((current, next) => next.score - current.score)
-    .map((item) => item.match)
 
-  const featuredMatches = rankedMatches.slice(0, 3)
-  const firstLocalOddsMatch = matches.find(hasLocalOdds)
+  const featuredMatches = featuredItems.slice(0, 3)
+  const firstLocalOddsMatch = featuredItems.find((item) =>
+    hasLocalOdds(item.match),
+  )
 
   if (
     firstLocalOddsMatch &&
-    !featuredMatches.some((match) => match.uiKey === firstLocalOddsMatch.uiKey)
+    !featuredMatches.some(
+      (item) => item.sourceIndex === firstLocalOddsMatch.sourceIndex,
+    )
   ) {
     return [firstLocalOddsMatch, ...featuredMatches.slice(0, 2)]
   }
@@ -1583,7 +1586,7 @@ function formatFallbackReason(meta) {
 }
 
 function App() {
-  const [selectedMatchKey, setSelectedMatchKey] = useState(null)
+  const [selectedIndex, setSelectedIndex] = useState(0)
   const [analysisPhase, setAnalysisPhase] = useState('done')
   const [lastAnalyzedAt, setLastAnalyzedAt] = useState(() => new Date())
   const [matchDataset, setMatchDataset] = useState(() => getInitialMatchSnapshot())
@@ -1762,24 +1765,22 @@ function App() {
   useEffect(() => {
     if (!normalizedMatches.length) return
 
-    setSelectedMatchKey((prevKey) => {
-      if (
-        prevKey &&
-        normalizedMatches.some((match) => match.uiKey === prevKey)
-      ) {
-        return prevKey
+    setSelectedIndex((prevIndex) => {
+      if (prevIndex >= 0 && prevIndex < normalizedMatches.length) {
+        return prevIndex
       }
 
-      return normalizedMatches[0].uiKey
+      return 0
     })
-  }, [normalizedMatches])
+  }, [normalizedMatches.length])
 
+  const safeSelectedIndex =
+    selectedIndex >= 0 && selectedIndex < normalizedMatches.length
+      ? selectedIndex
+      : 0
   const activeMatch =
-    normalizedMatches.find((match) => match.uiKey === selectedMatchKey) ||
-    normalizedMatches[0] ||
+    normalizedMatches[safeSelectedIndex] ||
     null
-  const isSelectedMatch = (match) =>
-    activeMatch ? activeMatch.uiKey === match.uiKey : false
 
   if (!activeMatch) {
     return (
@@ -1816,7 +1817,7 @@ function App() {
   const awayTeamStatus = getTeamStatusProfile(activeMatch, 'away')
   const homeSquadInsight = getSquadInsight(activeMatch, 'home')
   const awaySquadInsight = getSquadInsight(activeMatch, 'away')
-  const selectedMatchType = getMatchType(activeMatch)
+  const activeMatchType = getMatchType(activeMatch)
   const featuredMatches = getFeaturedMatches(normalizedMatches)
 
   function handleReanalyze() {
@@ -1897,19 +1898,19 @@ function App() {
 
         {featuredMatches.length ? (
           <div className="featured-match-grid">
-            {featuredMatches.map((match) => {
+            {featuredMatches.map(({ match, sourceIndex }) => {
               const matchType = getMatchType(match)
               const scoreReference = getScoreReferencePair(match)
 
               return (
                 <button
                   className={
-                    isSelectedMatch(match)
+                    safeSelectedIndex === sourceIndex
                       ? 'featured-match-card active'
                       : 'featured-match-card'
                   }
-                  key={match.uiKey}
-                  onClick={() => setSelectedMatchKey(match.uiKey)}
+                  key={`${match.uiKey}-${sourceIndex}`}
+                  onClick={() => setSelectedIndex(sourceIndex)}
                   type="button"
                 >
                   <div className="featured-card-head">
@@ -1959,19 +1960,19 @@ function App() {
           </div>
 
           <div className="simple-match-list">
-            {normalizedMatches.map((match) => {
+            {normalizedMatches.map((match, index) => {
               const matchType = getMatchType(match)
               const scoreReference = getScoreReferencePair(match)
 
               return (
                 <button
                   className={
-                    isSelectedMatch(match)
+                    safeSelectedIndex === index
                       ? 'simple-match-card active'
                       : 'simple-match-card'
                   }
                   key={match.uiKey}
-                  onClick={() => setSelectedMatchKey(match.uiKey)}
+                  onClick={() => setSelectedIndex(index)}
                   type="button"
                 >
                   <div className="match-card-top">
@@ -2030,8 +2031,8 @@ function App() {
             <div className="quick-meta-grid">
               <article>
                 <span>比赛类型</span>
-                <em className={`risk-tag ${selectedMatchType.tone}`}>
-                  {selectedMatchType.label}
+                <em className={`risk-tag ${activeMatchType.tone}`}>
+                  {activeMatchType.label}
                 </em>
               </article>
               <article>
@@ -2204,7 +2205,7 @@ function App() {
                     ? '结合基础面与盘口价值。'
                     : '基于球队强弱分的赛前初判。'}
                 </p>
-                <em className={`risk-tag ${selectedMatchType.tone}`}>
+                <em className={`risk-tag ${activeMatchType.tone}`}>
                   {getRecommendationStrength(activeMatch)}
                 </em>
               </article>
@@ -2218,7 +2219,7 @@ function App() {
                     ? '结合进攻、防守和总进球盘口。'
                     : '暂无赔率时使用基础面区间参考。'}
                 </p>
-                <em className={`risk-tag ${selectedMatchType.tone}`}>
+                <em className={`risk-tag ${activeMatchType.tone}`}>
                   {getRecommendationStrength(activeMatch)}
                 </em>
               </article>
@@ -2415,6 +2416,11 @@ function App() {
         <small>
           数据源：{formatDataSource(matchDataset.meta)} · fallback 原因：
           {formatFallbackReason(matchDataset.meta)}
+        </small>
+        <small className="debug-selection-line">
+          调试：selectedIndex: {safeSelectedIndex} | activeMatch:{' '}
+          {activeMatch.homeTeam.name} vs {activeMatch.awayTeam.name} | matchesCount:{' '}
+          {normalizedMatches.length} | dataSource: {matchDataset.meta?.dataSource ?? 'unknown'}
         </small>
       </footer>
     </main>
