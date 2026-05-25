@@ -1573,7 +1573,7 @@ function formatFallbackReason(meta) {
 }
 
 function App() {
-  const [selectedMatchKey, setSelectedMatchKey] = useState('')
+  const [selectedMatch, setSelectedMatch] = useState(null)
   const [analysisPhase, setAnalysisPhase] = useState('done')
   const [lastAnalyzedAt, setLastAnalyzedAt] = useState(() => new Date())
   const [matchDataset, setMatchDataset] = useState(() => getInitialMatchSnapshot())
@@ -1747,31 +1747,18 @@ function App() {
     }
   }, [matchDataset])
 
-  useEffect(() => {
-    if (!dashboard.matches.length) return
-
-    setSelectedMatchKey((currentKey) => {
-      const normalizedKey = String(currentKey ?? '')
-      const hasCurrentMatch = dashboard.matches.some(
-        (match) => match.uiKey === normalizedKey,
-      )
-
-      return hasCurrentMatch ? normalizedKey : dashboard.matches[0].uiKey
-    })
-  }, [dashboard.matches])
-
-  const normalizedSelectedMatchKey = String(selectedMatchKey ?? '')
-  const selectedMatch =
-    dashboard.matches.find(
-      (match) => match.uiKey === normalizedSelectedMatchKey,
-    ) ?? dashboard.matches[0]
+  const selectedMatchIsCurrent = selectedMatch
+    ? dashboard.matches.some((match) => match.uiKey === selectedMatch.uiKey)
+    : false
+  const activeMatch = selectedMatchIsCurrent ? selectedMatch : dashboard.matches[0]
   const selectMatch = (match) => {
-    setSelectedMatchKey(match.uiKey)
+    console.log('selected match:', match.homeTeam, match.awayTeam, match.uiKey)
+    setSelectedMatch(match)
   }
   const isSelectedMatch = (match) =>
-    selectedMatch ? selectedMatch.uiKey === match.uiKey : false
+    activeMatch ? activeMatch.uiKey === match.uiKey : false
 
-  if (!selectedMatch) {
+  if (!activeMatch) {
     return (
       <main className="rookie-dashboard">
         <section className="hero-card">
@@ -1798,15 +1785,15 @@ function App() {
   }
 
   const isAnalyzing = analysisPhase !== 'done'
-  const selectedConfidence = getAiConfidence(selectedMatch)
+  const selectedConfidence = getAiConfidence(activeMatch)
   const selectedSignalStrength = getSignalStrength(selectedConfidence)
-  const marketSentiment = buildMarketSentiment(selectedMatch)
+  const marketSentiment = buildMarketSentiment(activeMatch)
   const analysisTimeline = buildAnalysisTimeline(lastAnalyzedAt)
-  const homeTeamStatus = getTeamStatusProfile(selectedMatch, 'home')
-  const awayTeamStatus = getTeamStatusProfile(selectedMatch, 'away')
-  const homeSquadInsight = getSquadInsight(selectedMatch, 'home')
-  const awaySquadInsight = getSquadInsight(selectedMatch, 'away')
-  const selectedMatchType = getMatchType(selectedMatch)
+  const homeTeamStatus = getTeamStatusProfile(activeMatch, 'home')
+  const awayTeamStatus = getTeamStatusProfile(activeMatch, 'away')
+  const homeSquadInsight = getSquadInsight(activeMatch, 'home')
+  const awaySquadInsight = getSquadInsight(activeMatch, 'away')
+  const selectedMatchType = getMatchType(activeMatch)
   const featuredMatches = getFeaturedMatches(dashboard.matches)
 
   function handleReanalyze() {
@@ -1842,10 +1829,10 @@ function App() {
         </div>
         <div className="hero-pick">
           <span>AI当前建议</span>
-          <strong className={isSkipPrimary(selectedMatch) ? 'skip-primary' : ''}>
-            {getPrimaryDisplay(selectedMatch)}
+          <strong className={isSkipPrimary(activeMatch) ? 'skip-primary' : ''}>
+            {getPrimaryDisplay(activeMatch)}
           </strong>
-          <p>{selectedMatch.homeTeam.name} vs {selectedMatch.awayTeam.name}</p>
+          <p>{activeMatch.homeTeam.name} vs {activeMatch.awayTeam.name}</p>
         </div>
       </section>
 
@@ -2003,17 +1990,17 @@ function App() {
             <div className="quick-card-top">
               <span>比赛名称</span>
               <h2>
-                {selectedMatch.homeTeam.name} vs {selectedMatch.awayTeam.name}
+                {activeMatch.homeTeam.name} vs {activeMatch.awayTeam.name}
               </h2>
               <p className="quick-kickoff-time">
-                {formatKickoff(selectedMatch.kickoff)}
+                {formatKickoff(activeMatch.kickoff)}
               </p>
             </div>
 
             <div className="quick-recommendation">
               <span>主推方向</span>
-              <strong className={isSkipPrimary(selectedMatch) ? 'skip-primary' : ''}>
-                {getPrimaryDisplay(selectedMatch)}
+              <strong className={isSkipPrimary(activeMatch) ? 'skip-primary' : ''}>
+                {getPrimaryDisplay(activeMatch)}
               </strong>
             </div>
 
@@ -2026,7 +2013,7 @@ function App() {
               </article>
               <article>
                 <span>推荐强度</span>
-                <strong>{getRecommendationStrength(selectedMatch)}</strong>
+                <strong>{getRecommendationStrength(activeMatch)}</strong>
               </article>
               <article>
                 <span>信心指数</span>
@@ -2037,7 +2024,7 @@ function App() {
 
             <div className="quick-judgement-block">
               <span>一句话判断</span>
-              <p className="quick-judgement">{buildJudgementLine(selectedMatch)}</p>
+              <p className="quick-judgement">{buildJudgementLine(activeMatch)}</p>
             </div>
 
             <div className="analysis-action-row">
@@ -2108,12 +2095,12 @@ function App() {
               <TeamStatusCard
                 profile={homeTeamStatus}
                 sideLabel="主队"
-                teamName={selectedMatch.homeTeam.name}
+                teamName={activeMatch.homeTeam.name}
               />
               <TeamStatusCard
                 profile={awayTeamStatus}
                 sideLabel="客队"
-                teamName={selectedMatch.awayTeam.name}
+                teamName={activeMatch.awayTeam.name}
               />
             </div>
           </section>
@@ -2127,12 +2114,12 @@ function App() {
               <SquadInsightCard
                 insight={homeSquadInsight}
                 sideLabel="主队"
-                teamName={selectedMatch.homeTeam.name}
+                teamName={activeMatch.homeTeam.name}
               />
               <SquadInsightCard
                 insight={awaySquadInsight}
                 sideLabel="客队"
-                teamName={selectedMatch.awayTeam.name}
+                teamName={activeMatch.awayTeam.name}
               />
             </div>
           </section>
@@ -2147,37 +2134,37 @@ function App() {
               <article className="play-card odds-card">
                 <BarChart3 size={20} />
                 <span>盘口状态</span>
-                <strong>{getMarketStatus(selectedMatch)}</strong>
-                {hasLocalOdds(selectedMatch) ? (
+                <strong>{getMarketStatus(activeMatch)}</strong>
+                {hasLocalOdds(activeMatch) ? (
                   <>
                     <div className="odds-reference-grid">
                       <p>
                         <span>主胜</span>
-                        <strong>{formatOddsValue(selectedMatch.localOdds.homeWin)}</strong>
+                        <strong>{formatOddsValue(activeMatch.localOdds.homeWin)}</strong>
                       </p>
                       <p>
                         <span>平</span>
-                        <strong>{formatOddsValue(selectedMatch.localOdds.draw)}</strong>
+                        <strong>{formatOddsValue(activeMatch.localOdds.draw)}</strong>
                       </p>
                       <p>
                         <span>客胜</span>
-                        <strong>{formatOddsValue(selectedMatch.localOdds.awayWin)}</strong>
+                        <strong>{formatOddsValue(activeMatch.localOdds.awayWin)}</strong>
                       </p>
                       <p>
                         <span>大2.5</span>
-                        <strong>{formatOddsValue(selectedMatch.localOdds.over25)}</strong>
+                        <strong>{formatOddsValue(activeMatch.localOdds.over25)}</strong>
                       </p>
                       <p>
                         <span>小2.5</span>
-                        <strong>{formatOddsValue(selectedMatch.localOdds.under25)}</strong>
+                        <strong>{formatOddsValue(activeMatch.localOdds.under25)}</strong>
                       </p>
                       <p>
                         <span>让球</span>
-                        <strong>{selectedMatch.localOdds.handicap}</strong>
+                        <strong>{activeMatch.localOdds.handicap}</strong>
                       </p>
                     </div>
                     <small className="odds-reference-note">
-                      {selectedMatch.localOdds.note}
+                      {activeMatch.localOdds.note}
                     </small>
                   </>
                 ) : (
@@ -2188,28 +2175,28 @@ function App() {
               <article className="play-card">
                 <Crosshair size={20} />
                 <span>胜平负方向</span>
-                <strong>{getWdlDirection(selectedMatch)}</strong>
+                <strong>{getWdlDirection(activeMatch)}</strong>
                 <p>
-                  {hasWdlOdds(selectedMatch.odds)
+                  {hasWdlOdds(activeMatch.odds)
                     ? '结合基础面与盘口价值。'
                     : '基于球队强弱分的赛前初判。'}
                 </p>
                 <em className={`risk-tag ${selectedMatchType.tone}`}>
-                  {getRecommendationStrength(selectedMatch)}
+                  {getRecommendationStrength(activeMatch)}
                 </em>
               </article>
 
               <article className="play-card">
                 <Gauge size={20} />
                 <span>大小球方向</span>
-                <strong>{getTotalGoalsDirection(selectedMatch)}</strong>
+                <strong>{getTotalGoalsDirection(activeMatch)}</strong>
                 <p>
-                  {hasWdlOdds(selectedMatch.odds)
+                  {hasWdlOdds(activeMatch.odds)
                     ? '结合进攻、防守和总进球盘口。'
                     : '暂无赔率时使用基础面区间参考。'}
                 </p>
                 <em className={`risk-tag ${selectedMatchType.tone}`}>
-                  {getRecommendationStrength(selectedMatch)}
+                  {getRecommendationStrength(activeMatch)}
                 </em>
               </article>
 
@@ -2219,13 +2206,13 @@ function App() {
                 <div className="score-reference-list">
                   <p>
                     <span>主比分</span>
-                    <strong>{getScoreReferencePair(selectedMatch).main}</strong>
+                    <strong>{getScoreReferencePair(activeMatch).main}</strong>
                   </p>
                   <p>
                     <span>备选比分</span>
-                    <strong>{getScoreReferencePair(selectedMatch).backup}</strong>
+                    <strong>{getScoreReferencePair(activeMatch).backup}</strong>
                   </p>
-                  {shouldShowUpsetScore(selectedMatch) && (
+                  {shouldShowUpsetScore(activeMatch) && (
                     <p>
                       <span>冷门观察</span>
                       <strong>1-1 小防</strong>
@@ -2238,7 +2225,7 @@ function App() {
               <article className="play-card steady-card">
                 <TrendingUp size={20} />
                 <span>稳健玩法</span>
-                <strong>{selectedMatch.conservativeAdvice.text}</strong>
+                <strong>{activeMatch.conservativeAdvice.text}</strong>
               </article>
             </div>
           </section>
@@ -2262,9 +2249,9 @@ function App() {
                   {outcomes.map((outcome) => (
                     <div className="detail-row" key={outcome}>
                       <strong>{outcomeLabels[outcome]}</strong>
-                      <span>{formatPercent(selectedMatch.market.probabilities[outcome])}</span>
-                      <span>{formatPercent(selectedMatch.model[outcome])}</span>
-                      <b>{formatPointDiff(selectedMatch.valueDiffs[outcome])}</b>
+                      <span>{formatPercent(activeMatch.market.probabilities[outcome])}</span>
+                      <span>{formatPercent(activeMatch.model[outcome])}</span>
+                      <b>{formatPointDiff(activeMatch.valueDiffs[outcome])}</b>
                     </div>
                   ))}
                 </div>
@@ -2281,15 +2268,15 @@ function App() {
                   </div>
                   <div className="detail-row">
                     <strong>大2.5</strong>
-                    <span>{formatPercent(selectedMatch.totalGoals.market.probabilities.over25)}</span>
-                    <span>{formatPercent(selectedMatch.totalGoals.model.over25Probability)}</span>
-                    <b>{formatPointDiff(selectedMatch.totalGoals.recommendation.valueDiffs.over25)}</b>
+                    <span>{formatPercent(activeMatch.totalGoals.market.probabilities.over25)}</span>
+                    <span>{formatPercent(activeMatch.totalGoals.model.over25Probability)}</span>
+                    <b>{formatPointDiff(activeMatch.totalGoals.recommendation.valueDiffs.over25)}</b>
                   </div>
                   <div className="detail-row">
                     <strong>小2.5</strong>
-                    <span>{formatPercent(selectedMatch.totalGoals.market.probabilities.under25)}</span>
-                    <span>{formatPercent(selectedMatch.totalGoals.model.under25Probability)}</span>
-                    <b>{formatPointDiff(selectedMatch.totalGoals.recommendation.valueDiffs.under25)}</b>
+                    <span>{formatPercent(activeMatch.totalGoals.market.probabilities.under25)}</span>
+                    <span>{formatPercent(activeMatch.totalGoals.model.under25Probability)}</span>
+                    <b>{formatPointDiff(activeMatch.totalGoals.recommendation.valueDiffs.under25)}</b>
                   </div>
                 </div>
               </section>
@@ -2302,18 +2289,18 @@ function App() {
                       <div className="compare-label">
                         <span>{metric.label}</span>
                         <b>
-                          {selectedMatch.homeTeam[metric.key]} /{' '}
-                          {selectedMatch.awayTeam[metric.key]}
+                          {activeMatch.homeTeam[metric.key]} /{' '}
+                          {activeMatch.awayTeam[metric.key]}
                         </b>
                       </div>
                       <div className="dual-bars">
                         <i
                           className={metric.positive ? 'home-bar' : 'home-bar warning'}
-                          style={{ width: `${selectedMatch.homeTeam[metric.key]}%` }}
+                          style={{ width: `${activeMatch.homeTeam[metric.key]}%` }}
                         />
                         <i
                           className={metric.positive ? 'away-bar' : 'away-bar warning'}
-                          style={{ width: `${selectedMatch.awayTeam[metric.key]}%` }}
+                          style={{ width: `${activeMatch.awayTeam[metric.key]}%` }}
                         />
                       </div>
                     </div>
