@@ -335,13 +335,22 @@ function createStableMatchId(match, index, usedIds = new Set()) {
   return stableId
 }
 
-function createMatchUiKey(match, index) {
+function createMatchUiKey(match, index, usedUiKeys = new Set()) {
   const homeTeamName = getRawTeamName(match, 'home') || 'home'
   const awayTeamName = getRawTeamName(match, 'away') || 'away'
   const kickoff = String(match.kickoffTime ?? match.kickoff ?? '').trim()
   const kickoffPart = kickoff || index
+  const baseUiKey = `${homeTeamName}__${awayTeamName}__${kickoffPart}`
+  let uiKey = baseUiKey
+  let suffix = 2
 
-  return `${homeTeamName}__${awayTeamName}__${kickoffPart}`
+  while (usedUiKeys.has(uiKey)) {
+    uiKey = `${baseUiKey}__${suffix}`
+    suffix += 1
+  }
+
+  usedUiKeys.add(uiKey)
+  return String(uiKey)
 }
 
 function normalizeLocalOdds(localOddsEntry) {
@@ -358,6 +367,7 @@ function normalizeLocalOdds(localOddsEntry) {
 
 function cloneMatches(matches) {
   const usedIds = new Set()
+  const usedUiKeys = new Set()
 
   return matches.map((match, index) => {
     const localOddsKey = getLocalOddsKey(match)
@@ -369,7 +379,7 @@ function cloneMatches(matches) {
 
     return {
       ...match,
-      uiKey: createMatchUiKey(match, index),
+      uiKey: createMatchUiKey(match, index, usedUiKeys),
       id: createStableMatchId(match, index, usedIds),
       kickoff: match.kickoff ?? match.kickoffTime,
       kickoffTime: match.kickoffTime ?? match.kickoff,
@@ -1573,7 +1583,7 @@ function formatFallbackReason(meta) {
 }
 
 function App() {
-  const [selectedMatch, setSelectedMatch] = useState(null)
+  const [selectedMatchKey, setSelectedMatchKey] = useState(null)
   const [analysisPhase, setAnalysisPhase] = useState('done')
   const [lastAnalyzedAt, setLastAnalyzedAt] = useState(() => new Date())
   const [matchDataset, setMatchDataset] = useState(() => getInitialMatchSnapshot())
@@ -1747,14 +1757,27 @@ function App() {
     }
   }, [matchDataset])
 
-  const selectedMatchIsCurrent = selectedMatch
-    ? dashboard.matches.some((match) => match.uiKey === selectedMatch.uiKey)
-    : false
-  const activeMatch = selectedMatchIsCurrent ? selectedMatch : dashboard.matches[0]
-  const selectMatch = (match) => {
-    console.log('selected match:', match.homeTeam, match.awayTeam, match.uiKey)
-    setSelectedMatch(match)
-  }
+  const normalizedMatches = dashboard.matches
+
+  useEffect(() => {
+    if (!normalizedMatches.length) return
+
+    setSelectedMatchKey((prevKey) => {
+      if (
+        prevKey &&
+        normalizedMatches.some((match) => match.uiKey === prevKey)
+      ) {
+        return prevKey
+      }
+
+      return normalizedMatches[0].uiKey
+    })
+  }, [normalizedMatches])
+
+  const activeMatch =
+    normalizedMatches.find((match) => match.uiKey === selectedMatchKey) ||
+    normalizedMatches[0] ||
+    null
   const isSelectedMatch = (match) =>
     activeMatch ? activeMatch.uiKey === match.uiKey : false
 
@@ -1767,8 +1790,8 @@ function App() {
               <Activity size={16} />
               AI LIVE ENGINE
             </div>
-            <h1>AI比赛分析引擎</h1>
-            <p>比赛数据暂时不可用，系统正在使用安全回退。</p>
+            <h1>暂无比赛数据</h1>
+            <p>暂无可展示的比赛数据，等待赛程更新。</p>
           </div>
         </section>
         <footer className="risk-footer">
@@ -1794,7 +1817,7 @@ function App() {
   const homeSquadInsight = getSquadInsight(activeMatch, 'home')
   const awaySquadInsight = getSquadInsight(activeMatch, 'away')
   const selectedMatchType = getMatchType(activeMatch)
-  const featuredMatches = getFeaturedMatches(dashboard.matches)
+  const featuredMatches = getFeaturedMatches(normalizedMatches)
 
   function handleReanalyze() {
     if (isAnalyzing) return
@@ -1886,7 +1909,7 @@ function App() {
                       : 'featured-match-card'
                   }
                   key={match.uiKey}
-                  onClick={() => selectMatch(match)}
+                  onClick={() => setSelectedMatchKey(match.uiKey)}
                   type="button"
                 >
                   <div className="featured-card-head">
@@ -1936,7 +1959,7 @@ function App() {
           </div>
 
           <div className="simple-match-list">
-            {dashboard.matches.map((match) => {
+            {normalizedMatches.map((match) => {
               const matchType = getMatchType(match)
               const scoreReference = getScoreReferencePair(match)
 
@@ -1948,7 +1971,7 @@ function App() {
                       : 'simple-match-card'
                   }
                   key={match.uiKey}
-                  onClick={() => selectMatch(match)}
+                  onClick={() => setSelectedMatchKey(match.uiKey)}
                   type="button"
                 >
                   <div className="match-card-top">
