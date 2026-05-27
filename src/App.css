@@ -1649,12 +1649,76 @@
     grid-template-columns: 1fr;
   }
 
+  .daily-ai-spotlight {
+    gap: 14px;
+    margin-top: 14px;
+    padding: 18px;
+    text-align: center;
+  }
+
+  .daily-ai-copy {
+    align-items: center;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  }
+
   .daily-ai-copy h2 {
-    font-size: 34px;
+    margin: 10px 0 8px;
+    font-size: 38px;
+    line-height: 1.02;
+  }
+
+  .daily-ai-copy p {
+    font-size: 13px;
+  }
+
+  .daily-ai-summary {
+    gap: 12px;
+    padding: 14px;
+    border-radius: 18px;
+  }
+
+  .daily-ai-direction {
+    padding: 12px;
+    border: 1px solid rgba(45, 212, 191, 0.16);
+    border-radius: 16px;
+    background: rgba(45, 212, 191, 0.08);
   }
 
   .daily-ai-direction strong {
-    font-size: 32px;
+    font-size: 30px;
+    line-height: 1.06;
+  }
+
+  .daily-ai-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    text-align: left;
+  }
+
+  .daily-ai-facts p {
+    padding: 10px;
+    border-radius: 14px;
+  }
+
+  .daily-ai-facts p:nth-child(3),
+  .daily-ai-facts p:nth-child(6) {
+    grid-column: 1 / -1;
+  }
+
+  .daily-ai-facts strong {
+    font-size: 14px;
+  }
+
+  .daily-ai-summary small {
+    text-align: left;
+  }
+
+  .daily-ai-copy-button {
+    width: 100%;
+    min-height: 48px;
+    margin-top: 2px;
+    font-size: 14px;
   }
 }
 
