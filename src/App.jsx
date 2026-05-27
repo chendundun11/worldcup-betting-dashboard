@@ -2027,6 +2027,22 @@ function App() {
               </p>
             </div>
 
+            <div className="analysis-stage-strip" aria-label="分析阶段与复核提醒">
+              <div className="analysis-stage-items">
+                <p>
+                  <span>分析阶段</span>
+                  <strong>赛前初盘</strong>
+                </p>
+                <p>
+                  <span>复核提醒</span>
+                  <strong>赛前24小时建议重新更新</strong>
+                </p>
+              </div>
+              <small>
+                当前为赛前初盘参考，临场阵容、盘口变化和市场热度可能影响最终方向。
+              </small>
+            </div>
+
             <div className="quick-recommendation">
               <span>主推方向</span>
               <strong className={isSkipPrimary(activeMatch) ? 'skip-primary' : ''}>
