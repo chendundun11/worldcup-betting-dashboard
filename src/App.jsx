@@ -1994,12 +1994,14 @@ function App() {
             <span>数据源：{formatDataSource(matchDataset.meta)}</span>
           </div>
         </div>
-        <div className="hero-pick">
-          <span>当前详情</span>
-          <strong className={isSkipPrimary(activeMatch) ? 'skip-primary' : ''}>
-            {getPrimaryDisplay(activeMatch)}
-          </strong>
-          <p>{activeMatch.homeTeam.name} vs {activeMatch.awayTeam.name}</p>
+        <div className="hero-pick hero-system-status">
+          <span>系统状态</span>
+          <strong>赛前初盘｜临场需复核</strong>
+          <p>真实API同步 · 已分析 {analyzedMatchCount} 场</p>
+          <div className="hero-system-tags" aria-label="系统状态摘要">
+            <b>赛前数据扫描</b>
+            <b>盘口参考逐步补充</b>
+          </div>
         </div>
       </section>
 
