@@ -529,6 +529,54 @@ function formatKickoff(value) {
   return `北京时间 ${dateParts.month}/${dateParts.day} ${dateParts.hour}:${dateParts.minute}`
 }
 
+function getBeijingDateGroupInfo(value) {
+  const kickoffDate = new Date(value)
+
+  if (Number.isNaN(kickoffDate.getTime())) {
+    return {
+      dateKey: 'unknown-date',
+      label: '时间待定',
+    }
+  }
+
+  const parts = new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    weekday: 'short',
+  }).formatToParts(kickoffDate)
+  const dateParts = Object.fromEntries(
+    parts
+      .filter((part) => part.type !== 'literal')
+      .map((part) => [part.type, part.value]),
+  )
+
+  return {
+    dateKey: `${dateParts.year}-${dateParts.month}-${dateParts.day}`,
+    label: `${dateParts.month}/${dateParts.day} ${dateParts.weekday}`,
+  }
+}
+
+function groupMatchesByBeijingDate(matches) {
+  const groupMap = new Map()
+
+  matches.forEach((match, index) => {
+    const dateGroup = getBeijingDateGroupInfo(match.kickoff)
+
+    if (!groupMap.has(dateGroup.dateKey)) {
+      groupMap.set(dateGroup.dateKey, {
+        ...dateGroup,
+        matches: [],
+      })
+    }
+
+    groupMap.get(dateGroup.dateKey).matches.push({ match, index })
+  })
+
+  return Array.from(groupMap.values())
+}
+
 function formatClock(value) {
   return new Intl.DateTimeFormat('zh-CN', {
     timeZone: 'Asia/Shanghai',
@@ -1650,6 +1698,7 @@ function App() {
   const [lastAnalyzedAt, setLastAnalyzedAt] = useState(() => new Date())
   const [matchDataset, setMatchDataset] = useState(() => getInitialMatchSnapshot())
   const [spotlightCopyStatus, setSpotlightCopyStatus] = useState('idle')
+  const [expandedDateKeys, setExpandedDateKeys] = useState({})
 
   useEffect(() => {
     let isMounted = true
@@ -1821,6 +1870,10 @@ function App() {
   }, [matchDataset])
 
   const normalizedMatches = dashboard.matches
+  const groupedMatches = useMemo(
+    () => groupMatchesByBeijingDate(normalizedMatches),
+    [normalizedMatches],
+  )
 
   useEffect(() => {
     if (!normalizedMatches.length) return
@@ -1841,6 +1894,9 @@ function App() {
   const activeMatch =
     normalizedMatches[safeSelectedIndex] ||
     null
+  const selectedDateKey = activeMatch
+    ? getBeijingDateGroupInfo(activeMatch.kickoff).dateKey
+    : ''
 
   if (!activeMatch) {
     return (
@@ -1910,6 +1966,13 @@ function App() {
     const didCopy = await copyTextToClipboard(spotlightCopyText)
     setSpotlightCopyStatus(didCopy ? 'copied' : 'failed')
     window.setTimeout(() => setSpotlightCopyStatus('idle'), 1_800)
+  }
+
+  function handleToggleDateGroup(dateKey, isExpanded) {
+    setExpandedDateKeys((currentDateKeys) => ({
+      ...currentDateKeys,
+      [dateKey]: !isExpanded,
+    }))
   }
 
   return (
@@ -2108,50 +2171,86 @@ function App() {
           </div>
 
           <div className="simple-match-list">
-            {normalizedMatches.map((match, index) => {
-              const matchType = getMatchType(match)
-              const scoreReference = getScoreReferencePair(match)
+            {groupedMatches.map((dateGroup, groupIndex) => {
+              const isDefaultExpanded =
+                groupIndex === 0 && expandedDateKeys[dateGroup.dateKey] === undefined
+              const isExpanded =
+                dateGroup.dateKey === selectedDateKey ||
+                expandedDateKeys[dateGroup.dateKey] === true ||
+                isDefaultExpanded
 
               return (
-                <button
-                  className={
-                    safeSelectedIndex === index
-                      ? 'simple-match-card active'
-                      : 'simple-match-card'
-                  }
-                  key={match.uiKey}
-                  onClick={() => setSelectedIndex(index)}
-                  type="button"
-                >
-                  <div className="match-card-top">
-                    <strong>
-                      {match.homeTeam.shortName} vs {match.awayTeam.shortName}
-                    </strong>
-                    <span className={`status-pill ${statusConfig[match.status].tone}`}>
-                      {statusConfig[match.status].label}
-                    </span>
-                  </div>
-                  <span className="match-card-time">{formatKickoff(match.kickoff)}</span>
-                  <div className="match-card-signal">
-                    <strong>{getCompactDirectionDisplay(match)}</strong>
-                    <span>{getAiConfidence(match)}%</span>
-                    <em>{getRecommendationStrength(match)}</em>
-                  </div>
-                  <div className="match-card-detail">
+                <section className="match-date-group" key={dateGroup.dateKey}>
+                  <button
+                    aria-controls={`match-date-list-${dateGroup.dateKey}`}
+                    aria-expanded={isExpanded}
+                    className="match-date-toggle"
+                    onClick={() => handleToggleDateGroup(dateGroup.dateKey, isExpanded)}
+                    type="button"
+                  >
                     <span>
-                      比分：<strong>{scoreReference.main} / {scoreReference.backup}</strong>
+                      <strong>{dateGroup.label}</strong>
+                      <small>{dateGroup.matches.length}场</small>
                     </span>
-                    <span>
-                      大小球：<strong>{getTotalGoalsDirection(match)}</strong>
-                    </span>
-                  </div>
-                  <div className="match-card-tags">
-                    <em className={`match-type-pill ${matchType.tone}`}>
-                      {matchType.label}
-                    </em>
-                    <b>{getScoreText(match)}</b>
-                  </div>
-                </button>
+                    <i className={isExpanded ? 'date-toggle-arrow open' : 'date-toggle-arrow'}>
+                      ▾
+                    </i>
+                  </button>
+
+                  {isExpanded ? (
+                    <div
+                      className="match-date-list"
+                      id={`match-date-list-${dateGroup.dateKey}`}
+                    >
+                      {dateGroup.matches.map(({ match, index }) => {
+                        const matchType = getMatchType(match)
+                        const scoreReference = getScoreReferencePair(match)
+
+                        return (
+                          <button
+                            className={
+                              safeSelectedIndex === index
+                                ? 'simple-match-card active'
+                                : 'simple-match-card'
+                            }
+                            key={match.uiKey}
+                            onClick={() => setSelectedIndex(index)}
+                            type="button"
+                          >
+                            <div className="match-card-top">
+                              <strong>
+                                {match.homeTeam.shortName} vs {match.awayTeam.shortName}
+                              </strong>
+                              <span className={`status-pill ${statusConfig[match.status].tone}`}>
+                                {statusConfig[match.status].label}
+                              </span>
+                            </div>
+                            <span className="match-card-time">{formatKickoff(match.kickoff)}</span>
+                            <div className="match-card-signal">
+                              <strong>{getCompactDirectionDisplay(match)}</strong>
+                              <span>{getAiConfidence(match)}%</span>
+                              <em>{getRecommendationStrength(match)}</em>
+                            </div>
+                            <div className="match-card-detail">
+                              <span>
+                                比分：<strong>{scoreReference.main} / {scoreReference.backup}</strong>
+                              </span>
+                              <span>
+                                大小球：<strong>{getTotalGoalsDirection(match)}</strong>
+                              </span>
+                            </div>
+                            <div className="match-card-tags">
+                              <em className={`match-type-pill ${matchType.tone}`}>
+                                {matchType.label}
+                              </em>
+                              <b>{getScoreText(match)}</b>
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ) : null}
+                </section>
               )
             })}
           </div>

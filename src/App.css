@@ -507,6 +507,83 @@
 
 .simple-match-list {
   display: grid;
+  gap: 12px;
+}
+
+.match-date-group {
+  display: grid;
+  gap: 10px;
+}
+
+.match-date-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(45, 212, 191, 0.18);
+  border-radius: 16px;
+  color: var(--text-strong);
+  background:
+    linear-gradient(90deg, rgba(45, 212, 191, 0.1), rgba(96, 165, 250, 0.05)),
+    rgba(2, 6, 14, 0.24);
+  cursor: pointer;
+  text-align: left;
+}
+
+.match-date-toggle span {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.match-date-toggle strong {
+  color: var(--text-strong);
+  font-size: 14px;
+  font-weight: 1000;
+}
+
+.match-date-toggle small {
+  padding: 4px 7px;
+  border-radius: 999px;
+  color: var(--mint);
+  background: rgba(45, 212, 191, 0.1);
+  font-size: 11px;
+  font-weight: 1000;
+  white-space: nowrap;
+}
+
+.date-toggle-arrow {
+  display: grid;
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 999px;
+  color: var(--mint);
+  background: rgba(2, 6, 14, 0.32);
+  font-size: 14px;
+  font-style: normal;
+  line-height: 1;
+  transform: rotate(-90deg);
+  transition:
+    border-color 180ms ease,
+    transform 180ms ease;
+}
+
+.match-date-toggle:hover .date-toggle-arrow {
+  border-color: rgba(45, 212, 191, 0.44);
+}
+
+.date-toggle-arrow.open {
+  transform: rotate(0deg);
+}
+
+.match-date-list {
+  display: grid;
   gap: 10px;
 }
 
@@ -1581,7 +1658,7 @@
   }
 
   .simple-match-list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
   }
 }
 
