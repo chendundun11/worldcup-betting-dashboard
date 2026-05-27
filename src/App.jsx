@@ -3,7 +3,9 @@ import {
   Activity,
   BarChart3,
   CalendarDays,
+  Check,
   Clock3,
+  Copy,
   Crosshair,
   Gauge,
   ShieldAlert,
@@ -1585,11 +1587,73 @@ function formatFallbackReason(meta) {
   return meta?.fallbackReason || '无'
 }
 
+function buildSpotlightCopyText(match, scoreReference) {
+  const primaryDisplay = getPrimaryDisplay(match)
+  const recommendationStrength = getRecommendationStrength(match)
+  const directionText = primaryDisplay.includes(recommendationStrength)
+    ? primaryDisplay
+    : `${primaryDisplay}｜${recommendationStrength}`
+
+  return [
+    '今日AI重点参考',
+    `${match.homeTeam.name} vs ${match.awayTeam.name}`,
+    `方向：${directionText}`,
+    `信心指数：${getAiConfidence(match)}%`,
+    `比分参考：${scoreReference.main} / ${scoreReference.backup}`,
+    `大小球：${getTotalGoalsDirection(match)}`,
+    '阶段：赛前初盘，赛前24小时建议复核',
+    '仅供赛前初盘参考，临场阵容、盘口变化和市场热度需复核。',
+  ].join('\n')
+}
+
+async function copyTextToClipboard(text) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text)
+      return true
+    } catch {
+      // Continue to textarea fallback below.
+    }
+  }
+
+  const textarea = document.createElement('textarea')
+  let copiedByEvent = false
+  const handleCopy = (event) => {
+    event.clipboardData?.setData('text/plain', text)
+    event.preventDefault()
+    copiedByEvent = true
+  }
+
+  textarea.value = text
+  textarea.style.position = 'fixed'
+  textarea.style.left = '0'
+  textarea.style.top = '0'
+  textarea.style.width = '1px'
+  textarea.style.height = '1px'
+  textarea.style.opacity = '0'
+  textarea.style.pointerEvents = 'none'
+  document.body.appendChild(textarea)
+  textarea.focus()
+  textarea.select()
+  textarea.setSelectionRange(0, text.length)
+  document.addEventListener('copy', handleCopy)
+
+  try {
+    return document.execCommand('copy') || copiedByEvent
+  } catch {
+    return false
+  } finally {
+    document.removeEventListener('copy', handleCopy)
+    document.body.removeChild(textarea)
+  }
+}
+
 function App() {
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [analysisPhase, setAnalysisPhase] = useState('done')
   const [lastAnalyzedAt, setLastAnalyzedAt] = useState(() => new Date())
   const [matchDataset, setMatchDataset] = useState(() => getInitialMatchSnapshot())
+  const [spotlightCopyStatus, setSpotlightCopyStatus] = useState('idle')
 
   useEffect(() => {
     let isMounted = true
@@ -1823,6 +1887,10 @@ function App() {
   const spotlightScoreReference = spotlightMatch
     ? getScoreReferencePair(spotlightMatch)
     : null
+  const spotlightCopyText =
+    spotlightMatch && spotlightScoreReference
+      ? buildSpotlightCopyText(spotlightMatch, spotlightScoreReference)
+      : ''
   const analyzedMatchCount = normalizedMatches.length
   const featuredMatchCount = featuredMatches.length
   const highConfidenceMatchCount = normalizedMatches.filter(
@@ -1842,6 +1910,14 @@ function App() {
       setAnalysisPhase('done')
       setLastAnalyzedAt(new Date())
     }, 1_650)
+  }
+
+  async function handleCopySpotlightText() {
+    if (!spotlightCopyText) return
+
+    const didCopy = await copyTextToClipboard(spotlightCopyText)
+    setSpotlightCopyStatus(didCopy ? 'copied' : 'failed')
+    window.setTimeout(() => setSpotlightCopyStatus('idle'), 1_800)
   }
 
   return (
@@ -2008,6 +2084,26 @@ function App() {
             <small>
               当前为赛前初盘参考，临场阵容、盘口变化和市场热度可能影响最终方向。
             </small>
+            <button
+              className={
+                spotlightCopyStatus === 'copied'
+                  ? 'daily-ai-copy-button copied'
+                  : 'daily-ai-copy-button'
+              }
+              onClick={handleCopySpotlightText}
+              type="button"
+            >
+              {spotlightCopyStatus === 'copied' ? (
+                <Check size={16} />
+              ) : (
+                <Copy size={16} />
+              )}
+              {spotlightCopyStatus === 'copied'
+                ? '已复制'
+                : spotlightCopyStatus === 'failed'
+                  ? '复制失败'
+                  : '复制推荐文案'}
+            </button>
           </div>
         </section>
       ) : null}
