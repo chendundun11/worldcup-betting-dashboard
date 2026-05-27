@@ -1983,8 +1983,8 @@ function App() {
             <Activity size={16} />
             PRE-MATCH AI
           </div>
-          <h1>AI比赛分析引擎</h1>
-          <p>赛前数据扫描 · 风险评估 · 推荐强度</p>
+          <h1>世界杯赛前AI分析</h1>
+          <p>赛前初盘参考，重点看方向、比分和进球倾向，临场阵容需复核。</p>
           <div className="hero-status-row" aria-live="polite">
             <span className={`ai-status-pill ${isAnalyzing ? 'running' : 'done'}`}>
               <i />
@@ -1995,7 +1995,7 @@ function App() {
           </div>
         </div>
         <div className="hero-pick">
-          <span>AI当前建议</span>
+          <span>当前详情</span>
           <strong className={isSkipPrimary(activeMatch) ? 'skip-primary' : ''}>
             {getPrimaryDisplay(activeMatch)}
           </strong>
@@ -2014,34 +2014,36 @@ function App() {
           </div>
 
           <div className="daily-ai-summary" aria-label="重点推荐摘要">
-            <p className="daily-ai-direction">
-              <span>AI方向</span>
-              <strong>{getPrimaryDisplay(spotlightMatch)}</strong>
-            </p>
+            <div className="daily-ai-primary-grid">
+              <p className="daily-ai-direction">
+                <span>AI方向</span>
+                <strong>{getPrimaryDisplay(spotlightMatch)}</strong>
+              </p>
+              <p className="daily-ai-score-highlight">
+                <span>比分参考</span>
+                <strong>
+                  {spotlightScoreReference.main} / {spotlightScoreReference.backup}
+                </strong>
+              </p>
+            </div>
             <div className="daily-ai-facts">
               <p>
                 <span>信心指数</span>
                 <strong>{getAiConfidence(spotlightMatch)}%</strong>
               </p>
               <p>
-                <span>推荐强度</span>
-                <strong>{getRecommendationStrength(spotlightMatch)}</strong>
-              </p>
-              <p>
-                <span>比分参考</span>
-                <strong>
-                  {spotlightScoreReference.main} / {spotlightScoreReference.backup}
-                </strong>
-              </p>
-              <p>
                 <span>大小球方向</span>
                 <strong>{getTotalGoalsDirection(spotlightMatch)}</strong>
               </p>
-              <p>
+              <p className="daily-ai-secondary-fact">
+                <span>推荐强度</span>
+                <strong>{getRecommendationStrength(spotlightMatch)}</strong>
+              </p>
+              <p className="daily-ai-secondary-fact">
                 <span>分析阶段</span>
                 <strong>赛前初盘</strong>
               </p>
-              <p>
+              <p className="daily-ai-secondary-fact">
                 <span>复核提醒</span>
                 <strong>赛前24小时建议重新更新</strong>
               </p>
@@ -2073,30 +2075,26 @@ function App() {
         </section>
       ) : null}
 
-      <section className="overview-grid" aria-label="顶部总览">
+      <section className="overview-grid" aria-label="赛前状态概览">
         <article className="metric-card">
           <CalendarDays className="metric-icon blue" />
-          <span>已分析场次</span>
-          <strong>{analyzedMatchCount}</strong>
-          <p>当前赛程已完成赛前扫描</p>
+          <span>已分析</span>
+          <strong>{analyzedMatchCount} 场</strong>
         </article>
         <article className="metric-card">
           <Clock3 className="metric-icon gold" />
-          <span>重点场次</span>
-          <strong>{featuredMatchCount}</strong>
-          <p>优先查看的核心场次</p>
+          <span>重点</span>
+          <strong>{featuredMatchCount} 场</strong>
         </article>
         <article className="metric-card">
           <Target className="metric-icon green" />
-          <span>高信心场次</span>
-          <strong>{highConfidenceMatchCount}</strong>
-          <p>信心指数达到 80% 以上</p>
+          <span>高信心</span>
+          <strong>{highConfidenceMatchCount} 场</strong>
         </article>
         <article className="metric-card">
           <WalletCards className="metric-icon red" />
-          <span>待盘口确认</span>
-          <strong>{pendingMarketCount}</strong>
-          <p>等待本地盘口数据补充</p>
+          <span>待补盘口</span>
+          <strong>{pendingMarketCount} 场</strong>
         </article>
       </section>
 
@@ -2133,25 +2131,25 @@ function App() {
                   </div>
 
                   <div className="featured-card-main">
-                    <p>
+                    <p className="featured-card-direction">
                       <span>AI方向</span>
                       <strong>{getPrimaryDirectionDisplay(match)}</strong>
                     </p>
                     <p>
-                      <span>推荐强度</span>
-                      <strong>{getRecommendationStrength(match)}</strong>
-                    </p>
-                    <p>
-                      <span>信心指数</span>
+                      <span>信心</span>
                       <strong>{getAiConfidence(match)}%</strong>
                     </p>
                     <p>
-                      <span>比分参考</span>
+                      <span>比分</span>
                       <strong>{scoreReference.main} / {scoreReference.backup}</strong>
                     </p>
-                    <p>
-                      <span>大小球方向</span>
+                    <p className="featured-card-muted">
+                      <span>进球倾向</span>
                       <strong>{getTotalGoalsDirection(match)}</strong>
+                    </p>
+                    <p className="featured-card-muted">
+                      <span>强度</span>
+                      <strong>{getRecommendationStrength(match)}</strong>
                     </p>
                   </div>
                 </button>
