@@ -1583,10 +1583,6 @@ function formatDataSource(meta) {
   return '本地模拟'
 }
 
-function formatFallbackReason(meta) {
-  return meta?.fallbackReason || '无'
-}
-
 function buildSpotlightCopyText(match, scoreReference) {
   const primaryDisplay = getPrimaryDisplay(match)
   const recommendationStrength = getRecommendationStrength(match)
@@ -1595,7 +1591,7 @@ function buildSpotlightCopyText(match, scoreReference) {
     : `${primaryDisplay}｜${recommendationStrength}`
 
   return [
-    '今日AI重点参考',
+    '赛前AI重点参考',
     `${match.homeTeam.name} vs ${match.awayTeam.name}`,
     `方向：${directionText}`,
     `信心指数：${getAiConfidence(match)}%`,
@@ -1853,7 +1849,7 @@ function App() {
           <div className="hero-copy">
             <div className="eyebrow">
               <Activity size={16} />
-              AI LIVE ENGINE
+              PRE-MATCH AI
             </div>
             <h1>暂无比赛数据</h1>
             <p>暂无可展示的比赛数据，等待赛程更新。</p>
@@ -1863,10 +1859,6 @@ function App() {
           <span>
             本工具仅用于数据分析和娱乐参考，不构成投资或投注建议。请遵守当地法律法规，理性参与，控制风险。
           </span>
-          <small>
-            数据源：{formatDataSource(matchDataset.meta)} · fallback 原因：
-            {formatFallbackReason(matchDataset.meta)}
-          </small>
         </footer>
       </main>
     )
@@ -1926,10 +1918,10 @@ function App() {
         <div className="hero-copy">
           <div className="eyebrow">
             <Activity size={16} />
-            AI LIVE ENGINE
+            PRE-MATCH AI
           </div>
           <h1>AI比赛分析引擎</h1>
-          <p>实时赔率扫描 · 风险评估 · 推荐强度</p>
+          <p>赛前数据扫描 · 风险评估 · 推荐强度</p>
           <div className="hero-status-row" aria-live="polite">
             <span className={`ai-status-pill ${isAnalyzing ? 'running' : 'done'}`}>
               <i />
@@ -1957,7 +1949,7 @@ function App() {
         </article>
         <article className="metric-card">
           <Clock3 className="metric-icon gold" />
-          <span>今日重点</span>
+          <span>重点场次</span>
           <strong>{featuredMatchCount}</strong>
           <p>优先查看的核心场次</p>
         </article>
@@ -1975,10 +1967,10 @@ function App() {
         </article>
       </section>
 
-      <section className="featured-matches-panel" aria-label="今日重点场次">
+      <section className="featured-matches-panel" aria-label="更多重点场次">
         <div className="section-title featured-title">
           <span>重点筛选</span>
-          <h2>今日重点场次</h2>
+          <h2>更多重点场次</h2>
           <p>系统优先筛选有盘口、有方向、有参考价值的比赛。</p>
         </div>
 
@@ -2039,9 +2031,9 @@ function App() {
       </section>
 
       {spotlightMatch && spotlightScoreReference ? (
-        <section className="daily-ai-spotlight" aria-label="今日AI重点推荐卡">
+        <section className="daily-ai-spotlight" aria-label="赛前AI重点参考卡">
           <div className="daily-ai-copy">
-            <span>今日AI重点</span>
+            <span>赛前AI重点参考</span>
             <h2>
               {spotlightMatch.homeTeam.name} vs {spotlightMatch.awayTeam.name}
             </h2>
@@ -2585,15 +2577,6 @@ function App() {
         <span>
           本工具仅用于数据分析和娱乐参考，不构成投资或投注建议。请遵守当地法律法规，理性参与，控制风险。
         </span>
-        <small>
-          数据源：{formatDataSource(matchDataset.meta)} · fallback 原因：
-          {formatFallbackReason(matchDataset.meta)}
-        </small>
-        <small className="debug-selection-line">
-          调试：selectedIndex: {safeSelectedIndex} | activeMatch:{' '}
-          {activeMatch.homeTeam.name} vs {activeMatch.awayTeam.name} | matchesCount:{' '}
-          {normalizedMatches.length} | dataSource: {matchDataset.meta?.dataSource ?? 'unknown'}
-        </small>
       </footer>
     </main>
   )
