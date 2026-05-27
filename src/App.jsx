@@ -2003,6 +2003,76 @@ function App() {
         </div>
       </section>
 
+      {spotlightMatch && spotlightScoreReference ? (
+        <section className="daily-ai-spotlight" aria-label="赛前AI重点参考卡">
+          <div className="daily-ai-copy">
+            <span>赛前AI重点参考</span>
+            <h2>
+              {spotlightMatch.homeTeam.name} vs {spotlightMatch.awayTeam.name}
+            </h2>
+            <p>{formatKickoff(spotlightMatch.kickoff)}</p>
+          </div>
+
+          <div className="daily-ai-summary" aria-label="重点推荐摘要">
+            <p className="daily-ai-direction">
+              <span>AI方向</span>
+              <strong>{getPrimaryDisplay(spotlightMatch)}</strong>
+            </p>
+            <div className="daily-ai-facts">
+              <p>
+                <span>信心指数</span>
+                <strong>{getAiConfidence(spotlightMatch)}%</strong>
+              </p>
+              <p>
+                <span>推荐强度</span>
+                <strong>{getRecommendationStrength(spotlightMatch)}</strong>
+              </p>
+              <p>
+                <span>比分参考</span>
+                <strong>
+                  {spotlightScoreReference.main} / {spotlightScoreReference.backup}
+                </strong>
+              </p>
+              <p>
+                <span>大小球方向</span>
+                <strong>{getTotalGoalsDirection(spotlightMatch)}</strong>
+              </p>
+              <p>
+                <span>分析阶段</span>
+                <strong>赛前初盘</strong>
+              </p>
+              <p>
+                <span>复核提醒</span>
+                <strong>赛前24小时建议重新更新</strong>
+              </p>
+            </div>
+            <small>
+              当前为赛前初盘参考，临场阵容、盘口变化和市场热度可能影响最终方向。
+            </small>
+            <button
+              className={
+                spotlightCopyStatus === 'copied'
+                  ? 'daily-ai-copy-button copied'
+                  : 'daily-ai-copy-button'
+              }
+              onClick={handleCopySpotlightText}
+              type="button"
+            >
+              {spotlightCopyStatus === 'copied' ? (
+                <Check size={16} />
+              ) : (
+                <Copy size={16} />
+              )}
+              {spotlightCopyStatus === 'copied'
+                ? '已复制'
+                : spotlightCopyStatus === 'failed'
+                  ? '复制失败'
+                  : '复制推荐文案'}
+            </button>
+          </div>
+        </section>
+      ) : null}
+
       <section className="overview-grid" aria-label="顶部总览">
         <article className="metric-card">
           <CalendarDays className="metric-icon blue" />
@@ -2093,81 +2163,11 @@ function App() {
         )}
       </section>
 
-      {spotlightMatch && spotlightScoreReference ? (
-        <section className="daily-ai-spotlight" aria-label="赛前AI重点参考卡">
-          <div className="daily-ai-copy">
-            <span>赛前AI重点参考</span>
-            <h2>
-              {spotlightMatch.homeTeam.name} vs {spotlightMatch.awayTeam.name}
-            </h2>
-            <p>{formatKickoff(spotlightMatch.kickoff)}</p>
-          </div>
-
-          <div className="daily-ai-summary" aria-label="重点推荐摘要">
-            <p className="daily-ai-direction">
-              <span>AI方向</span>
-              <strong>{getPrimaryDisplay(spotlightMatch)}</strong>
-            </p>
-            <div className="daily-ai-facts">
-              <p>
-                <span>信心指数</span>
-                <strong>{getAiConfidence(spotlightMatch)}%</strong>
-              </p>
-              <p>
-                <span>推荐强度</span>
-                <strong>{getRecommendationStrength(spotlightMatch)}</strong>
-              </p>
-              <p>
-                <span>比分参考</span>
-                <strong>
-                  {spotlightScoreReference.main} / {spotlightScoreReference.backup}
-                </strong>
-              </p>
-              <p>
-                <span>大小球方向</span>
-                <strong>{getTotalGoalsDirection(spotlightMatch)}</strong>
-              </p>
-              <p>
-                <span>分析阶段</span>
-                <strong>赛前初盘</strong>
-              </p>
-              <p>
-                <span>复核提醒</span>
-                <strong>赛前24小时建议重新更新</strong>
-              </p>
-            </div>
-            <small>
-              当前为赛前初盘参考，临场阵容、盘口变化和市场热度可能影响最终方向。
-            </small>
-            <button
-              className={
-                spotlightCopyStatus === 'copied'
-                  ? 'daily-ai-copy-button copied'
-                  : 'daily-ai-copy-button'
-              }
-              onClick={handleCopySpotlightText}
-              type="button"
-            >
-              {spotlightCopyStatus === 'copied' ? (
-                <Check size={16} />
-              ) : (
-                <Copy size={16} />
-              )}
-              {spotlightCopyStatus === 'copied'
-                ? '已复制'
-                : spotlightCopyStatus === 'failed'
-                  ? '复制失败'
-                  : '复制推荐文案'}
-            </button>
-          </div>
-        </section>
-      ) : null}
-
       <section className="main-layout">
         <aside className="match-list-panel">
           <div className="section-title">
-            <span>比赛列表</span>
-            <h2>选择一场查看结论</h2>
+            <span>全部赛程</span>
+            <h2>分日期赛程</h2>
           </div>
 
           <div className="simple-match-list">
