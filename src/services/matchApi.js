@@ -11,11 +11,12 @@ const adapters = {
   footballData: fetchFootballDataMatches,
 }
 
-const defaultAdapter = import.meta.env.VITE_MATCH_API_ADAPTER || 'remote'
+const defaultAdapter = 'remote'
 const mockFallbackReasons = new Set([
   'API_KEY_MISSING',
   'API_FAILED',
   'INVALID_RESPONSE',
+  'COMPETITION_NO_DATA',
 ])
 
 function createEmptySnapshot(source = 'empty', fallbackReason = 'INVALID_RESPONSE') {

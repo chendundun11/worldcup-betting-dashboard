@@ -1,4 +1,70 @@
+const http = require('node:http')
+const fs = require('node:fs')
+const path = require('node:path')
+
 const FOOTBALL_DATA_BASE_URL = 'https://api.football-data.org/v4'
+
+function parseEnvLine(line) {
+  const trimmedLine = line.trim()
+  if (!trimmedLine || trimmedLine.startsWith('#')) return null
+
+  const normalizedLine = trimmedLine.startsWith('export ')
+    ? trimmedLine.slice(7).trim()
+    : trimmedLine
+  const separatorIndex = normalizedLine.indexOf('=')
+  if (separatorIndex === -1) return null
+
+  const key = normalizedLine.slice(0, separatorIndex).trim().replace(/^\uFEFF/, '')
+  let value = normalizedLine.slice(separatorIndex + 1).trim()
+
+  if (!key) return null
+
+  const quote = value[0]
+  if (
+    (quote === '"' || quote === "'") &&
+    value.endsWith(quote)
+  ) {
+    value = value.slice(1, -1)
+  } else {
+    value = value.replace(/\s+#.*$/, '').trim()
+  }
+
+  return [key, value]
+}
+
+function loadLocalEnv() {
+  const loadedKeys = new Set()
+  const envFiles = ['.env', '.env.local']
+  const loadedFiles = []
+
+  for (const envFile of envFiles) {
+    const envPath = path.join(process.cwd(), envFile)
+    if (!fs.existsSync(envPath)) continue
+
+    loadedFiles.push(envFile)
+    const envContent = fs.readFileSync(envPath, 'utf8')
+    for (const line of envContent.split(/\r?\n/)) {
+      const parsedLine = parseEnvLine(line)
+      if (!parsedLine) continue
+
+      const [key, value] = parsedLine
+      if (
+        process.env[key] === undefined ||
+        process.env[key] === '' ||
+        loadedKeys.has(key)
+      ) {
+        process.env[key] = value
+        loadedKeys.add(key)
+      }
+    }
+  }
+
+  return loadedFiles
+}
+
+const loadedEnvFiles = loadLocalEnv()
+
+const PORT = Number(process.env.LOCAL_API_PORT || process.env.PORT || 3001)
 
 function createMeta(dataSource, fallbackReason = null) {
   return {
@@ -8,11 +74,17 @@ function createMeta(dataSource, fallbackReason = null) {
   }
 }
 
-function sendJson(response, statusCode, body) {
-  response.status(statusCode).json({
-    ...body,
-    meta: createMeta(body.dataSource, body.fallbackReason),
+function sendJson(response, statusCode, body, headers = {}) {
+  response.writeHead(statusCode, {
+    'Content-Type': 'application/json; charset=utf-8',
+    ...headers,
   })
+  response.end(
+    JSON.stringify({
+      ...body,
+      meta: createMeta(body.dataSource, body.fallbackReason),
+    }),
+  )
 }
 
 function normalizeStatus(status) {
@@ -97,17 +169,21 @@ function buildFootballDataUrl() {
   return url
 }
 
-export default async function handler(request, response) {
+async function handleMatches(request, response) {
   if (request.method !== 'GET') {
-    response.setHeader('Allow', 'GET')
-    sendJson(response, 405, {
-      dataSource: 'fallback',
-      fallbackReason: 'API_FAILED',
-      provider: process.env.FOOTBALL_API_PROVIDER || 'football-data',
-      updatedAt: new Date().toISOString(),
-      matches: [],
-      error: 'Method not allowed',
-    })
+    sendJson(
+      response,
+      405,
+      {
+        dataSource: 'fallback',
+        fallbackReason: 'API_FAILED',
+        provider: process.env.FOOTBALL_API_PROVIDER || 'football-data',
+        updatedAt: new Date().toISOString(),
+        matches: [],
+        error: 'Method not allowed',
+      },
+      { Allow: 'GET' },
+    )
     return
   }
 
@@ -163,15 +239,19 @@ export default async function handler(request, response) {
     const matches = payload.matches.map(normalizeMatch)
     const fallbackReason = matches.length ? null : 'COMPETITION_NO_DATA'
 
-    response.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300')
-    sendJson(response, 200, {
-      dataSource: matches.length ? 'real' : 'fallback',
-      fallbackReason,
-      provider: process.env.FOOTBALL_API_PROVIDER || 'football-data',
-      matchDay: getMatchDay(matches),
-      updatedAt: new Date().toISOString(),
-      matches,
-    })
+    sendJson(
+      response,
+      200,
+      {
+        dataSource: matches.length ? 'real' : 'fallback',
+        fallbackReason,
+        provider: process.env.FOOTBALL_API_PROVIDER || 'football-data',
+        matchDay: getMatchDay(matches),
+        updatedAt: new Date().toISOString(),
+        matches,
+      },
+      { 'Cache-Control': 's-maxage=60, stale-while-revalidate=300' },
+    )
   } catch (error) {
     sendJson(response, 500, {
       dataSource: 'fallback',
@@ -184,3 +264,27 @@ export default async function handler(request, response) {
     })
   }
 }
+
+const server = http.createServer((request, response) => {
+  const requestUrl = new URL(request.url, `http://${request.headers.host}`)
+
+  if (requestUrl.pathname === '/api/matches') {
+    handleMatches(request, response)
+    return
+  }
+
+  sendJson(response, 404, {
+    dataSource: 'fallback',
+    fallbackReason: 'API_FAILED',
+    provider: process.env.FOOTBALL_API_PROVIDER || 'football-data',
+    updatedAt: new Date().toISOString(),
+    matches: [],
+    error: 'Not found',
+  })
+})
+
+server.listen(PORT, () => {
+  console.log(`Local API server listening on http://localhost:${PORT}`)
+  console.log(`Local env files loaded: ${loadedEnvFiles.join(', ') || 'none'}`)
+  console.log(`FOOTBALL_API_KEY loaded: ${Boolean(process.env.FOOTBALL_API_KEY)}`)
+})

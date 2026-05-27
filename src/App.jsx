@@ -1819,6 +1819,14 @@ function App() {
   const awaySquadInsight = getSquadInsight(activeMatch, 'away')
   const activeMatchType = getMatchType(activeMatch)
   const featuredMatches = getFeaturedMatches(normalizedMatches)
+  const analyzedMatchCount = normalizedMatches.length
+  const featuredMatchCount = featuredMatches.length
+  const highConfidenceMatchCount = normalizedMatches.filter(
+    (match) => getAiConfidence(match) >= 80,
+  ).length
+  const pendingMarketCount = normalizedMatches.filter(
+    (match) => !hasLocalOdds(match) || !hasWdlOdds(match.odds),
+  ).length
 
   function handleReanalyze() {
     if (isAnalyzing) return
@@ -1863,29 +1871,27 @@ function App() {
       <section className="overview-grid" aria-label="顶部总览">
         <article className="metric-card">
           <CalendarDays className="metric-icon blue" />
-          <span>今日比赛数</span>
-          <strong>{dashboard.metrics.todayMatchCount}</strong>
-          <p>已纳入系统分析</p>
+          <span>已分析场次</span>
+          <strong>{analyzedMatchCount}</strong>
+          <p>当前赛程已完成赛前扫描</p>
         </article>
         <article className="metric-card">
           <Clock3 className="metric-icon gold" />
-          <span>已结束比赛数</span>
-          <strong>{dashboard.metrics.finishedMatchCount}</strong>
-          <p>用于赛后复盘</p>
+          <span>今日重点</span>
+          <strong>{featuredMatchCount}</strong>
+          <p>优先查看的核心场次</p>
         </article>
         <article className="metric-card">
           <Target className="metric-icon green" />
-          <span>当前命中率</span>
-          <strong>{formatPercent(dashboard.metrics.hitRate)}</strong>
-          <p>
-            {dashboard.metrics.hitCount}/{dashboard.metrics.settledCount} 已结算
-          </p>
+          <span>高信心场次</span>
+          <strong>{highConfidenceMatchCount}</strong>
+          <p>信心指数达到 80% 以上</p>
         </article>
         <article className="metric-card">
           <WalletCards className="metric-icon red" />
-          <span>当前回报</span>
-          <strong>{formatPercent(dashboard.metrics.roi)}</strong>
-          <p>累计盈亏 {formatUnits(dashboard.metrics.totalProfit)}</p>
+          <span>待盘口确认</span>
+          <strong>{pendingMarketCount}</strong>
+          <p>等待本地盘口数据补充</p>
         </article>
       </section>
 

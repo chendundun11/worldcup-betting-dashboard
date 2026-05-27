@@ -103,12 +103,21 @@ export async function fetchMatches() {
     throw createFallbackError(payload?.fallbackReason ?? 'INVALID_RESPONSE')
   }
 
+  if (payload.dataSource === 'fallback' && payload.fallbackReason) {
+    throw createFallbackError(payload.fallbackReason)
+  }
+
+  const usableRemoteMatches = payload.matches.filter((remoteMatch) =>
+    hasTeamName(remoteMatch.homeTeam) && hasTeamName(remoteMatch.awayTeam),
+  )
+
+  if (!usableRemoteMatches.length) {
+    throw createFallbackError(payload.fallbackReason ?? 'COMPETITION_NO_DATA')
+  }
+
   const mockSnapshot = getMockMatchSnapshot()
   const localMatchLookup = createLocalMatchLookup(mockSnapshot.matches)
-  const matches = payload.matches
-    .filter((remoteMatch) =>
-      hasTeamName(remoteMatch.homeTeam) && hasTeamName(remoteMatch.awayTeam),
-    )
+  const matches = usableRemoteMatches
     .map((remoteMatch) => {
       const homeTeam = resolveTeamId(remoteMatch.homeTeam)
       const awayTeam = resolveTeamId(remoteMatch.awayTeam)
