@@ -9,6 +9,7 @@
 .hero-card,
 .metric-card,
 .match-list-panel,
+.daily-ai-spotlight,
 .core-card,
 .ai-flow-panel,
 .market-sentiment-card,
@@ -326,6 +327,113 @@
   color: var(--text-soft);
   background: rgba(2, 6, 14, 0.28);
   font-weight: 900;
+}
+
+.daily-ai-spotlight {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(420px, 1.35fr);
+  gap: 22px;
+  margin-top: 16px;
+  padding: 26px;
+  overflow: hidden;
+  border-color: rgba(45, 212, 191, 0.26);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 10% 0%, rgba(45, 212, 191, 0.22), transparent 34%),
+    radial-gradient(circle at 96% 18%, rgba(96, 165, 250, 0.18), transparent 30%),
+    linear-gradient(135deg, rgba(13, 24, 42, 0.98), rgba(3, 8, 19, 0.96));
+  box-shadow: 0 26px 80px rgba(0, 0, 0, 0.26);
+}
+
+.daily-ai-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.daily-ai-copy span,
+.daily-ai-summary span {
+  display: block;
+  color: var(--mint);
+  font-size: 12px;
+  font-weight: 1000;
+  letter-spacing: 0;
+}
+
+.daily-ai-copy h2 {
+  margin: 12px 0;
+  color: var(--text-strong);
+  font-family: var(--display);
+  font-size: 52px;
+  line-height: 0.98;
+  overflow-wrap: anywhere;
+}
+
+.daily-ai-copy p {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.daily-ai-summary {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(2, 6, 14, 0.1)),
+    rgba(2, 6, 14, 0.32);
+}
+
+.daily-ai-direction {
+  margin: 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.daily-ai-direction strong {
+  display: block;
+  margin-top: 8px;
+  color: var(--green);
+  font-family: var(--display);
+  font-size: 44px;
+  line-height: 1;
+  overflow-wrap: anywhere;
+}
+
+.daily-ai-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.daily-ai-facts p {
+  min-width: 0;
+  margin: 0;
+  padding: 11px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 16px;
+  background: rgba(2, 6, 14, 0.26);
+}
+
+.daily-ai-facts strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--text-strong);
+  font-size: 15px;
+  font-weight: 1000;
+  line-height: 1.35;
+}
+
+.daily-ai-summary small {
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.6;
 }
 
 .main-layout {
@@ -1422,6 +1530,7 @@
 
 @media (max-width: 1180px) {
   .hero-card,
+  .daily-ai-spotlight,
   .main-layout {
     grid-template-columns: 1fr;
   }
@@ -1446,6 +1555,7 @@
 @media (max-width: 860px) {
   .overview-grid,
   .featured-match-grid,
+  .daily-ai-facts,
   .quick-meta-grid,
   .ai-flow-steps,
   .ai-insight-grid,
@@ -1466,6 +1576,7 @@
 
   .hero-card,
   .featured-matches-panel,
+  .daily-ai-spotlight,
   .quick-conclusion-card,
   .core-card,
   .ai-flow-panel,
@@ -1481,6 +1592,7 @@
 
   .hero-card,
   .featured-matches-panel,
+  .daily-ai-spotlight,
   .quick-conclusion-card,
   .core-card,
   .ai-flow-panel,
@@ -1495,6 +1607,14 @@
 
   .analysis-stage-items {
     grid-template-columns: 1fr;
+  }
+
+  .daily-ai-copy h2 {
+    font-size: 34px;
+  }
+
+  .daily-ai-direction strong {
+    font-size: 32px;
   }
 }
 

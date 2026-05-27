@@ -1819,6 +1819,10 @@ function App() {
   const awaySquadInsight = getSquadInsight(activeMatch, 'away')
   const activeMatchType = getMatchType(activeMatch)
   const featuredMatches = getFeaturedMatches(normalizedMatches)
+  const spotlightMatch = featuredMatches[0]?.match ?? normalizedMatches[0]
+  const spotlightScoreReference = spotlightMatch
+    ? getScoreReferencePair(spotlightMatch)
+    : null
   const analyzedMatchCount = normalizedMatches.length
   const featuredMatchCount = featuredMatches.length
   const highConfidenceMatchCount = normalizedMatches.filter(
@@ -1957,6 +1961,56 @@ function App() {
           <p className="featured-empty">暂无重点场次，等待赛程与盘口更新。</p>
         )}
       </section>
+
+      {spotlightMatch && spotlightScoreReference ? (
+        <section className="daily-ai-spotlight" aria-label="今日AI重点推荐卡">
+          <div className="daily-ai-copy">
+            <span>今日AI重点</span>
+            <h2>
+              {spotlightMatch.homeTeam.name} vs {spotlightMatch.awayTeam.name}
+            </h2>
+            <p>{formatKickoff(spotlightMatch.kickoff)}</p>
+          </div>
+
+          <div className="daily-ai-summary" aria-label="重点推荐摘要">
+            <p className="daily-ai-direction">
+              <span>AI方向</span>
+              <strong>{getPrimaryDisplay(spotlightMatch)}</strong>
+            </p>
+            <div className="daily-ai-facts">
+              <p>
+                <span>信心指数</span>
+                <strong>{getAiConfidence(spotlightMatch)}%</strong>
+              </p>
+              <p>
+                <span>推荐强度</span>
+                <strong>{getRecommendationStrength(spotlightMatch)}</strong>
+              </p>
+              <p>
+                <span>比分参考</span>
+                <strong>
+                  {spotlightScoreReference.main} / {spotlightScoreReference.backup}
+                </strong>
+              </p>
+              <p>
+                <span>大小球方向</span>
+                <strong>{getTotalGoalsDirection(spotlightMatch)}</strong>
+              </p>
+              <p>
+                <span>分析阶段</span>
+                <strong>赛前初盘</strong>
+              </p>
+              <p>
+                <span>复核提醒</span>
+                <strong>赛前24小时建议重新更新</strong>
+              </p>
+            </div>
+            <small>
+              当前为赛前初盘参考，临场阵容、盘口变化和市场热度可能影响最终方向。
+            </small>
+          </div>
+        </section>
+      ) : null}
 
       <section className="main-layout">
         <aside className="match-list-panel">
