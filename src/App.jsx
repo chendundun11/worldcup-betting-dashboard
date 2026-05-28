@@ -192,6 +192,62 @@ const analysisPhaseConfig = {
   },
 }
 
+const internalMarketLabels = {
+  '1X2': '胜平负方向',
+  totalGoals: '大小球方向',
+  score: '比分参考',
+  upset: '冷门观察',
+}
+
+const internalDataQualityLabels = {
+  odds: '赔率快照',
+  marketMovement: '盘口变化历史',
+  injuries: '伤停信息',
+  expectedLineups: '预计首发',
+  teamProfile: '球队资料',
+  oddsUpdatedAt: '赔率更新时间',
+  handicapStructured: '让球结构化',
+  snapshotPersistence: '快照持久化',
+  resultSettlement: '赛果结算',
+  modelProbability: '模型概率',
+}
+
+const internalDataQualityStatusLabels = {
+  localSnapshot: '本地快照',
+  missing: '缺失',
+  partial: '部分',
+  estimated: '估算',
+  unavailable: '不可用',
+  available: '可用',
+}
+
+const internalScoreBreakdownLabels = {
+  valueEdge: '赔率价值',
+  directionClarity: '方向清晰度',
+  strengthGap: '实力差距',
+  recentAttackDefense: '近期攻防',
+  marketStability: '盘口稳定度',
+  upsetElasticity: '冷门弹性',
+  heatPenalty: '热度扣分',
+  infoPenalty: '信息缺口扣分',
+}
+
+function getInternalMarketLabel(market) {
+  return internalMarketLabels[market] ?? market ?? '-'
+}
+
+function getInternalDataQualityLabel(key) {
+  return internalDataQualityLabels[key] ?? key
+}
+
+function getInternalDataQualityStatus(value) {
+  return internalDataQualityStatusLabels[value] ?? String(value)
+}
+
+function getInternalScoreBreakdownLabel(key) {
+  return internalScoreBreakdownLabels[key] ?? key
+}
+
 const teamMetrics = [
   { key: 'teamStrength', label: '球队实力', positive: true },
   { key: 'recentForm', label: '近期状态', positive: true },
@@ -2665,36 +2721,36 @@ function App() {
 
               <div className="internal-engine-summary">
                 <p>
-                  <span>betScore</span>
+                  <span>综合评分</span>
                   <strong>{internalBetPlan.betScore}</strong>
                 </p>
                 <p>
-                  <span>recommendLevel</span>
+                  <span>参考级别</span>
                   <strong>{internalBetPlan.recommendLevel}</strong>
                 </p>
                 <p>
-                  <span>mainPick</span>
+                  <span>主方向</span>
                   <strong>{internalBetPlan.mainPick?.label ?? '-'}</strong>
                 </p>
                 <p>
-                  <span>secondaryPick</span>
+                  <span>副方向</span>
                   <strong>{internalBetPlan.secondaryPick?.label ?? '-'}</strong>
-                </p>
-                <p>
-                  <span>总投入</span>
-                  <strong>{internalBetPlan.totalStake}U</strong>
                 </p>
               </div>
 
               <div className="internal-engine-block">
                 <h4>资金分配</h4>
+                <div className="internal-total-stake">
+                  <span>总投入</span>
+                  <strong>{internalBetPlan.totalStake} U</strong>
+                </div>
                 {internalBetPlan.stakePlan.length ? (
                   <div className="internal-stake-list">
                     {internalBetPlan.stakePlan.map((item) => (
                       <p key={`${item.market}-${item.pick}-${item.label}`}>
-                        <span>{item.market}</span>
+                        <span>{getInternalMarketLabel(item.market)}</span>
                         <strong>{item.label}</strong>
-                        <b>{item.stake}U</b>
+                        <b>{item.stake} U</b>
                       </p>
                     ))}
                   </div>
@@ -2711,28 +2767,26 @@ function App() {
               </div>
 
               <div className="internal-engine-block">
-                <h4>dataQuality</h4>
+                <h4>数据完整度</h4>
                 <div className="internal-quality-grid">
                   {Object.entries(internalBetPlan.dataQuality ?? {})
                     .filter(([, value]) => !Array.isArray(value))
                     .map(([key, value]) => (
                       <p key={key} className={`quality-${value}`}>
-                        <span>{key}</span>
-                        <strong>{String(value)}</strong>
+                        <span>{getInternalDataQualityLabel(key)}</span>
+                        <strong>{getInternalDataQualityStatus(value)}</strong>
                       </p>
                     ))}
                 </div>
                 {internalBetPlan.dataQuality?.limitations?.length ? (
-                  <div className="internal-limitations">
-                    {internalBetPlan.dataQuality.limitations.map((item) => (
-                      <span key={item}>{item}</span>
-                    ))}
-                  </div>
+                  <p className="internal-limitations">
+                    限制项：{internalBetPlan.dataQuality.limitations.length} 项待补
+                  </p>
                 ) : null}
               </div>
 
               <div className="internal-engine-block">
-                <h4>cancelRules</h4>
+                <h4>取消条件</h4>
                 <ul className="internal-rule-list">
                   {internalBetPlan.cancelRules.map((rule) => (
                     <li key={rule}>{rule}</li>
@@ -2741,13 +2795,13 @@ function App() {
               </div>
 
               <div className="internal-engine-block">
-                <h4>scoreBreakdown</h4>
+                <h4>评分拆解</h4>
                 <div className="internal-breakdown-list">
                   {Object.entries(internalBetPlan.scoreBreakdown ?? {}).map(
                     ([key, item]) => (
                       <article key={key}>
                         <div>
-                          <span>{key}</span>
+                          <span>{getInternalScoreBreakdownLabel(key)}</span>
                           <strong>{item.score}</strong>
                         </div>
                         <p>{item.reason}</p>
