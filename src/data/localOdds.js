@@ -314,3 +314,109 @@ export const localOdds = {
     totalGoalsDirection: '小2.5方向',
   },
 }
+
+function getFavoriteSide(odds) {
+  const prices = [
+    ['home', odds.homeWin],
+    ['draw', odds.draw],
+    ['away', odds.awayWin],
+  ].filter(([, price]) => Number.isFinite(price))
+
+  if (!prices.length) return 'none'
+
+  return prices.sort((a, b) => a[1] - b[1])[0][0]
+}
+
+function getMarketTone(odds) {
+  const favoriteSide = getFavoriteSide(odds)
+  const favoritePrice =
+    favoriteSide === 'home'
+      ? odds.homeWin
+      : favoriteSide === 'away'
+        ? odds.awayWin
+        : odds.draw
+  const homeAwayGap = Math.abs((odds.homeWin ?? 0) - (odds.awayWin ?? 0))
+
+  if (odds.under25 <= 1.76) return 'goalsCold'
+  if (odds.over25 <= 1.76) return 'goalsHot'
+  if (odds.draw <= 3.25) return 'drawProtected'
+  if (favoritePrice <= 1.55) return 'favoriteHot'
+  if (homeAwayGap <= 0.45) return 'balanced'
+  return 'underdogResistant'
+}
+
+function getOddsConfidence(odds) {
+  if (odds.homeWin <= 0 || odds.draw <= 0 || odds.awayWin <= 0) return 'low'
+  if (odds.homeWin < 1.35 || odds.awayWin < 1.35 || odds.draw <= 3.15) {
+    return 'medium'
+  }
+  return 'high'
+}
+
+function getValueFlags(odds, favoriteSide) {
+  const favoritePrice =
+    favoriteSide === 'home'
+      ? odds.homeWin
+      : favoriteSide === 'away'
+        ? odds.awayWin
+        : odds.draw
+  const underdogPrice =
+    favoriteSide === 'home'
+      ? odds.awayWin
+      : favoriteSide === 'away'
+        ? odds.homeWin
+        : Math.min(odds.homeWin, odds.awayWin)
+  const flags = []
+
+  if (favoritePrice <= 1.45) flags.push('favoriteTooLow')
+  if (odds.draw <= 3.3) flags.push('drawHasProtection')
+  if (odds.over25 <= 1.78) flags.push('overPriceThin')
+  if (odds.under25 <= odds.over25) flags.push('underHasSupport')
+  if (favoritePrice <= 1.55 || favoritePrice >= 2.05) flags.push('handicapRisk')
+  if (underdogPrice <= 4.2 && favoritePrice >= 1.75) flags.push('upsetWatch')
+  if (Math.abs(odds.over25 - odds.under25) <= 0.12) flags.push('scoreVolatile')
+
+  return flags
+}
+
+function getReviewPoints(flags) {
+  const points = ['首发是否轮换', '临场伤停与首发需复核']
+
+  if (flags.includes('favoriteTooLow')) points.push('热门方向是否过热')
+  if (flags.includes('handicapRisk')) points.push('让球是否退盘')
+  if (flags.includes('overPriceThin') || flags.includes('underHasSupport')) {
+    points.push('大小球是否升降')
+  }
+  if (flags.includes('drawHasProtection')) points.push('平局保护是否增强')
+  if (flags.includes('upsetWatch')) points.push('弱势方反击路径是否成立')
+
+  return [...new Set(points)]
+}
+
+function getRiskNotes(flags) {
+  const notes = ['本场仅为赛前静态参考']
+
+  if (flags.includes('favoriteTooLow')) notes.push('强队低赔过热')
+  if (flags.includes('drawHasProtection')) notes.push('平局保护明显')
+  if (flags.includes('scoreVolatile')) notes.push('比分波动大')
+  if (flags.includes('upsetWatch')) notes.push('冷门路径存在但证据不足')
+  if (flags.includes('handicapRisk')) notes.push('让球变化需复核')
+
+  return [...new Set(notes)]
+}
+
+Object.entries(localOdds).forEach(([, odds]) => {
+  const favoriteSide = getFavoriteSide(odds)
+  const valueFlags = getValueFlags(odds, favoriteSide)
+
+  Object.assign(odds, {
+    marketTone: getMarketTone(odds),
+    oddsConfidence: getOddsConfidence(odds),
+    favoriteSide,
+    valueFlags,
+    reviewPoints: getReviewPoints(valueFlags),
+    riskNotes: getRiskNotes(valueFlags),
+    confidenceNote:
+      '本场仅基于本地赔率快照，缺少临场盘口变化，赛前参考需复核。',
+  })
+})

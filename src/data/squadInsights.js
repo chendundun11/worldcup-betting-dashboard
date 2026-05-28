@@ -84,3 +84,147 @@ export const SQUAD_INSIGHTS = {
     injuryNote: '暂无明显核心伤停',
   },
 }
+
+const squadLegacyDefaults = {
+  elite: {
+    coreLineup: '主力框架较完整',
+    benchDepth: '替补深度较强',
+    attackingOptions: '前场变化较多',
+    defensiveStability: '防线稳定性较强',
+    injuryNote: '伤停与首发仍需临场复核',
+  },
+  strong: {
+    coreLineup: '主力框架较完整',
+    benchDepth: '替补深度中等',
+    attackingOptions: '主要进攻路径较清晰',
+    defensiveStability: '防线稳定性中等',
+    injuryNote: '伤停与首发仍需临场复核',
+  },
+  medium: {
+    coreLineup: '主力完整度中等',
+    benchDepth: '替补深度一般',
+    attackingOptions: '进攻端依赖关键环节',
+    defensiveStability: '防线稳定性需观察',
+    injuryNote: '暂无完整伤停来源，需临场复核',
+  },
+  weak: {
+    coreLineup: '主力完整度待确认',
+    benchDepth: '替补深度偏弱',
+    attackingOptions: '反击端需要效率支撑',
+    defensiveStability: '防线持续抗压能力需观察',
+    injuryNote: '暂无完整伤停来源，需临场复核',
+  },
+}
+
+const commonLineupReviewPoints = [
+  '核心前锋是否首发',
+  '中场拦截强度',
+  '后防轮换情况',
+  '门将是否主力',
+  '边路速度点是否出场',
+]
+
+const squadProfilesByTier = {
+  elite: {
+    lineupCertainty: 'medium',
+    rotationRisk: 'medium',
+    keyDependency: 'medium',
+    benchImpact: 82,
+    injuryDataQuality: 'missing',
+    lineupReviewPoints: commonLineupReviewPoints,
+    squadNote: '阵容厚度较好，但当前缺少临场首发和伤停来源，仍需赛前复核。',
+  },
+  strong: {
+    lineupCertainty: 'medium',
+    rotationRisk: 'medium',
+    keyDependency: 'medium',
+    benchImpact: 70,
+    injuryDataQuality: 'missing',
+    lineupReviewPoints: commonLineupReviewPoints,
+    squadNote: '主力框架具备参考价值，但首发轮换与关键位置状态仍需复核。',
+  },
+  medium: {
+    lineupCertainty: 'low',
+    rotationRisk: 'medium',
+    keyDependency: 'high',
+    benchImpact: 58,
+    injuryDataQuality: 'missing',
+    lineupReviewPoints: commonLineupReviewPoints,
+    squadNote: '阵容信息不完整，赛前判断更依赖临场首发和关键球员状态。',
+  },
+  weak: {
+    lineupCertainty: 'low',
+    rotationRisk: 'high',
+    keyDependency: 'high',
+    benchImpact: 46,
+    injuryDataQuality: 'missing',
+    lineupReviewPoints: commonLineupReviewPoints,
+    squadNote: '阵容深度有限，需重点复核主力是否齐整以及防线轮换情况。',
+  },
+}
+
+const squadTierGroups = {
+  elite: [
+    'Brazil',
+    'Germany',
+    'Netherlands',
+    'Spain',
+    'Belgium',
+    'France',
+    'Argentina',
+    'Portugal',
+    'England',
+  ],
+  strong: [
+    'Mexico',
+    'South Korea',
+    'Czechia',
+    'Canada',
+    'United States',
+    'Switzerland',
+    'Morocco',
+    'Scotland',
+    'Turkey',
+    'Japan',
+    'Ivory Coast',
+    'Ecuador',
+    'Sweden',
+    'Egypt',
+    'Uruguay',
+    'Senegal',
+    'Norway',
+    'Algeria',
+    'Austria',
+    'Croatia',
+    'Ghana',
+    'Colombia',
+  ],
+  medium: [
+    'South Africa',
+    'Bosnia-Herzegovina',
+    'Paraguay',
+    'Qatar',
+    'Australia',
+    'Tunisia',
+    'Saudi Arabia',
+    'Iran',
+    'New Zealand',
+    'Iraq',
+    'Jordan',
+    'Congo DR',
+    'Panama',
+    'Uzbekistan',
+    'Cape Verde Islands',
+  ],
+  weak: ['Haiti', 'Curaçao'],
+}
+
+Object.entries(squadTierGroups).forEach(([tier, teamNames]) => {
+  teamNames.forEach((teamName) => {
+    SQUAD_INSIGHTS[teamName] = {
+      ...squadLegacyDefaults[tier],
+      ...(SQUAD_INSIGHTS[teamName] ?? {}),
+      ...squadProfilesByTier[tier],
+    }
+  })
+})
