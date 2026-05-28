@@ -161,11 +161,11 @@ const statusConfig = {
 }
 
 const analysisFlowSteps = [
-  '数据采集',
-  '赔率扫描',
+  '赛程同步',
+  '盘口参考',
   '状态评估',
-  '风险判断',
-  '输出建议',
+  '复核提示',
+  '输出参考',
 ]
 
 const analysisPhaseConfig = {
@@ -176,17 +176,17 @@ const analysisPhaseConfig = {
   },
   scanning: {
     label: '运行中',
-    message: 'AI 正在扫描赔率...',
+    message: '赛前模型正在整理盘口参考...',
     activeStep: 1,
   },
   risk: {
     label: '运行中',
-    message: 'AI 正在评估风险...',
+    message: 'AI赛前模型正在整理参考信息...',
     activeStep: 3,
   },
   generating: {
     label: '运行中',
-    message: 'AI 正在生成建议...',
+    message: 'AI赛前模型正在整理参考建议...',
     activeStep: 4,
   },
 }
@@ -2315,9 +2315,14 @@ function App() {
             </div>
 
             <div className="analysis-action-row">
-              <p className={isAnalyzing ? 'analysis-state running' : 'analysis-state'}>
-                {analysisPhaseConfig[analysisPhase].message}
-              </p>
+              <div className="analysis-state-copy">
+                <p className={isAnalyzing ? 'analysis-state running' : 'analysis-state'}>
+                  {analysisPhaseConfig[analysisPhase].message}
+                </p>
+                <small>
+                  当前为赛前初盘参考。后续可接入 GPT 深度分析，临场仍需复核阵容与盘口变化。
+                </small>
+              </div>
               <button
                 className="reanalyze-button"
                 disabled={isAnalyzing}
@@ -2325,15 +2330,15 @@ function App() {
                 type="button"
               >
                 <Activity size={16} />
-                {isAnalyzing ? '分析中' : '重新分析本场'}
+                {isAnalyzing ? '整理中' : '刷新本场赛前参考'}
               </button>
             </div>
           </section>
 
-          <section className="ai-flow-panel" aria-label="AI 分析流程">
+          <section className="ai-flow-panel" aria-label="AI赛前分析步骤">
             <div className="section-title compact-title">
-              <span>AI分析流程</span>
-              <h2>系统已完成本场扫描</h2>
+              <span>AI赛前分析步骤</span>
+              <h2>赛前模型已整理本场参考</h2>
             </div>
             <div className="ai-flow-steps">
               {analysisFlowSteps.map((step, index) => (
@@ -2420,7 +2425,7 @@ function App() {
             <div className="play-grid">
               <article className="play-card odds-card">
                 <BarChart3 size={20} />
-                <span>盘口状态</span>
+                <span>盘口参考</span>
                 <strong>{getMarketStatus(activeMatch)}</strong>
                 {hasLocalOdds(activeMatch) ? (
                   <>
@@ -2446,7 +2451,7 @@ function App() {
                         <strong>{formatOddsValue(activeMatch.localOdds.under25)}</strong>
                       </p>
                       <p>
-                        <span>让球</span>
+                        <span>让球参考</span>
                         <strong>{activeMatch.localOdds.handicap}</strong>
                       </p>
                     </div>
@@ -2529,9 +2534,9 @@ function App() {
                 <div className="detail-table three-way-table">
                   <div className="detail-row detail-head">
                     <span>方向</span>
-                    <span>市场概率</span>
-                    <span>系统判断</span>
-                    <span>价值差</span>
+                    <span>市场参考</span>
+                    <span>模型参考</span>
+                    <span>参考差异</span>
                   </div>
                   {outcomes.map((outcome) => (
                     <div className="detail-row" key={outcome}>
@@ -2549,9 +2554,9 @@ function App() {
                 <div className="detail-table total-table">
                   <div className="detail-row detail-head">
                     <span>方向</span>
-                    <span>市场概率</span>
-                    <span>系统判断</span>
-                    <span>价值差</span>
+                    <span>市场参考</span>
+                    <span>模型参考</span>
+                    <span>参考差异</span>
                   </div>
                   <div className="detail-row">
                     <strong>大2.5</strong>
@@ -2596,7 +2601,7 @@ function App() {
               </section>
 
               <section className="detail-block">
-                <h3>赛后状态变化</h3>
+                <h3>近期状态变化参考</h3>
                 <div className="revaluation-table">
                   <div className="revaluation-row revaluation-head">
                     <span>球队</span>
