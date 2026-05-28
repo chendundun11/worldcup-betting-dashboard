@@ -403,6 +403,71 @@ export function calculateBetScore(match) {
   }
 }
 
+function buildScoreBreakdown(match, scoreResult) {
+  const odds = getOdds(match)
+  const valueEdge = scoreResult.valueEdge
+  const favorite = odds.hasOneXTwo ? getFavoriteOutcome(odds) : 'none'
+  const powerDiff = round(getPowerDiff(match), 1)
+  const oddsSourceText =
+    valueEdge.oddsSource === 'localSnapshot'
+      ? '本地赔率快照'
+      : valueEdge.oddsSource === 'embedded'
+        ? '内置赔率快照'
+        : '缺少赔率'
+
+  return {
+    valueEdge: {
+      score: scoreResult.scoreParts.valueEdge,
+      reason:
+        valueEdge.bestOutcome === 'none'
+          ? '缺少可用胜平负赔率，无法形成静态赔率价值判断。'
+          : `${outcomeLabels[valueEdge.bestOutcome]}静态价值为正，来源为${oddsSourceText}，仅作赛前估算。`,
+    },
+    directionClarity: {
+      score: scoreResult.scoreParts.directionClarity,
+      reason:
+        favorite === 'none'
+          ? '缺少赔率结构，方向清晰度归零。'
+          : `热门方向为${outcomeLabels[favorite]}，按单点赔率差距评估方向清晰度。`,
+    },
+    strengthGap: {
+      score: scoreResult.scoreParts.strengthGap,
+      reason: `内部模型强弱差为 ${powerDiff}，用于辅助判断方向稳定性。`,
+    },
+    recentAttackDefense: {
+      score: scoreResult.scoreParts.recentAttackDefense,
+      reason: '基于球队近期状态、进攻评分和防守评分的内部估算，缺少真实近况源时需降权理解。',
+    },
+    marketStability: {
+      score: scoreResult.scoreParts.marketStability,
+      reason: match?.oddsHistory?.length
+        ? '存在部分盘口历史，可辅助判断静态价值是否稳定。'
+        : '缺少盘口变化历史，仅按静态价值给基础分。',
+    },
+    upsetElasticity: {
+      score: scoreResult.scoreParts.upsetElasticity,
+      reason:
+        scoreResult.scoreParts.upsetElasticity > 0
+          ? '存在静态赔率弹性，但 V1 只作为冷门路径观察。'
+          : '未发现足够明确的静态冷门弹性。',
+    },
+    heatPenalty: {
+      score: scoreResult.scoreParts.heatPenalty,
+      reason:
+        scoreResult.scoreParts.heatPenalty < 0
+          ? '热门方向赔率偏低或价值不足，V1 按静态过热信号降权。'
+          : '未触发静态过热扣分。',
+    },
+    infoPenalty: {
+      score: scoreResult.scoreParts.infoPenalty,
+      reason:
+        scoreResult.scoreParts.infoPenalty < 0
+          ? '盘口变化、真实伤停、预计首发或模型来源存在缺口，按信息不足降权。'
+          : '当前输入未触发明显信息缺口扣分。',
+    },
+  }
+}
+
 function getRecommendLevel(score) {
   return recommendLevels.find((level) => score >= level.min) ?? recommendLevels.at(-1)
 }
@@ -578,8 +643,8 @@ export function buildUpsetPick(match, scoreParts) {
     stake: 0,
     market: '1X2',
     direction: bestCandidate,
-    label: `${outcomeLabels[bestCandidate]}冷门观察`,
-    reason: '当前只基于静态赔率，缺少盘口变化、伤停、首发数据。',
+    label: '冷门路径观察',
+    reason: `${outcomeLabels[bestCandidate]}仅作冷门路径观察，不纳入 V1 下注金额；当前缺少盘口变化、伤停、首发数据。`,
   }
 }
 
@@ -678,41 +743,67 @@ function buildScorePicks(match, mainPick) {
     return scores.map((score) => ({
       score,
       stake: 0,
+      highVariance: true,
       note: '比分仅作为小额弹性参考。',
     }))
   }
 
   if (mainPick.direction === 'away') {
     return [
-      { score: '0-1', stake: 0, note: '比分仅作为小额弹性参考。' },
-      { score: '1-2', stake: 0, note: '比分仅作为小额弹性参考。' },
+      { score: '0-1', stake: 0, highVariance: true, note: '比分仅作为小额弹性参考。' },
+      { score: '1-2', stake: 0, highVariance: true, note: '比分仅作为小额弹性参考。' },
     ]
   }
 
   if (mainPick.direction === 'home') {
     return [
-      { score: '1-0', stake: 0, note: '比分仅作为小额弹性参考。' },
-      { score: '2-1', stake: 0, note: '比分仅作为小额弹性参考。' },
+      { score: '1-0', stake: 0, highVariance: true, note: '比分仅作为小额弹性参考。' },
+      { score: '2-1', stake: 0, highVariance: true, note: '比分仅作为小额弹性参考。' },
     ]
   }
 
-  return [{ score: '1-1', stake: 0, note: '比分仅作为小额弹性参考。' }]
+  return [{ score: '1-1', stake: 0, highVariance: true, note: '比分仅作为小额弹性参考。' }]
+}
+
+function getModelProbabilityQuality(match, valueEdge) {
+  if (valueEdge.limitations.includes('missingOneXTwoOdds')) return 'missing'
+  if (valueEdge.limitations.includes('missingModelProbability')) return 'estimated'
+  if (
+    Number.isFinite(match?.model?.home) &&
+    Number.isFinite(match?.model?.draw) &&
+    Number.isFinite(match?.model?.away)
+  ) {
+    return 'estimated'
+  }
+  return 'missing'
 }
 
 function getDataQuality(match, valueEdge) {
   const odds = getOdds(match)
+  const limitations = [
+    ...valueEdge.limitations,
+    'realInjuriesMissing',
+    'expectedLineupsMissing',
+  ]
+
+  if (!match?.oddsHistory?.length) limitations.push('marketMovementHistoryMissing')
+  if (!match?.oddsUpdatedAt) limitations.push('oddsUpdatedAtMissing')
+  if (!Number.isFinite(match?.handicapLine)) limitations.push('handicapStructuredMissing')
+  if (!match?.snapshotId) limitations.push('snapshotPersistenceMissing')
+  if (!match?.settlement) limitations.push('resultSettlementMissing')
+
   return {
     odds: odds.source,
     marketMovement: match?.oddsHistory?.length ? 'partial' : 'missing',
     injuries: 'missing',
     expectedLineups: 'missing',
     teamProfile: match?.homeTeam && match?.awayTeam ? 'partial' : 'missing',
-    limitations: [
-      ...valueEdge.limitations,
-      'marketMovementHistoryMissing',
-      'realInjuriesMissing',
-      'expectedLineupsMissing',
-    ],
+    oddsUpdatedAt: match?.oddsUpdatedAt ? 'partial' : 'missing',
+    handicapStructured: Number.isFinite(match?.handicapLine) ? 'partial' : 'missing',
+    snapshotPersistence: match?.snapshotId ? 'partial' : 'missing',
+    resultSettlement: match?.settlement ? 'partial' : 'missing',
+    modelProbability: getModelProbabilityQuality(match, valueEdge),
+    limitations,
   }
 }
 
@@ -755,6 +846,7 @@ export function buildBetPlan(match, options = {}) {
     betScore: scoreResult.betScore,
   })
   const dataQuality = getDataQuality(match, scoreResult.valueEdge)
+  const scoreBreakdown = buildScoreBreakdown(match, scoreResult)
   const plan = {
     engineVersion: ENGINE_VERSION,
     matchId: getMatchId(match),
@@ -789,12 +881,15 @@ export function buildBetPlan(match, options = {}) {
     },
     heatWarning,
     cancelRules,
+    scoreBreakdown,
     internalAnalysis: {
       scoreParts: scoreResult.scoreParts,
+      scoreBreakdown,
       valueEdgeSource: scoreResult.valueEdge.status,
       ruleNotes: [
         'GPT 后续只负责解释，不改变方向、评分、金额。',
         'V1 为静态赛前规则引擎，盘口变化历史缺失时自动降权。',
+        'valueEdge 为静态赔率价值估算，不代表真实胜率，也不构成收益承诺。',
       ],
     },
     publicSummary: '',
