@@ -19,6 +19,7 @@ import { SQUAD_INSIGHTS } from './data/squadInsights'
 import { TEAM_PROFILES } from './data/teamProfiles'
 import teamsData from './data/teams.json'
 import { getInitialMatchSnapshot, getMatches } from './services/matchApi'
+import buildBetPlan from './services/betEngine.js'
 import {
   applyFinishedMatchAdjustments,
   applyFinishedMatchAdjustmentsBefore,
@@ -1699,6 +1700,7 @@ function App() {
   const [matchDataset, setMatchDataset] = useState(() => getInitialMatchSnapshot())
   const [spotlightCopyStatus, setSpotlightCopyStatus] = useState('idle')
   const [expandedDateKeys, setExpandedDateKeys] = useState({})
+  const [showInternalEngine, setShowInternalEngine] = useState(false)
 
   useEffect(() => {
     let isMounted = true
@@ -1894,6 +1896,17 @@ function App() {
   const activeMatch =
     normalizedMatches[safeSelectedIndex] ||
     null
+  const internalBetPlan = useMemo(
+    () =>
+      activeMatch
+        ? buildBetPlan(activeMatch, {
+            bankroll: 10000,
+            maxStakePerMatch: 500,
+            engineMode: 'internal',
+          })
+        : null,
+    [activeMatch],
+  )
   const selectedDateKey = activeMatch
     ? getBeijingDateGroupInfo(activeMatch.kickoff).dateKey
     : ''
@@ -2629,6 +2642,127 @@ function App() {
               </section>
             </div>
           </details>
+
+          <div className="internal-engine-toggle-row">
+            <button
+              className="internal-engine-toggle"
+              type="button"
+              onClick={() => setShowInternalEngine((isVisible) => !isVisible)}
+            >
+              {showInternalEngine ? '隐藏内部引擎' : '显示内部引擎'}
+            </button>
+          </div>
+
+          {showInternalEngine && internalBetPlan ? (
+            <section className="internal-engine-panel" aria-label="内部下注引擎 V1">
+              <div className="internal-engine-head">
+                <div>
+                  <span>内部工具</span>
+                  <h3>内部下注引擎 V1</h3>
+                </div>
+                <p>静态赛前规则验收，不代表真实盈利能力。</p>
+              </div>
+
+              <div className="internal-engine-summary">
+                <p>
+                  <span>betScore</span>
+                  <strong>{internalBetPlan.betScore}</strong>
+                </p>
+                <p>
+                  <span>recommendLevel</span>
+                  <strong>{internalBetPlan.recommendLevel}</strong>
+                </p>
+                <p>
+                  <span>mainPick</span>
+                  <strong>{internalBetPlan.mainPick?.label ?? '-'}</strong>
+                </p>
+                <p>
+                  <span>secondaryPick</span>
+                  <strong>{internalBetPlan.secondaryPick?.label ?? '-'}</strong>
+                </p>
+                <p>
+                  <span>总投入</span>
+                  <strong>{internalBetPlan.totalStake}U</strong>
+                </p>
+              </div>
+
+              <div className="internal-engine-block">
+                <h4>资金分配</h4>
+                {internalBetPlan.stakePlan.length ? (
+                  <div className="internal-stake-list">
+                    {internalBetPlan.stakePlan.map((item) => (
+                      <p key={`${item.market}-${item.pick}-${item.label}`}>
+                        <span>{item.market}</span>
+                        <strong>{item.label}</strong>
+                        <b>{item.stake}U</b>
+                      </p>
+                    ))}
+                  </div>
+                ) : (
+                  <small>当前为观望或数据不足，暂无资金分配。</small>
+                )}
+              </div>
+
+              <div className="internal-engine-block">
+                <h4>热度提示</h4>
+                <p className="internal-engine-note">
+                  {internalBetPlan.heatWarning?.message ?? '-'}
+                </p>
+              </div>
+
+              <div className="internal-engine-block">
+                <h4>dataQuality</h4>
+                <div className="internal-quality-grid">
+                  {Object.entries(internalBetPlan.dataQuality ?? {})
+                    .filter(([, value]) => !Array.isArray(value))
+                    .map(([key, value]) => (
+                      <p key={key} className={`quality-${value}`}>
+                        <span>{key}</span>
+                        <strong>{String(value)}</strong>
+                      </p>
+                    ))}
+                </div>
+                {internalBetPlan.dataQuality?.limitations?.length ? (
+                  <div className="internal-limitations">
+                    {internalBetPlan.dataQuality.limitations.map((item) => (
+                      <span key={item}>{item}</span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="internal-engine-block">
+                <h4>cancelRules</h4>
+                <ul className="internal-rule-list">
+                  {internalBetPlan.cancelRules.map((rule) => (
+                    <li key={rule}>{rule}</li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="internal-engine-block">
+                <h4>scoreBreakdown</h4>
+                <div className="internal-breakdown-list">
+                  {Object.entries(internalBetPlan.scoreBreakdown ?? {}).map(
+                    ([key, item]) => (
+                      <article key={key}>
+                        <div>
+                          <span>{key}</span>
+                          <strong>{item.score}</strong>
+                        </div>
+                        <p>{item.reason}</p>
+                      </article>
+                    ),
+                  )}
+                </div>
+              </div>
+
+              <div className="internal-engine-block">
+                <h4>公开摘要预览</h4>
+                <p className="internal-engine-note">{internalBetPlan.publicSummary}</p>
+              </div>
+            </section>
+          ) : null}
         </section>
       </section>
 
