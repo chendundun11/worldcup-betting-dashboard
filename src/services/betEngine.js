@@ -298,7 +298,7 @@ function getRecentAttackDefenseScore(match) {
   if (fields.some((value) => !Number.isFinite(value))) return 6
 
   const average = fields.reduce((sum, value) => sum + value, 0) / fields.length
-  return clamp(Math.round((average - 45) / 3.4), 0, 15)
+  return clamp(Math.round((average - 42) / 3.2), 0, 15)
 }
 
 function getDirectionClarityScore(odds, valueEdge) {
@@ -634,7 +634,12 @@ function buildSecondaryPick(match, scoreResult) {
   const odds = getOdds(match)
   const totalGoals = scoreResult.valueEdge.totalGoals
 
-  if (!odds.hasTotals || totalGoals.bestDirection === 'none' || totalGoals.bestEdge < 0.025) {
+  if (
+    scoreResult.betScore < 55 ||
+    !odds.hasTotals ||
+    totalGoals.bestDirection === 'none' ||
+    totalGoals.bestEdge < 0.025
+  ) {
     return {
       action: 'none',
       market: 'none',
@@ -801,3 +806,5 @@ export function buildBetPlan(match, options = {}) {
     publicSummary: buildPublicSummary(plan),
   }
 }
+
+export default buildBetPlan
