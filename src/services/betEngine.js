@@ -1,3 +1,6 @@
+import { SQUAD_INSIGHTS } from '../data/squadInsights.js'
+import { TEAM_PROFILES } from '../data/teamProfiles.js'
+
 const ENGINE_VERSION = 'bet-engine-v1-static-prematch'
 const DEFAULT_BANKROLL = 10000
 const DEFAULT_MAX_STAKE_PER_MATCH = 500
@@ -24,6 +27,15 @@ const recommendLevels = [
   { min: 55, label: '轻仓试探', stakeMin: 50, stakeMax: 100 },
   { min: 0, label: '观望', stakeMin: 0, stakeMax: 0 },
 ]
+
+const heatValueFlagRules = {
+  favoriteTooLow: '热门方向赔率过低，临场若继续降赔需取消或降级。',
+  overPriceThin: '大小球赔率空间偏薄，临场不确认时取消或降级。',
+  handicapRisk: '让球变化需要复核，盘口退让时取消或降级。',
+  scoreVolatile: '比分波动较大，阵容不清时取消比分参考。',
+}
+
+const heatPenaltyFlags = ['favoriteTooLow', 'overPriceThin', 'handicapRisk']
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max)
@@ -70,6 +82,199 @@ function getMatchId(match) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
+}
+
+function compactText(value) {
+  const text = String(value ?? '').trim()
+  return text || null
+}
+
+function asList(value) {
+  return Array.isArray(value) ? value.map((item) => compactText(item)).filter(Boolean) : []
+}
+
+function uniqueList(values) {
+  return [...new Set(values.filter(Boolean))]
+}
+
+function formatList(values, limit = 3) {
+  return values.slice(0, limit).join('、')
+}
+
+function getLightTeamLayer(match, side) {
+  const teamName = getTeamName(match, side)
+  const profile = TEAM_PROFILES[teamName] ?? null
+  const squad = SQUAD_INSIGHTS[teamName] ?? null
+
+  return {
+    teamName,
+    hasProfile: Boolean(profile),
+    volatilityScore: toNumber(profile?.volatilityScore, null),
+    upsetRisk: toNumber(profile?.upsetRisk, null),
+    profileNote: compactText(profile?.profileNote),
+    styleTags: asList(profile?.styleTags),
+    hasSquad: Boolean(squad),
+    lineupCertainty: compactText(squad?.lineupCertainty) ?? 'unknown',
+    rotationRisk: compactText(squad?.rotationRisk) ?? 'unknown',
+    injuryDataQuality: compactText(squad?.injuryDataQuality) ?? 'unknown',
+    lineupReviewPoints: asList(squad?.lineupReviewPoints),
+    squadNote: compactText(squad?.squadNote),
+  }
+}
+
+function buildLightDataLayer(match) {
+  const local = match?.localOdds ?? null
+
+  return {
+    localOdds: local
+      ? {
+          oddsConfidence: compactText(local.oddsConfidence) ?? 'unknown',
+          valueFlags: asList(local.valueFlags),
+          reviewPoints: asList(local.reviewPoints),
+          riskNotes: asList(local.riskNotes),
+          confidenceNote: compactText(local.confidenceNote),
+        }
+      : null,
+    teams: {
+      home: getLightTeamLayer(match, 'home'),
+      away: getLightTeamLayer(match, 'away'),
+    },
+  }
+}
+
+function getLightTeams(lightDataLayer) {
+  return Object.values(lightDataLayer.teams)
+}
+
+function getLightSquads(lightDataLayer) {
+  return getLightTeams(lightDataLayer).filter((team) => team.hasSquad)
+}
+
+function getLightProfiles(lightDataLayer) {
+  return getLightTeams(lightDataLayer).filter((team) => team.hasProfile)
+}
+
+function getLightDataAdjustments(match) {
+  const lightDataLayer = buildLightDataLayer(match)
+  const squads = getLightSquads(lightDataLayer)
+  const profiles = getLightProfiles(lightDataLayer)
+  const valueFlags = lightDataLayer.localOdds?.valueFlags ?? []
+  let infoPenalty = 0
+  let heatPenalty = 0
+
+  if (lightDataLayer.localOdds?.oddsConfidence === 'low') infoPenalty += 1
+  if (hasAny(squads, 'injuryDataQuality', ['missing', 'partial'])) infoPenalty += 1
+  if (hasAny(squads, 'lineupCertainty', ['low', 'unknown', 'missing'])) infoPenalty += 1
+  if (hasAny(squads, 'rotationRisk', ['high', 'medium', 'unknown', 'missing'])) infoPenalty += 1
+  for (const flag of heatPenaltyFlags) {
+    if (valueFlags.includes(flag)) heatPenalty += flag === 'favoriteTooLow' ? 2 : 1
+  }
+  if (profiles.some((profile) => toNumber(profile.volatilityScore) >= 66)) heatPenalty += 1
+  if (profiles.some((profile) => toNumber(profile.upsetRisk) >= 62)) heatPenalty += 1
+
+  const cappedInfoPenalty = Math.min(infoPenalty, 5)
+  const cappedHeatPenalty = Math.min(heatPenalty, 8 - cappedInfoPenalty)
+
+  return {
+    lightDataLayer,
+    infoPenalty: cappedInfoPenalty,
+    heatPenalty: cappedHeatPenalty,
+    totalPenalty: cappedInfoPenalty + cappedHeatPenalty,
+  }
+}
+
+function hasAny(items, key, values) {
+  return items.some((item) => values.includes(item[key]))
+}
+
+function getLayerQuality(values, missingValues, partialValues = []) {
+  if (!values.length || values.some((value) => missingValues.includes(value))) return 'missing'
+  return values.some((value) => partialValues.includes(value)) ? 'partial' : 'available'
+}
+
+function getLightDataReasonNotes(match) {
+  const { lightDataLayer } = getLightDataAdjustments(match)
+  const localOdds = lightDataLayer.localOdds
+  const squads = getLightSquads(lightDataLayer)
+  const profiles = getLightProfiles(lightDataLayer)
+  const valueFlags = localOdds?.valueFlags ?? []
+  const reviewPoints = uniqueList(localOdds?.reviewPoints ?? [])
+  const riskNotes = uniqueList(localOdds?.riskNotes ?? [])
+  const lineupReviewPoints = uniqueList(
+    squads.flatMap((squad) => squad.lineupReviewPoints),
+  )
+
+  return {
+    info: uniqueList([
+      localOdds?.oddsConfidence === 'low' && '赔率置信偏低，按信息缺口扣分。',
+      hasAny(squads, 'injuryDataQuality', ['missing', 'partial']) &&
+        '伤停数据缺失或仅部分可用，保守扣分。',
+      hasAny(squads, 'lineupCertainty', ['low', 'unknown', 'missing']) &&
+        '首发确定性偏低，临场不明时降权。',
+      hasAny(squads, 'rotationRisk', ['high', 'medium', 'unknown', 'missing']) &&
+        '轮换情况需要复核。',
+      reviewPoints.length && `本地复核点：${formatList(reviewPoints)}。`,
+      lineupReviewPoints.length && `阵容复核点：${formatList(lineupReviewPoints)}。`,
+    ]),
+    heat: uniqueList([
+      valueFlags.length && `本地标记：${formatList(valueFlags)}，仅用于过热降权。`,
+      profiles.some((profile) => toNumber(profile.volatilityScore) >= 66) &&
+        '球队波动偏高，仅作风险提示。',
+      riskNotes.length && `本地风险提示：${formatList(riskNotes)}。`,
+    ]),
+    upset: profiles.some((profile) => toNumber(profile.upsetRisk) >= 55)
+      ? ['球队 upsetRisk 较高，仅作为冷门路径观察，不纳入 V1 下注金额。']
+      : [],
+    reviewPoints,
+    riskNotes,
+    lineupReviewPoints,
+    confidenceNote: localOdds?.confidenceNote ?? null,
+  }
+}
+
+function getLightCancelRules(match) {
+  const notes = getLightDataReasonNotes(match)
+
+  return uniqueList([
+    notes.heat.length && `${notes.heat[0]}临场不确认时取消或降级。`,
+    notes.reviewPoints.length && `临场复核：${formatList(notes.reviewPoints, 2)}，不确认时取消或降级。`,
+    notes.riskNotes.length && `风险提示：${formatList(notes.riskNotes, 2)}，与临场信息冲突时降级。`,
+    notes.lineupReviewPoints.length && `阵容复核：${formatList(notes.lineupReviewPoints, 2)}，首发不符时取消或降级。`,
+    notes.confidenceNote && `赔率置信说明：${notes.confidenceNote}`,
+  ])
+}
+
+function appendReason(base, notes, limit = 2) {
+  const suffix = notes.slice(0, limit).join('')
+  return suffix ? `${base}${suffix}` : base
+}
+
+function summarizeLightDataLayer(lightDataLayer) {
+  return {
+    localOdds: lightDataLayer.localOdds
+      ? {
+          oddsConfidence: lightDataLayer.localOdds.oddsConfidence,
+          valueFlags: lightDataLayer.localOdds.valueFlags,
+          reviewPointCount: lightDataLayer.localOdds.reviewPoints.length,
+          riskNoteCount: lightDataLayer.localOdds.riskNotes.length,
+          hasConfidenceNote: Boolean(lightDataLayer.localOdds.confidenceNote),
+        }
+      : null,
+    teams: Object.fromEntries(
+      Object.entries(lightDataLayer.teams).map(([side, team]) => [
+        side,
+        {
+          teamName: team.teamName,
+          volatilityScore: team.volatilityScore,
+          upsetRisk: team.upsetRisk,
+          lineupCertainty: team.lineupCertainty,
+          rotationRisk: team.rotationRisk,
+          injuryDataQuality: team.injuryDataQuality,
+          lineupReviewPointCount: team.lineupReviewPoints.length,
+        },
+      ]),
+    ),
+  }
 }
 
 function getOdds(match) {
@@ -353,16 +558,18 @@ function getUpsetElasticityScore(odds, valueEdge) {
   return 0
 }
 
-function getHeatPenalty(odds, valueEdge) {
+function getHeatPenalty(match, odds, valueEdge) {
   if (!odds.hasOneXTwo) return 0
 
   const favorite = getFavoriteOutcome(odds)
   const favoriteOdd = odds[favorite]
+  const lightDataAdjustments = getLightDataAdjustments(match)
   let penalty = 0
 
   if (favoriteOdd < 1.35) penalty -= 10
   if (favoriteOdd < 1.55 && valueEdge.edges[favorite] < 0.02) penalty -= 6
   if (favorite === valueEdge.bestOutcome && valueEdge.bestEdge < 0.015) penalty -= 4
+  penalty -= lightDataAdjustments.heatPenalty
 
   return clamp(penalty, -20, 0)
 }
@@ -375,6 +582,7 @@ function getInfoPenalty(match, odds, valueEdge) {
   if (!match?.homeTeam || !match?.awayTeam) penalty -= 4
   if (valueEdge.limitations.length) penalty -= Math.min(4, valueEdge.limitations.length * 2)
   if (!match?.oddsHistory?.length) penalty -= 2
+  penalty -= getLightDataAdjustments(match).infoPenalty
 
   return clamp(penalty, -15, 0)
 }
@@ -389,7 +597,7 @@ export function calculateBetScore(match) {
     recentAttackDefense: getRecentAttackDefenseScore(match),
     marketStability: getMarketStabilityScore(match, odds, valueEdge),
     upsetElasticity: getUpsetElasticityScore(odds, valueEdge),
-    heatPenalty: getHeatPenalty(odds, valueEdge),
+    heatPenalty: getHeatPenalty(match, odds, valueEdge),
     infoPenalty: getInfoPenalty(match, odds, valueEdge),
   }
 
@@ -408,12 +616,33 @@ function buildScoreBreakdown(match, scoreResult) {
   const valueEdge = scoreResult.valueEdge
   const favorite = odds.hasOneXTwo ? getFavoriteOutcome(odds) : 'none'
   const powerDiff = round(getPowerDiff(match), 1)
+  const lightReasonNotes = getLightDataReasonNotes(match)
   const oddsSourceText =
     valueEdge.oddsSource === 'localSnapshot'
       ? '本地赔率快照'
       : valueEdge.oddsSource === 'embedded'
         ? '内置赔率快照'
         : '缺少赔率'
+  const upsetElasticityReason = appendReason(
+    scoreResult.scoreParts.upsetElasticity > 0
+      ? '存在静态赔率弹性，但 V1 只作为冷门路径观察。'
+      : '未发现足够明确的静态冷门弹性。',
+    lightReasonNotes.upset,
+    1,
+  )
+  const heatPenaltyReason = appendReason(
+    scoreResult.scoreParts.heatPenalty < 0
+      ? '热门方向赔率偏低或价值不足，V1 按静态过热信号降权。'
+      : '未触发静态过热扣分。',
+    lightReasonNotes.heat,
+  )
+  const infoPenaltyReason = appendReason(
+    scoreResult.scoreParts.infoPenalty < 0
+      ? '盘口变化、真实伤停、预计首发或模型来源存在缺口，按信息不足降权。'
+      : '当前输入未触发明显信息缺口扣分。',
+    lightReasonNotes.info,
+    3,
+  )
 
   return {
     valueEdge: {
@@ -446,24 +675,15 @@ function buildScoreBreakdown(match, scoreResult) {
     },
     upsetElasticity: {
       score: scoreResult.scoreParts.upsetElasticity,
-      reason:
-        scoreResult.scoreParts.upsetElasticity > 0
-          ? '存在静态赔率弹性，但 V1 只作为冷门路径观察。'
-          : '未发现足够明确的静态冷门弹性。',
+      reason: upsetElasticityReason,
     },
     heatPenalty: {
       score: scoreResult.scoreParts.heatPenalty,
-      reason:
-        scoreResult.scoreParts.heatPenalty < 0
-          ? '热门方向赔率偏低或价值不足，V1 按静态过热信号降权。'
-          : '未触发静态过热扣分。',
+      reason: heatPenaltyReason,
     },
     infoPenalty: {
       score: scoreResult.scoreParts.infoPenalty,
-      reason:
-        scoreResult.scoreParts.infoPenalty < 0
-          ? '盘口变化、真实伤停、预计首发或模型来源存在缺口，按信息不足降权。'
-          : '当前输入未触发明显信息缺口扣分。',
+      reason: infoPenaltyReason,
     },
   }
 }
@@ -649,23 +869,26 @@ export function buildUpsetPick(match, scoreParts) {
 }
 
 export function buildCancelRules(match, scoreParts) {
-  const rules = [
+  const rules = []
+
+  if (scoreParts?.betScore < 55) {
+    rules.push('评分低于 55，保持观望。')
+  }
+
+  if (!getOdds(match).hasOneXTwo) {
+    rules.push('缺少胜平负赔率，保持观望。')
+  }
+
+  rules.push(
+    ...getLightCancelRules(match),
     '临场阵容明显不利时取消或降级。',
     '盘口反向变化且无法解释时取消。',
     '信息不足时取消或观望。',
     '赔率价值被吃掉时不下注。',
     '比分玩法遇到阵容不确定时取消。',
-  ]
+  )
 
-  if (scoreParts?.betScore < 55) {
-    rules.unshift('评分低于 55，保持观望。')
-  }
-
-  if (!getOdds(match).hasOneXTwo) {
-    rules.unshift('缺少胜平负赔率，保持观望。')
-  }
-
-  return rules
+  return uniqueList(rules).slice(0, 8)
 }
 
 function buildMainPick(match, scoreResult) {
@@ -780,6 +1003,27 @@ function getModelProbabilityQuality(match, valueEdge) {
 
 function getDataQuality(match, valueEdge) {
   const odds = getOdds(match)
+  const lightDataLayer = buildLightDataLayer(match)
+  const squads = getLightSquads(lightDataLayer)
+  const profiles = getLightProfiles(lightDataLayer)
+  const injuryValues = squads.map((squad) => squad.injuryDataQuality)
+  const lineupValues = squads.map((squad) => squad.lineupCertainty)
+  const rotationValues = squads.map((squad) => squad.rotationRisk)
+  const injuryDataQuality = getLayerQuality(
+    injuryValues,
+    ['missing', 'unknown'],
+    ['partial'],
+  )
+  const lineupCertainty = getLayerQuality(
+    lineupValues,
+    ['low', 'unknown', 'missing'],
+    ['medium'],
+  )
+  const rotationRisk = getLayerQuality(
+    rotationValues,
+    ['high', 'unknown', 'missing'],
+    ['medium'],
+  )
   const limitations = [
     ...valueEdge.limitations,
     'realInjuriesMissing',
@@ -791,18 +1035,37 @@ function getDataQuality(match, valueEdge) {
   if (!Number.isFinite(match?.handicapLine)) limitations.push('handicapStructuredMissing')
   if (!match?.snapshotId) limitations.push('snapshotPersistenceMissing')
   if (!match?.settlement) limitations.push('resultSettlementMissing')
+  if (lightDataLayer.localOdds?.oddsConfidence === 'low') limitations.push('oddsConfidenceLow')
+  if (injuryDataQuality === 'missing') limitations.push('injuryDataQualityMissing')
+  if (injuryDataQuality === 'partial') limitations.push('injuryDataQualityPartial')
+  if (lineupCertainty === 'missing') limitations.push('lineupCertaintyLow')
+  if (rotationRisk !== 'available') limitations.push('rotationRiskReviewRequired')
+  for (const flag of lightDataLayer.localOdds?.valueFlags ?? []) {
+    if (heatValueFlagRules[flag]) limitations.push(`valueFlag:${flag}`)
+  }
+  if (profiles.some((profile) => toNumber(profile.volatilityScore) >= 66)) {
+    limitations.push('teamVolatilityHigh')
+  }
+  if (profiles.some((profile) => toNumber(profile.upsetRisk) >= 55)) {
+    limitations.push('teamUpsetRiskReview')
+  }
 
   return {
     odds: odds.source,
     marketMovement: match?.oddsHistory?.length ? 'partial' : 'missing',
-    injuries: 'missing',
-    expectedLineups: 'missing',
-    teamProfile: match?.homeTeam && match?.awayTeam ? 'partial' : 'missing',
+    injuries: injuryDataQuality === 'available' ? 'partial' : injuryDataQuality,
+    expectedLineups: lineupCertainty,
+    teamProfile:
+      profiles.length === 2 ? 'available' : match?.homeTeam && match?.awayTeam ? 'partial' : 'missing',
     oddsUpdatedAt: match?.oddsUpdatedAt ? 'partial' : 'missing',
     handicapStructured: Number.isFinite(match?.handicapLine) ? 'partial' : 'missing',
     snapshotPersistence: match?.snapshotId ? 'partial' : 'missing',
     resultSettlement: match?.settlement ? 'partial' : 'missing',
     modelProbability: getModelProbabilityQuality(match, valueEdge),
+    oddsConfidence: lightDataLayer.localOdds?.oddsConfidence ?? 'missing',
+    lineupCertainty,
+    rotationRisk,
+    injuryDataQuality,
     limitations,
   }
 }
@@ -847,6 +1110,7 @@ export function buildBetPlan(match, options = {}) {
   })
   const dataQuality = getDataQuality(match, scoreResult.valueEdge)
   const scoreBreakdown = buildScoreBreakdown(match, scoreResult)
+  const lightDataAdjustments = getLightDataAdjustments(match)
   const plan = {
     engineVersion: ENGINE_VERSION,
     matchId: getMatchId(match),
@@ -886,6 +1150,12 @@ export function buildBetPlan(match, options = {}) {
       scoreParts: scoreResult.scoreParts,
       scoreBreakdown,
       valueEdgeSource: scoreResult.valueEdge.status,
+      lightDataLayer: summarizeLightDataLayer(lightDataAdjustments.lightDataLayer),
+      lightDataAdjustments: {
+        infoPenalty: -lightDataAdjustments.infoPenalty,
+        heatPenalty: -lightDataAdjustments.heatPenalty,
+        totalPenalty: -lightDataAdjustments.totalPenalty,
+      },
       ruleNotes: [
         'GPT 后续只负责解释，不改变方向、评分、金额。',
         'V1 为静态赛前规则引擎，盘口变化历史缺失时自动降权。',

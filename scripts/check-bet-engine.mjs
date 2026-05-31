@@ -23,7 +23,10 @@ function team(name, strength = 60, form = 60, attack = 60, defense = 60) {
 }
 
 function oddsFromLocal(key) {
-  const odds = localOdds[key]
+  return oddsFromEntry(localOdds[key])
+}
+
+function oddsFromEntry(odds) {
   if (!odds) return null
 
   return {
@@ -33,6 +36,24 @@ function oddsFromLocal(key) {
     over25: odds.over25,
     under25: odds.under25,
   }
+}
+
+function basicLocalOdds(key) {
+  const odds = localOdds[key]
+  if (!odds) return null
+  const keys = [
+    'homeWin',
+    'draw',
+    'awayWin',
+    'over25',
+    'under25',
+    'handicap',
+    'note',
+    'scoreReference',
+    'totalGoalsDirection',
+  ]
+
+  return Object.fromEntries(keys.map((key) => [key, odds[key]]))
 }
 
 function match(id, key, homeTeam, awayTeam, model, totalModel, extra = {}) {
@@ -200,6 +221,24 @@ function assertScorePicks(plan, name) {
   }
 }
 
+function assertPositiveScorePartsDoNotGrow(baselinePlan, nextPlan, name) {
+  const positiveScorePartKeys = [
+    'valueEdge',
+    'directionClarity',
+    'strengthGap',
+    'recentAttackDefense',
+    'marketStability',
+    'upsetElasticity',
+  ]
+
+  for (const key of positiveScorePartKeys) {
+    assert(
+      nextPlan.internalAnalysis.scoreParts[key] <= baselinePlan.internalAnalysis.scoreParts[key],
+      `${name}: 新增字段不得抬高 ${key}`,
+    )
+  }
+}
+
 function compact(plan) {
   return {
     matchName: plan.matchName,
@@ -251,8 +290,8 @@ for (const { name, target, plan } of plans) {
 
   if (target === 'standard') {
     assert(
-      plan.betScore >= 65 && plan.betScore <= 74,
-      `${name}: 标准优势场目标应在 65-74，当前 ${plan.betScore}`,
+      plan.betScore >= 60 && plan.betScore <= 74,
+      `${name}: 标准优势场新增保守扣分后目标应在 60-74，当前 ${plan.betScore}`,
     )
   }
 }
@@ -283,6 +322,73 @@ assert(
 assert(
   !missingModelPlan.scoreBreakdown.valueEdge.reason.includes('真实概率一定'),
   '缺 model 但有 odds 测试: valueEdge 不能描述成精确真实概率',
+)
+
+const lightDataModel = { home: 0.64, draw: 0.22, away: 0.14, powerDiff: 12 }
+const lightDataTotalModel = { over25Probability: 0.57, under25Probability: 0.43 }
+const lightDataBaseOdds = basicLocalOdds('France__Senegal')
+const buildLightDataPlan = (id, localOddsEntry, homeTeam, awayTeam) =>
+  buildBetPlan(
+    match(
+      id,
+      'France__Senegal',
+      homeTeam,
+      awayTeam,
+      lightDataModel,
+      lightDataTotalModel,
+      { localOdds: localOddsEntry, odds: oddsFromEntry(localOddsEntry) },
+    ),
+    {
+      bankroll: BANKROLL,
+      maxStakePerMatch: MAX_STAKE_PER_MATCH,
+    },
+  )
+const lightDataBaselinePlan = buildLightDataPlan(
+  'sample-light-data-baseline',
+  lightDataBaseOdds,
+  team('Baseline Home', 78, 74, 75, 73),
+  team('Baseline Away', 64, 63, 65, 64),
+)
+const lightDataRiskPlan = buildLightDataPlan(
+  'sample-light-data-risk',
+  {
+    ...lightDataBaseOdds,
+    oddsConfidence: 'low',
+    valueFlags: ['favoriteTooLow', 'overPriceThin', 'handicapRisk', 'scoreVolatile'],
+    reviewPoints: ['首发是否轮换', '盘口是否退让'],
+    riskNotes: ['强队低赔过热', '比分波动大'],
+    confidenceNote: '本地赔率快照置信度较低，临场需复核。',
+  },
+  team('France', 78, 74, 75, 73),
+  team('Senegal', 64, 63, 65, 64),
+)
+const lightDataText = [
+  lightDataRiskPlan.cancelRules.join('\n'),
+  Object.values(lightDataRiskPlan.scoreBreakdown)
+    .map((item) => item.reason)
+    .join('\n'),
+].join('\n')
+const lightDataInternalText = JSON.stringify(lightDataRiskPlan.internalAnalysis)
+
+assert(lightDataRiskPlan.betScore <= lightDataBaselinePlan.betScore, '新增风险字段测试: betScore 不能高于 baseline')
+assert(lightDataRiskPlan.totalStake <= lightDataBaselinePlan.totalStake, '新增风险字段测试: totalStake 不能高于 baseline')
+assert(lightDataRiskPlan.upsetPick.stake === 0, '新增风险字段测试: upsetPick.stake 必须继续为 0')
+assertPositiveScorePartsDoNotGrow(lightDataBaselinePlan, lightDataRiskPlan, '新增风险字段测试')
+for (const [text, label] of [
+  ['首发是否轮换', 'reviewPoints'],
+  ['强队低赔过热', 'riskNotes'],
+  ['核心前锋是否首发', 'lineupReviewPoints'],
+  ['favoriteTooLow', 'valueFlags'],
+]) {
+  assert(lightDataText.includes(text), `新增风险字段测试: ${label} 必须进入 cancelRules 或 reason`)
+}
+assert(
+  lightDataRiskPlan.internalAnalysis.lightDataLayer?.localOdds?.valueFlags?.includes('favoriteTooLow'),
+  '新增风险字段测试: internalAnalysis 必须包含轻量数据层摘要',
+)
+assert(
+  !/(totalStake|stakePlan|bankroll)/.test(lightDataInternalText),
+  '新增风险字段测试: internalAnalysis 不应包含公开金额字段',
 )
 
 if (boundarySamples.extreme.plan.betScore >= 85) {
