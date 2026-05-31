@@ -210,6 +210,10 @@ const internalDataQualityLabels = {
   snapshotPersistence: '快照持久化',
   resultSettlement: '赛果结算',
   modelProbability: '模型概率',
+  oddsConfidence: '赔率置信度',
+  lineupCertainty: '首发确定性',
+  rotationRisk: '轮换风险',
+  injuryDataQuality: '伤停数据质量',
 }
 
 const internalDataQualityStatusLabels = {
@@ -219,6 +223,10 @@ const internalDataQualityStatusLabels = {
   estimated: '估算',
   unavailable: '不可用',
   available: '可用',
+  high: '高',
+  medium: '中',
+  low: '低',
+  unknown: '待确认',
 }
 
 const internalScoreBreakdownLabels = {
@@ -557,11 +565,6 @@ function formatPercent(value, digits = 1) {
 function formatPointDiff(value) {
   const sign = value >= 0 ? '+' : ''
   return `${sign}${(value * 100).toFixed(1)}pp`
-}
-
-function formatUnits(value) {
-  const sign = value > 0 ? '+' : ''
-  return `${sign}${value.toFixed(2)}`
 }
 
 function formatKickoff(value) {
@@ -2832,7 +2835,7 @@ function App() {
             <span>赛前方向</span>
             <span>赛果</span>
             <span>是否命中</span>
-            <span>盈亏参考</span>
+            <span>赛后表现参考</span>
             <span>复盘一句话</span>
           </div>
 
@@ -2858,7 +2861,7 @@ function App() {
                     ? '未命中'
                     : '未下注'}
               </span>
-              <span>{formatUnits(match.settlement?.profitUnits ?? 0)}</span>
+              <span>赛后仅作方向复核</span>
               <span>{getReviewText(match)}</span>
             </div>
           ))}
