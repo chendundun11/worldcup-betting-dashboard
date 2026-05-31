@@ -240,6 +240,38 @@ const internalScoreBreakdownLabels = {
   infoPenalty: '信息缺口扣分',
 }
 
+const internalRiskFlagLabels = {
+  favoriteTooLow: '热门价格偏低',
+  overPriceThin: '大球价格支撑不足',
+  handicapRisk: '让球方向存在风险',
+  scoreVolatile: '比分波动较高',
+  upsetRisk: '冷门扰动风险',
+  underHasSupport: '小球方向有一定支撑',
+  drawHasProtection: '平局保护明显',
+}
+
+const internalLimitationLabels = {
+  missingOneXTwoOdds: '缺少胜平负赔率',
+  missingModelProbability: '缺少模型概率',
+  missingTotalGoalsModel: '缺少大小球模型概率',
+  missingTotalGoalsOdds: '缺少大小球赔率',
+  missingMarketMovementHistory: '缺少盘口变化历史',
+  realInjuriesMissing: '真实伤停缺失',
+  expectedLineupsMissing: '预计首发缺失',
+  marketMovementHistoryMissing: '盘口变化历史缺失',
+  oddsUpdatedAtMissing: '赔率更新时间缺失',
+  handicapStructuredMissing: '让球结构未结构化',
+  snapshotPersistenceMissing: '快照未持久化',
+  resultSettlementMissing: '赛果未结算',
+  oddsConfidenceLow: '赔率置信度偏低',
+  injuryDataQualityMissing: '伤停数据质量缺失',
+  injuryDataQualityPartial: '伤停数据仅部分可用',
+  lineupCertaintyLow: '首发确定性偏低',
+  rotationRiskReviewRequired: '轮换情况需复核',
+  teamVolatilityHigh: '球队波动偏高',
+  teamUpsetRiskReview: '冷门扰动需观察',
+}
+
 function getInternalMarketLabel(market) {
   return internalMarketLabels[market] ?? market ?? '-'
 }
@@ -254,6 +286,94 @@ function getInternalDataQualityStatus(value) {
 
 function getInternalScoreBreakdownLabel(key) {
   return internalScoreBreakdownLabels[key] ?? key
+}
+
+function getInternalRiskFlagLabel(flag) {
+  return internalRiskFlagLabels[flag] ?? flag
+}
+
+function formatInternalRiskText(text) {
+  return Object.entries(internalRiskFlagLabels).reduce(
+    (currentText, [key, label]) => currentText.split(key).join(label),
+    String(text ?? ''),
+  )
+}
+
+function getInternalLimitationLabel(limitation) {
+  if (String(limitation).startsWith('valueFlag:')) {
+    const flag = String(limitation).replace('valueFlag:', '')
+    return `盘口风险：${getInternalRiskFlagLabel(flag)}`
+  }
+
+  return internalLimitationLabels[limitation] ?? formatInternalRiskText(limitation)
+}
+
+function getInternalLimitationSummaries(limitations = []) {
+  const summaries = Array.from(
+    new Set(limitations.map((limitation) => getInternalLimitationLabel(limitation))),
+  )
+  const visibleSummaries = summaries.slice(0, 5)
+  const hiddenCount = Math.max(summaries.length - visibleSummaries.length, 0)
+
+  return hiddenCount
+    ? [...visibleSummaries, `另有 ${hiddenCount} 项数据限制待补。`]
+    : visibleSummaries
+}
+
+function getInternalLayerStatusSummary(teams, key) {
+  const values = Array.from(
+    new Set(
+      teams
+        .map((team) => team?.[key])
+        .filter(Boolean)
+        .map((value) => getInternalDataQualityStatus(value)),
+    ),
+  )
+
+  return values.length ? values.join(' / ') : '-'
+}
+
+function getInternalLightDataLayerSummary(plan) {
+  const lightDataLayer = plan?.internalAnalysis?.lightDataLayer
+  if (!lightDataLayer) return []
+
+  const teams = Object.values(lightDataLayer.teams ?? {})
+  const valueFlags = lightDataLayer.localOdds?.valueFlags ?? []
+  const maxUpsetRisk = Math.max(
+    0,
+    ...teams.map((team) => Number(team?.upsetRisk)).filter(Number.isFinite),
+  )
+
+  return [
+    {
+      label: '赔率置信度',
+      value: getInternalDataQualityStatus(
+        lightDataLayer.localOdds?.oddsConfidence ?? 'missing',
+      ),
+    },
+    {
+      label: '阵容确定性',
+      value: getInternalLayerStatusSummary(teams, 'lineupCertainty'),
+    },
+    {
+      label: '轮换风险',
+      value: getInternalLayerStatusSummary(teams, 'rotationRisk'),
+    },
+    {
+      label: '伤停数据质量',
+      value: getInternalLayerStatusSummary(teams, 'injuryDataQuality'),
+    },
+    {
+      label: '盘口风险标签',
+      value: valueFlags.length
+        ? valueFlags.map((flag) => getInternalRiskFlagLabel(flag)).join(' / ')
+        : '暂无明显盘口风险标签',
+    },
+    {
+      label: '冷门扰动提示',
+      value: maxUpsetRisk >= 55 ? '存在冷门扰动，仅观察' : '暂无明显冷门扰动',
+    },
+  ]
 }
 
 const teamMetrics = [
@@ -1995,6 +2115,10 @@ function App() {
   const isAnalyzing = analysisPhase !== 'done'
   const selectedConfidence = getAiConfidence(activeMatch)
   const selectedSignalStrength = getSignalStrength(selectedConfidence)
+  const internalLightDataLayerSummary = getInternalLightDataLayerSummary(internalBetPlan)
+  const internalDataQualityLimitationSummaries = getInternalLimitationSummaries(
+    internalBetPlan?.dataQuality?.limitations ?? [],
+  )
   const marketSentiment = buildMarketSentiment(activeMatch)
   const analysisTimeline = buildAnalysisTimeline(lastAnalyzedAt)
   const homeTeamStatus = getTeamStatusProfile(activeMatch, 'home')
@@ -2765,7 +2889,7 @@ function App() {
               <div className="internal-engine-block">
                 <h4>热度提示</h4>
                 <p className="internal-engine-note">
-                  {internalBetPlan.heatWarning?.message ?? '-'}
+                  {formatInternalRiskText(internalBetPlan.heatWarning?.message ?? '-')}
                 </p>
               </div>
 
@@ -2781,18 +2905,36 @@ function App() {
                       </p>
                     ))}
                 </div>
-                {internalBetPlan.dataQuality?.limitations?.length ? (
-                  <p className="internal-limitations">
-                    限制项：{internalBetPlan.dataQuality.limitations.length} 项待补
-                  </p>
-                ) : null}
+                {internalDataQualityLimitationSummaries.length ? (
+                  <ul className="internal-rule-list">
+                    {internalDataQualityLimitationSummaries.map((summary) => (
+                      <li key={summary}>{summary}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="internal-limitations">暂无明显数据限制</p>
+                )}
               </div>
+
+              {internalLightDataLayerSummary.length ? (
+                <div className="internal-engine-block">
+                  <h4>数据层摘要</h4>
+                  <div className="internal-quality-grid">
+                    {internalLightDataLayerSummary.map((item) => (
+                      <p key={item.label}>
+                        <span>{item.label}</span>
+                        <strong>{item.value}</strong>
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
               <div className="internal-engine-block">
                 <h4>取消条件</h4>
                 <ul className="internal-rule-list">
-                  {internalBetPlan.cancelRules.map((rule) => (
-                    <li key={rule}>{rule}</li>
+                  {internalBetPlan.cancelRules.map((rule, index) => (
+                    <li key={`${rule}-${index}`}>{formatInternalRiskText(rule)}</li>
                   ))}
                 </ul>
               </div>
@@ -2807,7 +2949,7 @@ function App() {
                           <span>{getInternalScoreBreakdownLabel(key)}</span>
                           <strong>{item.score}</strong>
                         </div>
-                        <p>{item.reason}</p>
+                        <p>{formatInternalRiskText(item.reason)}</p>
                       </article>
                     ),
                   )}
