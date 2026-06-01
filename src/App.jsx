@@ -1880,6 +1880,7 @@ function App() {
   const [spotlightCopyStatus, setSpotlightCopyStatus] = useState('idle')
   const [expandedDateKeys, setExpandedDateKeys] = useState({})
   const [showInternalEngine, setShowInternalEngine] = useState(false)
+  const canShowInternalEngine = import.meta.env.DEV
 
   useEffect(() => {
     let isMounted = true
@@ -2077,14 +2078,14 @@ function App() {
     null
   const internalBetPlan = useMemo(
     () =>
-      activeMatch
+      canShowInternalEngine && activeMatch
         ? buildBetPlan(activeMatch, {
             bankroll: 10000,
             maxStakePerMatch: 500,
             engineMode: 'internal',
           })
         : null,
-    [activeMatch],
+    [canShowInternalEngine, activeMatch],
   )
   const selectedDateKey = activeMatch
     ? getBeijingDateGroupInfo(activeMatch.kickoff).dateKey
@@ -2516,7 +2517,7 @@ function App() {
                   {analysisPhaseConfig[analysisPhase].message}
                 </p>
                 <small>
-                  当前为赛前初盘参考。后续可接入 GPT 深度分析，临场仍需复核阵容与盘口变化。
+                  当前为赛前初盘参考。后续可接入更完整的数据复核，临场仍需复核阵容与盘口变化。
                 </small>
               </div>
               <button
@@ -2826,17 +2827,19 @@ function App() {
             </div>
           </details>
 
-          <div className="internal-engine-toggle-row">
-            <button
-              className="internal-engine-toggle"
-              type="button"
-              onClick={() => setShowInternalEngine((isVisible) => !isVisible)}
-            >
-              {showInternalEngine ? '隐藏内部引擎' : '显示内部引擎'}
-            </button>
-          </div>
+          {canShowInternalEngine ? (
+            <div className="internal-engine-toggle-row">
+              <button
+                className="internal-engine-toggle"
+                type="button"
+                onClick={() => setShowInternalEngine((isVisible) => !isVisible)}
+              >
+                {showInternalEngine ? '隐藏内部引擎' : '显示内部引擎'}
+              </button>
+            </div>
+          ) : null}
 
-          {showInternalEngine && internalBetPlan ? (
+          {canShowInternalEngine && showInternalEngine && internalBetPlan ? (
             <section className="internal-engine-panel" aria-label="内部下注引擎 V1">
               <div className="internal-engine-head">
                 <div>
