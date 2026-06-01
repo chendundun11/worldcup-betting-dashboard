@@ -191,6 +191,104 @@ const teamProfileV1Seeds = {
   Colombia: ['strong', 76, 66, 56, 72, 46, ['transitionFast', 'possession'], '前场创造力较好，临场需看核心状态。'],
 }
 
+const teamProfileAdjustments = {
+  Brazil: {
+    attackScore: 89,
+    styleTags: ['possession', 'highPress', 'wideOverload'],
+    profileNote: '前场个人能力和边路层次都强，若首发轮换较大，需下调穿盘期待。',
+  },
+  Germany: {
+    attackScore: 85,
+    defenseScore: 71,
+    volatilityScore: 60,
+    styleTags: ['possession', 'highPress', 'centralOverload'],
+    profileNote: '控球压制和中路推进稳定，但高位防线身后空间要临场复核。',
+  },
+  Netherlands: {
+    attackScore: 83,
+    styleTags: ['wingBacks', 'direct', 'highPress'],
+    profileNote: '边翼推进和高点转换清晰，面对速度型对手时需复核回防距离。',
+  },
+  Spain: {
+    attackScore: 85,
+    volatilityScore: 44,
+    styleTags: ['possession', 'highPress', 'patientBuildUp'],
+    profileNote: '控球压制稳定，若缺少纵深冲击，领先后节奏可能回落。',
+  },
+  Belgium: {
+    defenseScore: 68,
+    volatilityScore: 58,
+    upsetRisk: 50,
+    profileNote: '前场创造力仍强，但防线回追和年龄结构让强强局波动偏高。',
+  },
+  England: {
+    attackScore: 83,
+    styleTags: ['possession', 'setPiece', 'wideCross'],
+    profileNote: '阵容深度和定位球优势明显，遇到控节奏球队时需复核进攻耐心。',
+  },
+  Croatia: {
+    volatilityScore: 42,
+    bigMatchStability: 84,
+    styleTags: ['lowTempo', 'possession', 'midfieldControl'],
+    profileNote: '中场控节奏和大赛经验突出，速度对抗不足会限制反击质量。',
+  },
+  Turkey: {
+    attackScore: 73,
+    volatilityScore: 65,
+    upsetRisk: 60,
+    styleTags: ['possession', 'transitionFast', 'tempoSwing'],
+    profileNote: '中前场变化多，顺风时能拉高节奏，但防守转换会带来波动。',
+  },
+  Japan: {
+    attackScore: 75,
+    volatilityScore: 58,
+    styleTags: ['highPress', 'transitionFast', 'compactBlock'],
+    profileNote: '整体纪律和转换速度好，若终结效率打开，面对强队也有制造麻烦的空间。',
+  },
+  Morocco: {
+    defenseScore: 76,
+    bigMatchStability: 78,
+    styleTags: ['defensiveBlock', 'transitionFast', 'wideCounter'],
+    profileNote: '低位防守和边路反击都成熟，强队低赔场景下具备降温价值。',
+  },
+  Norway: {
+    volatilityScore: 63,
+    upsetRisk: 54,
+    styleTags: ['direct', 'transitionFast', 'boxPresence'],
+    profileNote: '前场终结点突出，但整体推进稳定性和防守转换仍需复核。',
+  },
+  Ghana: {
+    volatilityScore: 64,
+    upsetRisk: 56,
+    styleTags: ['transitionFast', 'direct', 'individualDuels'],
+    profileNote: '个人冲击和对抗强，比赛容易被拉开，但防守集中度会决定下限。',
+  },
+  Colombia: {
+    attackScore: 78,
+    volatilityScore: 58,
+    styleTags: ['transitionFast', 'possession', 'creativeMidfield'],
+    profileNote: '前场创造力和转换质量较好，客场或中立场仍需看核心状态。',
+  },
+  Qatar: {
+    volatilityScore: 62,
+    upsetRisk: 60,
+    styleTags: ['counter', 'lowTempo', 'deepBlock'],
+    profileNote: '面对强队更依赖低位防守和少数反击，抗压时间越长波动越大。',
+  },
+  Haiti: {
+    volatilityScore: 72,
+    upsetRisk: 68,
+    styleTags: ['counter', 'direct', 'paceOutlet'],
+    profileNote: '速度反击有突发性，但防线连续抗压能力弱，比分弹性较大。',
+  },
+  'Curaçao': {
+    volatilityScore: 72,
+    upsetRisk: 70,
+    styleTags: ['defensiveBlock', 'counter', 'survivalMode'],
+    profileNote: '整体强度有限，主要依赖低位防守和反击窗口，强弱差场景风险更高。',
+  },
+}
+
 Object.entries(teamProfileV1Seeds).forEach(([teamName, seed]) => {
   const [tier, attackScore, defenseScore, volatilityScore, bigMatchStability, upsetRisk, styleTags, profileNote] = seed
 
@@ -205,5 +303,6 @@ Object.entries(teamProfileV1Seeds).forEach(([teamName, seed]) => {
     bigMatchStability,
     upsetRisk,
     profileNote,
+    ...(teamProfileAdjustments[teamName] ?? {}),
   }
 })
