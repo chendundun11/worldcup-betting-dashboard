@@ -1580,6 +1580,122 @@ function getScoreReferencePair(match) {
   return applyTeamStatusScoreTilt(match, scorePair, favoriteDirection)
 }
 
+function parseScoreValue(score) {
+  const match = String(score ?? '').trim().match(/^(\d+)-(\d+)$/)
+  if (!match) return null
+
+  const home = Number(match[1])
+  const away = Number(match[2])
+  if (!Number.isFinite(home) || !Number.isFinite(away)) return null
+
+  return {
+    home,
+    away,
+    total: home + away,
+  }
+}
+
+function getScoreOutcome(score) {
+  const parsedScore = parseScoreValue(score)
+  if (!parsedScore) return 'draw'
+  if (parsedScore.home > parsedScore.away) return 'home'
+  if (parsedScore.home < parsedScore.away) return 'away'
+  return 'draw'
+}
+
+function getPublicPrimaryOutcome(match) {
+  const primaryDirection = getPrimaryDirectionDisplay(match)
+
+  if (primaryDirection.includes('主胜')) return 'home'
+  if (primaryDirection.includes('客胜')) return 'away'
+  if (primaryDirection.includes('平局') || primaryDirection.includes('等待')) return 'draw'
+
+  const recommendationDirection = match.recommendation?.direction
+  return outcomes.includes(recommendationDirection) ? recommendationDirection : 'draw'
+}
+
+function getScoreTotalBand(score) {
+  const parsedScore = parseScoreValue(score)
+  if (!parsedScore) return 'range'
+  if (parsedScore.total >= 3) return 'over'
+  if (parsedScore.total <= 1) return 'under'
+  return 'range'
+}
+
+function getFallbackDisplayScorePair(match, primaryOutcome, totalBand) {
+  const matchType = getMatchType(match)
+  const isStrongFavorite = matchType.id === 'strongFavorite'
+
+  if (primaryOutcome === 'draw') {
+    if (totalBand === 'over') return { main: '2-2', backup: '1-1' }
+    if (totalBand === 'under') return { main: '0-0', backup: '1-1' }
+    return { main: '1-1', backup: '0-0' }
+  }
+
+  if (primaryOutcome === 'away') {
+    if (totalBand === 'over') {
+      return isStrongFavorite
+        ? { main: '0-3', backup: '1-3' }
+        : { main: '1-2', backup: '0-2' }
+    }
+    if (totalBand === 'under') return { main: '0-1', backup: '0-2' }
+    return { main: '0-2', backup: '1-2' }
+  }
+
+  if (totalBand === 'over') {
+    return isStrongFavorite
+      ? { main: '3-0', backup: '3-1' }
+      : { main: '2-1', backup: '3-1' }
+  }
+  if (totalBand === 'under') return { main: '1-0', backup: '2-0' }
+  return { main: '2-0', backup: '2-1' }
+}
+
+function shouldCorrectDisplayScore(score, primaryOutcome, isMainScore = false) {
+  const outcome = getScoreOutcome(score)
+
+  if (primaryOutcome === 'home') {
+    return isMainScore ? outcome !== 'home' : outcome === 'away'
+  }
+
+  if (primaryOutcome === 'away') {
+    return isMainScore ? outcome !== 'away' : outcome === 'home'
+  }
+
+  return outcome !== 'draw'
+}
+
+function alignScoreReferenceWithPrimary(match, scoreReference) {
+  const primaryOutcome = getPublicPrimaryOutcome(match)
+  const totalBand = getScoreTotalBand(scoreReference.main)
+  const shouldUseFallback =
+    shouldCorrectDisplayScore(scoreReference.main, primaryOutcome, true) ||
+    shouldCorrectDisplayScore(scoreReference.backup, primaryOutcome)
+
+  if (!shouldUseFallback) return scoreReference
+
+  return getFallbackDisplayScorePair(match, primaryOutcome, totalBand)
+}
+
+function getDisplayTotalGoalsDirection(scoreReference) {
+  const totalBand = getScoreTotalBand(scoreReference.main)
+  if (totalBand === 'over') return '2.5球以上倾向'
+  if (totalBand === 'under') return '2.5球以下倾向'
+  return '2-3球区间'
+}
+
+function getPublicMatchDisplay(match) {
+  const scoreReference = alignScoreReferenceWithPrimary(
+    match,
+    getScoreReferencePair(match),
+  )
+
+  return {
+    scoreReference,
+    totalGoalsDirection: getDisplayTotalGoalsDirection(scoreReference),
+  }
+}
+
 function hasScoutedTeam(match) {
   return Boolean(match.homeTeam.confederation || match.awayTeam.confederation)
 }
@@ -1749,10 +1865,12 @@ function buildJudgementLine(match) {
 
 function buildBeginnerNotes(match) {
   if (!hasWdlOdds(match.odds)) {
+    const publicDisplay = getPublicMatchDisplay(match)
+
     return [
       `胜平负方向：${getWdlDirection(match)}。`,
-      `大小球方向：${getTotalGoalsDirection(match)}。`,
-      '主比分：1-1；备选比分：2-1。',
+      `大小球方向：${publicDisplay.totalGoalsDirection}。`,
+      `主比分：${publicDisplay.scoreReference.main}；备选比分：${publicDisplay.scoreReference.backup}。`,
       NO_ODDS_REASON,
     ]
   }
@@ -1811,7 +1929,8 @@ function formatDataSource(meta) {
   return '本地模拟'
 }
 
-function buildSpotlightCopyText(match, scoreReference) {
+function buildSpotlightCopyText(match, publicDisplay) {
+  const { scoreReference, totalGoalsDirection } = publicDisplay
   const primaryDisplay = getPrimaryDisplay(match)
   const recommendationStrength = getRecommendationStrength(match)
   const directionText = primaryDisplay.includes(recommendationStrength)
@@ -1824,7 +1943,7 @@ function buildSpotlightCopyText(match, scoreReference) {
     `方向：${directionText}`,
     `信心指数：${getAiConfidence(match)}%`,
     `比分参考：${scoreReference.main} / ${scoreReference.backup}`,
-    `大小球：${getTotalGoalsDirection(match)}`,
+    `大小球：${totalGoalsDirection}`,
     '阶段：赛前初盘，赛前24小时建议复核',
     '仅供赛前初盘参考，临场阵容、盘口变化和市场热度需复核。',
   ].join('\n')
@@ -2127,14 +2246,15 @@ function App() {
   const homeSquadInsight = getSquadInsight(activeMatch, 'home')
   const awaySquadInsight = getSquadInsight(activeMatch, 'away')
   const activeMatchType = getMatchType(activeMatch)
+  const activePublicDisplay = getPublicMatchDisplay(activeMatch)
   const featuredMatches = getFeaturedMatches(normalizedMatches)
   const spotlightMatch = featuredMatches[0]?.match ?? normalizedMatches[0]
-  const spotlightScoreReference = spotlightMatch
-    ? getScoreReferencePair(spotlightMatch)
+  const spotlightPublicDisplay = spotlightMatch
+    ? getPublicMatchDisplay(spotlightMatch)
     : null
   const spotlightCopyText =
-    spotlightMatch && spotlightScoreReference
-      ? buildSpotlightCopyText(spotlightMatch, spotlightScoreReference)
+    spotlightMatch && spotlightPublicDisplay
+      ? buildSpotlightCopyText(spotlightMatch, spotlightPublicDisplay)
       : ''
   const analyzedMatchCount = normalizedMatches.length
   const featuredMatchCount = featuredMatches.length
@@ -2202,7 +2322,7 @@ function App() {
         </div>
       </section>
 
-      {spotlightMatch && spotlightScoreReference ? (
+      {spotlightMatch && spotlightPublicDisplay ? (
         <section className="daily-ai-spotlight" aria-label="赛前AI重点参考卡">
           <div className="daily-ai-copy">
             <span>赛前AI重点参考</span>
@@ -2221,7 +2341,8 @@ function App() {
               <p className="daily-ai-score-highlight">
                 <span>比分参考</span>
                 <strong>
-                  {spotlightScoreReference.main} / {spotlightScoreReference.backup}
+                  {spotlightPublicDisplay.scoreReference.main} /{' '}
+                  {spotlightPublicDisplay.scoreReference.backup}
                 </strong>
               </p>
             </div>
@@ -2232,7 +2353,7 @@ function App() {
               </p>
               <p>
                 <span>大小球方向</span>
-                <strong>{getTotalGoalsDirection(spotlightMatch)}</strong>
+                <strong>{spotlightPublicDisplay.totalGoalsDirection}</strong>
               </p>
               <p className="daily-ai-secondary-fact">
                 <span>推荐强度</span>
@@ -2308,7 +2429,8 @@ function App() {
           <div className="featured-match-grid">
             {featuredMatches.map(({ match, sourceIndex }) => {
               const matchType = getMatchType(match)
-              const scoreReference = getScoreReferencePair(match)
+              const publicDisplay = getPublicMatchDisplay(match)
+              const scoreReference = publicDisplay.scoreReference
 
               return (
                 <button
@@ -2344,7 +2466,7 @@ function App() {
                     </p>
                     <p className="featured-card-muted">
                       <span>进球倾向</span>
-                      <strong>{getTotalGoalsDirection(match)}</strong>
+                      <strong>{publicDisplay.totalGoalsDirection}</strong>
                     </p>
                     <p className="featured-card-muted">
                       <span>强度</span>
@@ -2401,7 +2523,8 @@ function App() {
                     >
                       {dateGroup.matches.map(({ match, index }) => {
                         const matchType = getMatchType(match)
-                        const scoreReference = getScoreReferencePair(match)
+                        const publicDisplay = getPublicMatchDisplay(match)
+                        const scoreReference = publicDisplay.scoreReference
 
                         return (
                           <button
@@ -2433,7 +2556,7 @@ function App() {
                                 比分：<strong>{scoreReference.main} / {scoreReference.backup}</strong>
                               </span>
                               <span>
-                                大小球：<strong>{getTotalGoalsDirection(match)}</strong>
+                                大小球：<strong>{publicDisplay.totalGoalsDirection}</strong>
                               </span>
                             </div>
                             <div className="match-card-tags">
@@ -2678,7 +2801,7 @@ function App() {
               <article className="play-card">
                 <Gauge size={20} />
                 <span>大小球方向</span>
-                <strong>{getTotalGoalsDirection(activeMatch)}</strong>
+                <strong>{activePublicDisplay.totalGoalsDirection}</strong>
                 <p>
                   {hasWdlOdds(activeMatch.odds)
                     ? '结合进攻、防守和总进球盘口。'
@@ -2695,11 +2818,11 @@ function App() {
                 <div className="score-reference-list">
                   <p>
                     <span>主比分</span>
-                    <strong>{getScoreReferencePair(activeMatch).main}</strong>
+                    <strong>{activePublicDisplay.scoreReference.main}</strong>
                   </p>
                   <p>
                     <span>备选比分</span>
-                    <strong>{getScoreReferencePair(activeMatch).backup}</strong>
+                    <strong>{activePublicDisplay.scoreReference.backup}</strong>
                   </p>
                   {shouldShowUpsetScore(activeMatch) && (
                     <p>
