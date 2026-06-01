@@ -1,13 +1,10 @@
+import { neon } from '@neondatabase/serverless'
+import { buildAnalysisSnapshotRow } from '../../src/services/snapshotRowMapper.js'
+
 const DISABLED_RESPONSE = {
   ok: false,
   disabled: true,
   message: 'Snapshot writing is disabled.',
-}
-
-const ACCEPTED_DRY_RUN_RESPONSE = {
-  ok: true,
-  dryRun: true,
-  message: 'Snapshot payload accepted. Database write not implemented.',
 }
 
 const TOP_LEVEL_ALLOWED_KEYS = new Set([
@@ -233,51 +230,153 @@ async function parseRequestPayload(request) {
   return { payload: body }
 }
 
-export default async function handler(request, response) {
-  if (request.method !== 'POST') {
-    response.setHeader('Allow', 'POST')
-    sendJson(response, 405, {
+async function writeSnapshotRowToDatabase(row) {
+  const databaseUrl = process.env.DATABASE_URL
+
+  if (!databaseUrl) {
+    return {
       ok: false,
-      message: 'Method not allowed.',
-    })
-    return
+      missingDatabaseUrl: true,
+    }
   }
 
-  if (process.env.SNAPSHOT_WRITE_ENABLED !== 'true') {
-    sendJson(response, 200, DISABLED_RESPONSE)
-    return
+  const sql = neon(databaseUrl)
+  const rows = await sql`
+    insert into analysis_snapshots (
+      schema_version,
+      match_id,
+      match_key,
+      kickoff_at,
+      home_team,
+      away_team,
+      status,
+      provider,
+      data_source,
+      fallback_reason,
+      source_updated_at,
+      engine_version,
+      bet_score,
+      recommend_level,
+      public_match_snapshot,
+      engine_snapshot,
+      internal_snapshot,
+      data_quality,
+      cancel_rules
+    )
+    values (
+      ${row.schema_version},
+      ${row.match_id},
+      ${row.match_key},
+      ${row.kickoff_at},
+      ${row.home_team},
+      ${row.away_team},
+      ${row.status},
+      ${row.provider},
+      ${row.data_source},
+      ${row.fallback_reason},
+      ${row.source_updated_at},
+      ${row.engine_version},
+      ${row.bet_score},
+      ${row.recommend_level},
+      ${JSON.stringify(row.public_match_snapshot)}::jsonb,
+      ${JSON.stringify(row.engine_snapshot)}::jsonb,
+      ${row.internal_snapshot === null ? null : JSON.stringify(row.internal_snapshot)}::jsonb,
+      ${row.data_quality === null ? null : JSON.stringify(row.data_quality)}::jsonb,
+      ${row.cancel_rules === null ? null : JSON.stringify(row.cancel_rules)}::jsonb
+    )
+    returning id
+  `
+
+  return {
+    ok: true,
+    id: rows[0]?.id ?? null,
   }
-
-  const expectedToken = process.env.SNAPSHOT_WRITE_TOKEN
-  const providedToken = getHeader(request, 'x-snapshot-write-token')
-
-  if (!expectedToken || providedToken !== expectedToken) {
-    sendJson(response, 401, {
-      ok: false,
-      message: 'Unauthorized.',
-    })
-    return
-  }
-
-  const { payload, error } = await parseRequestPayload(request)
-
-  if (error) {
-    sendJson(response, 400, {
-      ok: false,
-      errors: [error],
-    })
-    return
-  }
-
-  const errors = validateSnapshotPayload(payload)
-
-  if (errors.length) {
-    sendJson(response, 400, {
-      ok: false,
-      errors,
-    })
-    return
-  }
-
-  sendJson(response, 200, ACCEPTED_DRY_RUN_RESPONSE)
 }
+
+export function createSnapshotHandler({ writeSnapshotRow = writeSnapshotRowToDatabase } = {}) {
+  return async function handler(request, response) {
+    if (request.method !== 'POST') {
+      response.setHeader('Allow', 'POST')
+      sendJson(response, 405, {
+        ok: false,
+        message: 'Method not allowed.',
+      })
+      return
+    }
+
+    if (process.env.SNAPSHOT_WRITE_ENABLED !== 'true') {
+      sendJson(response, 200, DISABLED_RESPONSE)
+      return
+    }
+
+    const expectedToken = process.env.SNAPSHOT_WRITE_TOKEN
+    const providedToken = getHeader(request, 'x-snapshot-write-token')
+
+    if (!expectedToken || providedToken !== expectedToken) {
+      sendJson(response, 401, {
+        ok: false,
+        message: 'Unauthorized.',
+      })
+      return
+    }
+
+    const { payload, error } = await parseRequestPayload(request)
+
+    if (error) {
+      sendJson(response, 400, {
+        ok: false,
+        errors: [error],
+      })
+      return
+    }
+
+    const errors = validateSnapshotPayload(payload)
+
+    if (errors.length) {
+      sendJson(response, 400, {
+        ok: false,
+        errors,
+      })
+      return
+    }
+
+    const rowResult = buildAnalysisSnapshotRow(payload)
+
+    if (!rowResult.ok) {
+      sendJson(response, 400, {
+        ok: false,
+        errors: rowResult.errors,
+      })
+      return
+    }
+
+    try {
+      const writeResult = await writeSnapshotRow(rowResult.row)
+
+      if (writeResult?.missingDatabaseUrl) {
+        sendJson(response, 500, {
+          ok: false,
+          written: false,
+          error: 'DATABASE_URL_MISSING',
+        })
+        return
+      }
+
+      sendJson(response, 200, {
+        ok: true,
+        written: true,
+        id: writeResult?.id ?? null,
+        message: 'Snapshot written.',
+      })
+    } catch {
+      sendJson(response, 500, {
+        ok: false,
+        written: false,
+        error: 'DATABASE_WRITE_FAILED',
+        message: 'Snapshot write failed.',
+      })
+    }
+  }
+}
+
+export default createSnapshotHandler()
