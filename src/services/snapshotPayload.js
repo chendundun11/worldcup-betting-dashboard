@@ -10,6 +10,18 @@ const BLOCKED_KEYS = new Set([
 const BLOCKED_KEY_PATTERNS = [/token/i, /database_?url/i, /authorization/i, /apiKey/i, /secret/i, /password/i, /raw.*response/i]
 const AMOUNT_KEYS = new Set(['totalStake', 'stakePlan', 'bankroll', 'stake'])
 const SCORE_REFERENCE_KEYS = ['score', 'label', 'reason', 'confidence', 'type']
+const MATCH_KEY_BLOCKED_PATTERNS = [
+  /selectedindex/gi,
+  /sourceindex/gi,
+  /showinternalengine/gi,
+  /internalsnapshot/gi,
+  /totalstake/gi,
+  /stakeplan/gi,
+  /bankroll/gi,
+  /amount/gi,
+  /money/gi,
+  /stake/gi,
+]
 
 function firstPresent(...values) {
   return values.find((value) => value !== undefined && value !== null && value !== '')
@@ -43,16 +55,48 @@ function getTeamName(match, side) {
   ) ?? null
 }
 
+function cleanMatchKeyPart(value) {
+  const text = String(value ?? '').trim().toLowerCase()
+  const cleanedText = MATCH_KEY_BLOCKED_PATTERNS.reduce(
+    (currentText, pattern) => currentText.replace(pattern, '-'),
+    text,
+  )
+
+  return cleanedText
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+function buildMatchKey(match, matchIdentity) {
+  const preferredMatchKey = firstPresent(match?.matchKey)
+  const preferredMatchId = firstPresent(match?.id, match?.matchId)
+  const parts = preferredMatchKey
+    ? [preferredMatchKey]
+    : preferredMatchId
+      ? [preferredMatchId]
+      : matchIdentity.kickoff
+        ? [matchIdentity.homeTeam, matchIdentity.awayTeam, matchIdentity.kickoff]
+        : [matchIdentity.homeTeam, matchIdentity.awayTeam]
+  const matchKey = parts.map(cleanMatchKeyPart).filter(Boolean).join('-')
+
+  return matchKey || 'unknown-match'
+}
+
 function getMatchIdentity(match, plan) {
   const homeTeam = getTeamName(match, 'home')
   const awayTeam = getTeamName(match, 'away')
-
-  return {
+  const kickoff = firstPresent(match?.kickoffAt, match?.kickoff, match?.kickoffTime, match?.startTime)
+  const matchIdentity = {
     matchId: firstPresent(match?.id, match?.matchId, plan?.matchId),
     matchName: firstPresent(plan?.matchName, match?.matchName, `${homeTeam ?? 'Home'} vs ${awayTeam ?? 'Away'}`),
     homeTeam,
     awayTeam,
-    kickoff: firstPresent(match?.kickoff, match?.kickoffTime, match?.startTime),
+    kickoff,
+  }
+
+  return {
+    matchKey: buildMatchKey(match, matchIdentity),
+    ...matchIdentity,
   }
 }
 

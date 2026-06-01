@@ -1,5 +1,6 @@
 import buildBetPlan from '../src/services/betEngine.js'
 import { buildAnalysisSnapshotPayload } from '../src/services/snapshotPayload.js'
+import { buildAnalysisSnapshotRow } from '../src/services/snapshotRowMapper.js'
 
 const CREATED_AT = '2026-06-01T00:00:00.000Z'
 const AMOUNT_KEYS = ['totalStake', 'stakePlan', 'bankroll', 'stake']
@@ -90,6 +91,53 @@ function payloadFor(localOddsPatch, planPatch = {}) {
 
 const payload = payloadFor({})
 const payloadText = JSON.stringify(payload)
+const providedMatchKeyPayload = buildAnalysisSnapshotPayload(
+  { ...match, id: 'ignored-id', matchKey: 'provided-match-key' },
+  pollutedPlan,
+  options,
+)
+const idMatchKeyPayloadA = buildAnalysisSnapshotPayload(
+  { ...match, id: 'Match 42 / ABC' },
+  pollutedPlan,
+  options,
+)
+const idMatchKeyPayloadB = buildAnalysisSnapshotPayload(
+  { ...match, id: 'Match 42 / ABC' },
+  pollutedPlan,
+  options,
+)
+const kickoffDerivedMatchKeyPayload = buildAnalysisSnapshotPayload(
+  {
+    ...match,
+    id: undefined,
+    matchId: undefined,
+    kickoffTime: undefined,
+    kickoffAt: '2026-06-15T08:30:00.000Z',
+  },
+  pollutedPlan,
+  options,
+)
+const teamsOnlyMatchKeyPayload = buildAnalysisSnapshotPayload(
+  {
+    ...match,
+    id: undefined,
+    matchId: undefined,
+    kickoff: undefined,
+    kickoffAt: undefined,
+    kickoffTime: undefined,
+    startTime: undefined,
+  },
+  pollutedPlan,
+  options,
+)
+const pollutedMatchKeyPayload = buildAnalysisSnapshotPayload(
+  {
+    ...match,
+    matchKey: 'selectedIndex totalStake safe sourceIndex showInternalEngine',
+  },
+  pollutedPlan,
+  options,
+)
 const arrayScorePayload = payloadFor(
   {
     scoreReference: [
@@ -145,6 +193,36 @@ assert(payload.createdAt === CREATED_AT, 'createdAt 应支持 options 注入')
 assert(JSON.stringify(payload) === JSON.stringify(payloadFor({})), '同输入输出必须稳定')
 assert(JSON.stringify(plan) === planBeforeSnapshot, 'payload 构建不能修改 BetEngine plan')
 assert(!payloadText.includes('must-not-enter-payload'), 'payload 不允许包含 token 或函数返回内容')
+assert(payload.matchIdentity.matchKey, 'matchIdentity.matchKey must be generated')
+assert(
+  providedMatchKeyPayload.matchIdentity.matchKey === 'provided-match-key',
+  'match.matchKey must take priority',
+)
+assert(
+  idMatchKeyPayloadA.matchIdentity.matchKey === 'match-42-abc',
+  'id must derive a stable matchKey when matchKey is missing',
+)
+assert(
+  idMatchKeyPayloadA.matchIdentity.matchKey === idMatchKeyPayloadB.matchIdentity.matchKey,
+  'id-derived matchKey must be stable',
+)
+assert(
+  kickoffDerivedMatchKeyPayload.matchIdentity.matchKey ===
+    'snapshot-home-snapshot-away-2026-06-15t08-30-00-000z',
+  'home/away/kickoffAt must derive matchKey when id is missing',
+)
+assert(
+  teamsOnlyMatchKeyPayload.matchIdentity.matchKey === 'snapshot-home-snapshot-away',
+  'home/away must derive matchKey when kickoffAt is missing',
+)
+for (const key of [...AMOUNT_KEYS, ...UI_KEYS]) {
+  assert(
+    !pollutedMatchKeyPayload.matchIdentity.matchKey.toLowerCase().includes(key.toLowerCase()),
+    `matchKey must not include ${key}`,
+  )
+}
+const rowResult = buildAnalysisSnapshotRow(payload)
+assert(rowResult.ok === true, 'payload must pass snapshot row mapper')
 for (const key of UI_KEYS) assert(!hasKey(payload, key), `payload 不允许包含 ${key}`)
 for (const key of AMOUNT_KEYS) {
   assert(!hasKey(payload.publicMatchSnapshot, key), `publicMatchSnapshot 不允许包含 ${key}`)
