@@ -102,6 +102,22 @@ function createDisabledOddsSnapshot() {
   }
 }
 
+function createDisabledTeamFormSnapshot() {
+  return {
+    ok: false,
+    disabled: true,
+    provider: 'mock',
+    dataSource: 'mock',
+    updatedAt: new Date().toISOString(),
+    fallbackReason: 'TEAM_FORM_API_DISABLED',
+    teams: [],
+    meta: {
+      schemaVersion: 'team-form-snapshot-v1',
+      message: 'Team form API is not enabled.',
+    },
+  }
+}
+
 function sendRawJson(response, statusCode, body, headers = {}) {
   response.writeHead(statusCode, {
     'Content-Type': 'application/json; charset=utf-8',
@@ -299,8 +315,24 @@ function handleOdds(request, response) {
   })
 }
 
+function handleTeamForm(request, response) {
+  if (request.method !== 'GET') {
+    sendRawJson(response, 405, createDisabledTeamFormSnapshot(), { Allow: 'GET' })
+    return
+  }
+
+  sendRawJson(response, 200, createDisabledTeamFormSnapshot(), {
+    'Cache-Control': 's-maxage=60, stale-while-revalidate=300',
+  })
+}
+
 const server = http.createServer((request, response) => {
   const requestUrl = new URL(request.url, `http://${request.headers.host}`)
+
+  if (requestUrl.pathname === '/api/team-form') {
+    handleTeamForm(request, response)
+    return
+  }
 
   if (requestUrl.pathname === '/api/odds') {
     handleOdds(request, response)
