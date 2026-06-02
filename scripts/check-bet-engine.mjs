@@ -1,5 +1,7 @@
 import buildBetPlan from '../src/services/betEngine.js'
 import { localOdds } from '../src/data/localOdds.js'
+import { TEAM_PROFILES } from '../src/data/teamProfiles.js'
+import { SQUAD_INSIGHTS } from '../src/data/squadInsights.js'
 
 const BANKROLL = 10000
 const MAX_STAKE_PER_MATCH = 500
@@ -239,6 +241,18 @@ function assertPositiveScorePartsDoNotGrow(baselinePlan, nextPlan, name) {
   }
 }
 
+function assertRiskPlanDoesNotGrow(baselinePlan, nextPlan, name) {
+  assert(nextPlan.betScore < baselinePlan.betScore, `${name}: betScore 必须低于完整数据版本`)
+  assert(nextPlan.totalStake <= baselinePlan.totalStake, `${name}: totalStake 不能高于完整数据版本`)
+  assert(nextPlan.upsetPick.stake === 0, `${name}: upsetPick.stake 必须继续为 0`)
+  assertPositiveScorePartsDoNotGrow(baselinePlan, nextPlan, name)
+
+  if (nextPlan.betScore < 55) {
+    assert(nextPlan.totalStake === 0, `${name}: 低分 totalStake 必须为 0`)
+    assert(nextPlan.mainPick.action === 'observe', `${name}: 低分 mainPick 必须观望`)
+  }
+}
+
 function compact(plan) {
   return {
     matchName: plan.matchName,
@@ -343,6 +357,126 @@ const buildLightDataPlan = (id, localOddsEntry, homeTeam, awayTeam) =>
       maxStakePerMatch: MAX_STAKE_PER_MATCH,
     },
   )
+
+const syntheticStableProfile = {
+  tier: 'synthetic',
+  styleTags: ['stableBlock'],
+  attackScore: 72,
+  defenseScore: 70,
+  volatilityScore: 40,
+  bigMatchStability: 74,
+  upsetRisk: 35,
+  profileNote: '测试用稳定球队画像。',
+}
+const syntheticStableSquad = {
+  lineupCertainty: 'high',
+  rotationRisk: 'low',
+  keyDependency: 'medium',
+  benchImpact: 70,
+  injuryDataQuality: 'available',
+  lineupReviewPoints: ['测试首发完整度'],
+  squadNote: '测试用稳定阵容资料。',
+}
+
+function registerSyntheticTeam(name, profileOverrides = {}, squadOverrides = {}) {
+  TEAM_PROFILES[name] = {
+    ...syntheticStableProfile,
+    ...profileOverrides,
+  }
+  SQUAD_INSIGHTS[name] = {
+    ...syntheticStableSquad,
+    ...squadOverrides,
+  }
+}
+
+function removeSyntheticTeam(name) {
+  delete TEAM_PROFILES[name]
+  delete SQUAD_INSIGHTS[name]
+}
+
+function buildSyntheticRiskPlan(id, options = {}) {
+  const homeName = `${id} Home`
+  const awayName = `${id} Away`
+  const {
+    registerHome = true,
+    registerAway = true,
+    homeProfile = {},
+    awayProfile = {},
+    homeSquad = {},
+    awaySquad = {},
+    localOddsOverrides = {},
+  } = options
+
+  if (registerHome) registerSyntheticTeam(homeName, homeProfile, homeSquad)
+  else removeSyntheticTeam(homeName)
+  if (registerAway) registerSyntheticTeam(awayName, awayProfile, awaySquad)
+  else removeSyntheticTeam(awayName)
+
+  const localOddsEntry = {
+    ...lightDataBaseOdds,
+    ...localOddsOverrides,
+  }
+
+  return buildLightDataPlan(
+    id,
+    localOddsEntry,
+    team(homeName, 78, 74, 75, 73),
+    team(awayName, 64, 63, 65, 64),
+  )
+}
+
+const completeLightDataPlan = buildSyntheticRiskPlan('sample-risk-complete')
+const missingLightDataPlan = buildSyntheticRiskPlan('sample-risk-missing', {
+  registerHome: false,
+  registerAway: false,
+})
+const highVolatilityPlan = buildSyntheticRiskPlan('sample-risk-volatility', {
+  homeProfile: { volatilityScore: 72 },
+})
+const highUpsetRiskPlan = buildSyntheticRiskPlan('sample-risk-upset', {
+  homeProfile: { upsetRisk: 70 },
+})
+const lowLineupCertaintyPlan = buildSyntheticRiskPlan('sample-risk-lineup', {
+  homeSquad: { lineupCertainty: 'low' },
+})
+const highRotationRiskPlan = buildSyntheticRiskPlan('sample-risk-rotation', {
+  homeSquad: { rotationRisk: 'high' },
+})
+const missingInjuryDataPlan = buildSyntheticRiskPlan('sample-risk-injury', {
+  homeSquad: { injuryDataQuality: 'missing' },
+})
+const combinedLightDataRiskPlan = buildSyntheticRiskPlan('sample-risk-combined', {
+  homeProfile: { volatilityScore: 72, upsetRisk: 70 },
+  homeSquad: {
+    lineupCertainty: 'low',
+    rotationRisk: 'high',
+    injuryDataQuality: 'missing',
+  },
+  localOddsOverrides: {
+    oddsConfidence: 'low',
+    valueFlags: ['favoriteTooLow', 'scoreVolatile', 'upsetWatch'],
+    reviewPoints: ['测试盘口复核'],
+    riskNotes: ['测试热门过热'],
+  },
+})
+
+assertRiskPlanDoesNotGrow(completeLightDataPlan, missingLightDataPlan, '缺 teamProfiles/squadInsights 测试')
+assertRiskPlanDoesNotGrow(completeLightDataPlan, highVolatilityPlan, 'volatilityScore 高测试')
+assertRiskPlanDoesNotGrow(completeLightDataPlan, highUpsetRiskPlan, 'upsetRisk 高测试')
+assertRiskPlanDoesNotGrow(completeLightDataPlan, lowLineupCertaintyPlan, 'lineupCertainty low 测试')
+assertRiskPlanDoesNotGrow(completeLightDataPlan, highRotationRiskPlan, 'rotationRisk high 测试')
+assertRiskPlanDoesNotGrow(completeLightDataPlan, missingInjuryDataPlan, 'injuryDataQuality missing 测试')
+assertRiskPlanDoesNotGrow(completeLightDataPlan, combinedLightDataRiskPlan, '数据层组合风险测试')
+assert(
+  combinedLightDataRiskPlan.internalAnalysis.lightDataAdjustments.totalPenalty <= 0,
+  '数据层组合风险测试: lightDataAdjustments 必须只体现扣分',
+)
+assert(
+  completeLightDataPlan.totalStake <= MAX_STAKE_PER_MATCH &&
+    combinedLightDataRiskPlan.totalStake <= MAX_STAKE_PER_MATCH,
+  '数据层逐字段测试: totalStake 必须继续受封顶保护',
+)
+
 const lightDataBaselinePlan = buildLightDataPlan(
   'sample-light-data-baseline',
   lightDataBaseOdds,
@@ -378,9 +512,12 @@ for (const [text, label] of [
   ['首发是否轮换', 'reviewPoints'],
   ['强队低赔过热', 'riskNotes'],
   ['核心前锋是否首发', 'lineupReviewPoints'],
-  ['favoriteTooLow', 'valueFlags'],
+  ['热门方向赔率偏低', 'valueFlags 中文解释'],
 ]) {
   assert(lightDataText.includes(text), `新增风险字段测试: ${label} 必须进入 cancelRules 或 reason`)
+}
+for (const rawFlag of ['favoriteTooLow', 'scoreVolatile', 'upsetRisk']) {
+  assert(!lightDataText.includes(rawFlag), `新增风险字段测试: ${rawFlag} 不应直接暴露给用户解释`)
 }
 assert(
   lightDataRiskPlan.internalAnalysis.lightDataLayer?.localOdds?.valueFlags?.includes('favoriteTooLow'),
