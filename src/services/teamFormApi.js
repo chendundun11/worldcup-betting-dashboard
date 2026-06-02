@@ -1,23 +1,38 @@
 const FALLBACK_TEAM_FORM_SNAPSHOT = {
   ok: false,
   disabled: true,
+  status: 'disabled',
   provider: 'none',
   dataSource: 'disabled',
+  source: 'disabled-fallback',
+  error: null,
   fallbackReason: 'TEAM_FORM_API_DISABLED',
   teams: [],
 }
 
 const statusValues = new Set(['strong', 'stable', 'mixed', 'weak', 'unknown'])
+const formTrendValues = new Set(['strong', 'stable', 'weak', 'volatile', 'unknown'])
+const attackDefenseTrendValues = new Set(['strong', 'normal', 'weak', 'unknown'])
 const confidenceValues = new Set(['high', 'medium', 'low'])
 const loadValues = new Set(['low', 'medium', 'high', 'unknown'])
 
 export function createFallbackTeamFormSnapshot(options = {}) {
+  const status = options.status ?? FALLBACK_TEAM_FORM_SNAPSHOT.status
+  const source = options.source ?? FALLBACK_TEAM_FORM_SNAPSHOT.source
+  const error = options.error ?? FALLBACK_TEAM_FORM_SNAPSHOT.error
+
   return {
     ...FALLBACK_TEAM_FORM_SNAPSHOT,
+    status,
     fallbackReason:
       options.fallbackReason ?? FALLBACK_TEAM_FORM_SNAPSHOT.fallbackReason,
+    source,
+    error,
     updatedAt: options.updatedAt ?? new Date().toISOString(),
     meta: {
+      status,
+      error,
+      source,
       message: options.message ?? 'Team form API is not enabled.',
       ...(options.meta ?? {}),
     },
@@ -30,6 +45,23 @@ function normalizeNullableNumber(value) {
 
 function normalizeStatus(value) {
   return statusValues.has(value) ? value : 'unknown'
+}
+
+function normalizeString(value, fallback = '') {
+  return typeof value === 'string' && value.trim() ? value : fallback
+}
+
+function normalizeFormTrend(value, formStatus) {
+  if (formTrendValues.has(value)) return value
+  if (formStatus === 'mixed') return 'volatile'
+  if (formStatusValues.has(formStatus)) return formStatus
+  return 'unknown'
+}
+
+const formStatusValues = new Set(['strong', 'stable', 'weak', 'unknown'])
+
+function normalizeAttackDefenseTrend(value) {
+  return attackDefenseTrendValues.has(value) ? value : 'unknown'
 }
 
 function normalizeConfidence(value) {
@@ -46,6 +78,32 @@ function normalizeStringList(value) {
     : []
 }
 
+function normalizeRecentResults(value) {
+  return Array.isArray(value)
+    ? value.map((item) => (
+        item && typeof item === 'object' && !Array.isArray(item)
+          ? { ...item }
+          : item
+      ))
+    : []
+}
+
+function normalizeMeta(meta, defaults) {
+  const metaData = meta && typeof meta === 'object' ? meta : {}
+  const error =
+    typeof metaData.error === 'string' && metaData.error.trim()
+      ? metaData.error
+      : defaults.error
+
+  return {
+    ...metaData,
+    status: normalizeString(metaData.status, defaults.status),
+    error,
+    source: normalizeString(metaData.source, defaults.source),
+    message: normalizeString(metaData.message, defaults.message),
+  }
+}
+
 function normalizeTeamForm(teamForm) {
   const teamData = teamForm && typeof teamForm === 'object' ? teamForm : {}
   const recentMatches =
@@ -60,10 +118,13 @@ function normalizeTeamForm(teamForm) {
     teamData.scheduleLoad && typeof teamData.scheduleLoad === 'object'
       ? teamData.scheduleLoad
       : {}
+  const normalizedFormStatus = normalizeStatus(teamData.formStatus)
 
   return {
+    status: normalizeString(teamData.status, 'mock'),
     teamName: typeof teamData.teamName === 'string' ? teamData.teamName : '',
-    formStatus: normalizeStatus(teamData.formStatus),
+    formStatus: normalizedFormStatus,
+    formTrend: normalizeFormTrend(teamData.formTrend, normalizedFormStatus),
     confidence: normalizeConfidence(teamData.confidence),
     recentMatches: {
       sampleSize: normalizeNullableNumber(recentMatches.sampleSize),
@@ -73,6 +134,11 @@ function normalizeTeamForm(teamForm) {
       goalsFor: normalizeNullableNumber(recentMatches.goalsFor),
       goalsAgainst: normalizeNullableNumber(recentMatches.goalsAgainst),
     },
+    recentResults: normalizeRecentResults(teamData.recentResults),
+    attackTrend: normalizeAttackDefenseTrend(teamData.attackTrend),
+    defenseTrend: normalizeAttackDefenseTrend(teamData.defenseTrend),
+    volatility: normalizeLoad(teamData.volatility),
+    dataQuality: normalizeLoad(teamData.dataQuality),
     homeAwaySplit: {
       homeStatus: normalizeStatus(homeAwaySplit.homeStatus),
       awayStatus: normalizeStatus(homeAwaySplit.awayStatus),
@@ -85,7 +151,9 @@ function normalizeTeamForm(teamForm) {
     trendFlags: normalizeStringList(teamData.trendFlags),
     riskFlags: normalizeStringList(teamData.riskFlags),
     reviewPoints: normalizeStringList(teamData.reviewPoints),
+    riskNotes: normalizeStringList(teamData.riskNotes),
     fallbackReason: teamData.fallbackReason ?? null,
+    rawAvailable: teamData.rawAvailable === true,
   }
 }
 
@@ -96,21 +164,37 @@ function normalizeTeamFormSnapshot(payload) {
     })
   }
 
+  const disabled = payload.disabled !== false
+  const status = normalizeString(
+    payload.status,
+    disabled ? FALLBACK_TEAM_FORM_SNAPSHOT.status : 'available',
+  )
+  const source = normalizeString(payload.source, payload.dataSource ?? FALLBACK_TEAM_FORM_SNAPSHOT.source)
+  const error =
+    typeof payload.error === 'string' && payload.error.trim()
+      ? payload.error
+      : null
+
   return {
     ok: payload.ok === true,
-    disabled: payload.disabled !== false,
+    disabled,
+    status,
     provider: payload.provider ?? FALLBACK_TEAM_FORM_SNAPSHOT.provider,
     dataSource: payload.dataSource ?? FALLBACK_TEAM_FORM_SNAPSHOT.dataSource,
+    source,
+    error,
     updatedAt: payload.updatedAt ?? new Date().toISOString(),
     fallbackReason:
       payload.fallbackReason ?? FALLBACK_TEAM_FORM_SNAPSHOT.fallbackReason,
     teams: Array.isArray(payload.teams)
       ? payload.teams.map(normalizeTeamForm)
       : [],
-    meta:
-      payload.meta && typeof payload.meta === 'object'
-        ? payload.meta
-        : { message: 'Team form API is not enabled.' },
+    meta: normalizeMeta(payload.meta, {
+      status,
+      error,
+      source,
+      message: 'Team form API is not enabled.',
+    }),
   }
 }
 

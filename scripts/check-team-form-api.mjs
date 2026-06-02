@@ -77,9 +77,22 @@ const { createFallbackTeamFormSnapshot, getTeamFormSnapshot } = await import('..
 const { createMockTeamFormSnapshot } = await import('../src/data/mockTeamFormSnapshot.js')
 
 const formStatusValues = new Set(['strong', 'stable', 'mixed', 'weak', 'unknown'])
+const standardStatuses = new Set(['mock', 'disabled', 'fallback'])
+const formTrendValues = new Set(['strong', 'stable', 'weak', 'volatile', 'unknown'])
+const attackDefenseTrendValues = new Set(['strong', 'normal', 'weak', 'unknown'])
 const confidenceValues = new Set(['high', 'medium', 'low'])
 const loadValues = new Set(['low', 'medium', 'high', 'unknown'])
 const positivePattern = /guarantee|guaranteed|lock|sure|profit|boost|bonus|positive|must.?bet|recommend|pick|stake|bankroll|guaranteedWin|sureWin|increaseScore|raiseScore|bestBet|heavy/i
+
+function assertMetaShape(meta, label) {
+  for (const field of ['status', 'error', 'source']) {
+    assert(Object.prototype.hasOwnProperty.call(meta, field), `${label} must include ${field}.`)
+  }
+
+  assert(typeof meta.status === 'string' && meta.status, `${label} status must be a string.`)
+  assert(meta.error === null || typeof meta.error === 'string', `${label} error must be null or a string.`)
+  assert(typeof meta.source === 'string' && meta.source, `${label} source must be a string.`)
+}
 
 function assertSnapshotShape(snapshot, label) {
   for (const field of [
@@ -94,6 +107,7 @@ function assertSnapshotShape(snapshot, label) {
 
   assert(Array.isArray(snapshot.teams), `${label} teams must be an array.`)
   assert(snapshot.meta && typeof snapshot.meta === 'object', `${label} meta must be an object.`)
+  assertMetaShape(snapshot.meta, `${label} meta`)
 }
 
 function assertDisabledShape(snapshot, label) {
@@ -118,24 +132,40 @@ function assertDisabledShape(snapshot, label) {
 
 function assertTeamShape(team, label) {
   for (const field of [
+    'status',
     'teamName',
     'formStatus',
+    'formTrend',
     'confidence',
     'recentMatches',
+    'recentResults',
+    'attackTrend',
+    'defenseTrend',
+    'volatility',
+    'dataQuality',
     'homeAwaySplit',
     'scheduleLoad',
     'trendFlags',
     'riskFlags',
     'reviewPoints',
+    'riskNotes',
     'fallbackReason',
+    'rawAvailable',
   ]) {
     assert(Object.prototype.hasOwnProperty.call(team, field), `${label} must include ${field}.`)
   }
 
+  assert(standardStatuses.has(team.status), `${label} status must use the allowed enum.`)
   assert(typeof team.teamName === 'string' && team.teamName, `${label} must include teamName.`)
   assert(formStatusValues.has(team.formStatus), `${label} formStatus must use the allowed enum.`)
+  assert(formTrendValues.has(team.formTrend), `${label} formTrend must use the allowed enum.`)
   assert(confidenceValues.has(team.confidence), `${label} confidence must use the allowed enum.`)
   assert(['sampleSize', 'wins', 'draws', 'losses', 'goalsFor', 'goalsAgainst'].every((field) => Object.prototype.hasOwnProperty.call(team.recentMatches, field)), `${label} recentMatches must include all fields.`)
+  assert(Array.isArray(team.recentResults), `${label} recentResults must be an array.`)
+  assert(attackDefenseTrendValues.has(team.attackTrend), `${label} attackTrend must use the allowed enum.`)
+  assert(attackDefenseTrendValues.has(team.defenseTrend), `${label} defenseTrend must use the allowed enum.`)
+  assert(loadValues.has(team.volatility), `${label} volatility must use the allowed enum.`)
+  assert(loadValues.has(team.dataQuality), `${label} dataQuality must use the allowed enum.`)
   assert(formStatusValues.has(team.homeAwaySplit.homeStatus), `${label} homeStatus must use the allowed enum.`)
   assert(formStatusValues.has(team.homeAwaySplit.awayStatus), `${label} awayStatus must use the allowed enum.`)
   assert(loadValues.has(team.scheduleLoad.density), `${label} schedule density must use the allowed enum.`)
@@ -144,6 +174,8 @@ function assertTeamShape(team, label) {
   assert(Array.isArray(team.trendFlags), `${label} trendFlags must be an array.`)
   assert(Array.isArray(team.riskFlags), `${label} riskFlags must be an array.`)
   assert(Array.isArray(team.reviewPoints), `${label} reviewPoints must be an array.`)
+  assert(Array.isArray(team.riskNotes), `${label} riskNotes must be an array.`)
+  assert(typeof team.rawAvailable === 'boolean', `${label} rawAvailable must be a boolean.`)
 
   for (const trendFlag of team.trendFlags) {
     assert(typeof trendFlag === 'string', `${label} trendFlags must be strings.`)
@@ -153,6 +185,11 @@ function assertTeamShape(team, label) {
   for (const riskFlag of team.riskFlags) {
     assert(typeof riskFlag === 'string', `${label} riskFlags must be strings.`)
     assert(!positivePattern.test(riskFlag), `${label} riskFlags must not contain positive scoring semantics.`)
+  }
+
+  for (const riskNote of team.riskNotes) {
+    assert(typeof riskNote === 'string', `${label} riskNotes must be strings.`)
+    assert(!positivePattern.test(riskNote), `${label} riskNotes must not contain positive scoring semantics.`)
   }
 }
 

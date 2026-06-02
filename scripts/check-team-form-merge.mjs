@@ -18,6 +18,14 @@ function git(args) {
   return execFileSync('git', args, { encoding: 'utf8' }).trim()
 }
 
+function assertComparisonShape(comparison, label) {
+  assert(comparison && typeof comparison === 'object', `${label} comparison must be an object.`)
+  for (const field of ['formEdge', 'attackEdge', 'defenseEdge', 'volatilityRisk']) {
+    assert(Object.prototype.hasOwnProperty.call(comparison, field), `${label} comparison must include ${field}.`)
+    assert(typeof comparison[field] === 'string' && comparison[field], `${label} comparison.${field} must be a string.`)
+  }
+}
+
 assert(existsSync(mergePath), `${mergePath} must exist.`)
 
 const mergeText = readText(mergePath)
@@ -26,6 +34,7 @@ const betEngineText = readText(betEnginePath)
 const packageText = readText(packagePath)
 
 assert(mergeText.includes('export function mergeTeamFormIntoMatches'), 'teamFormMerge must export mergeTeamFormIntoMatches.')
+assert(!/teamFormMeta/.test(mergeText), 'teamFormMerge must not own teamFormMeta.')
 assert(!/teamFormMerge|mergeTeamFormIntoMatches|remoteTeamForm/.test(appText), 'App.jsx must not reference teamFormMerge or remoteTeamForm.')
 assert(!/teamFormMerge|mergeTeamFormIntoMatches|remoteTeamForm/.test(betEngineText), 'BetEngine must not reference teamFormMerge or remoteTeamForm.')
 
@@ -79,13 +88,16 @@ const matches = Object.freeze([baseMatch, homeOnlyMatch, unmatchedMatch])
 const teamFormSnapshot = Object.freeze({
   ok: true,
   disabled: false,
+  status: 'mock',
   provider: 'mock',
   dataSource: 'mock',
   updatedAt: '2026-06-02T00:00:00.000Z',
   teams: Object.freeze([
     Object.freeze({
+      status: 'mock',
       teamName: 'France',
       formStatus: 'stable',
+      formTrend: 'stable',
       confidence: 'medium',
       recentMatches: Object.freeze({
         sampleSize: null,
@@ -95,6 +107,11 @@ const teamFormSnapshot = Object.freeze({
         goalsFor: null,
         goalsAgainst: null,
       }),
+      recentResults: Object.freeze([]),
+      attackTrend: 'normal',
+      defenseTrend: 'normal',
+      volatility: 'medium',
+      dataQuality: 'low',
       homeAwaySplit: Object.freeze({
         homeStatus: 'stable',
         awayStatus: 'mixed',
@@ -107,11 +124,15 @@ const teamFormSnapshot = Object.freeze({
       trendFlags: Object.freeze(['attackRhythmReview']),
       riskFlags: Object.freeze(['realRecentMatchesMissing']),
       reviewPoints: Object.freeze(['fallback only']),
+      riskNotes: Object.freeze([]),
       fallbackReason: null,
+      rawAvailable: false,
     }),
     Object.freeze({
+      status: 'mock',
       teamName: 'Senegal',
       formStatus: 'unknown',
+      formTrend: 'unknown',
       confidence: 'low',
       recentMatches: Object.freeze({
         sampleSize: null,
@@ -121,6 +142,11 @@ const teamFormSnapshot = Object.freeze({
         goalsFor: null,
         goalsAgainst: null,
       }),
+      recentResults: Object.freeze([]),
+      attackTrend: 'unknown',
+      defenseTrend: 'unknown',
+      volatility: 'unknown',
+      dataQuality: 'low',
       homeAwaySplit: Object.freeze({
         homeStatus: 'unknown',
         awayStatus: 'unknown',
@@ -133,11 +159,15 @@ const teamFormSnapshot = Object.freeze({
       trendFlags: Object.freeze(['formTrendUnknown']),
       riskFlags: Object.freeze(['realFormUnavailable']),
       reviewPoints: Object.freeze(['fallback only']),
+      riskNotes: Object.freeze([]),
       fallbackReason: 'MOCK_FORM_MISSING',
+      rawAvailable: false,
     }),
     Object.freeze({
+      status: 'mock',
       teamName: 'Portugal',
       formStatus: 'mixed',
+      formTrend: 'volatile',
       confidence: 'low',
       recentMatches: Object.freeze({
         sampleSize: null,
@@ -147,6 +177,11 @@ const teamFormSnapshot = Object.freeze({
         goalsFor: null,
         goalsAgainst: null,
       }),
+      recentResults: Object.freeze([]),
+      attackTrend: 'unknown',
+      defenseTrend: 'unknown',
+      volatility: 'high',
+      dataQuality: 'low',
       homeAwaySplit: Object.freeze({
         homeStatus: 'stable',
         awayStatus: 'unknown',
@@ -159,14 +194,23 @@ const teamFormSnapshot = Object.freeze({
       trendFlags: Object.freeze(['rotationPatternReview']),
       riskFlags: Object.freeze(['restDaysMissing']),
       reviewPoints: Object.freeze(['fallback only']),
+      riskNotes: Object.freeze([]),
       fallbackReason: 'MOCK_FORM_PARTIAL',
+      rawAvailable: false,
     }),
   ]),
 })
 
 function assertRemoteTeamSide(side, label) {
   for (const field of [
+    'status',
     'teamName',
+    'formTrend',
+    'recentResults',
+    'attackTrend',
+    'defenseTrend',
+    'volatility',
+    'dataQuality',
     'formStatus',
     'confidence',
     'recentMatches',
@@ -175,10 +219,22 @@ function assertRemoteTeamSide(side, label) {
     'trendFlags',
     'riskFlags',
     'reviewPoints',
+    'riskNotes',
     'fallbackReason',
   ]) {
     assert(Object.prototype.hasOwnProperty.call(side, field), `${label} must include ${field}.`)
   }
+
+  assert(typeof side.status === 'string' && side.status, `${label} status must be a string.`)
+  assert(typeof side.teamName === 'string' && side.teamName, `${label} teamName must be a string.`)
+  assert(typeof side.formTrend === 'string' && side.formTrend, `${label} formTrend must be a string.`)
+  assert(Array.isArray(side.recentResults), `${label} recentResults must be an array.`)
+  assert(typeof side.attackTrend === 'string' && side.attackTrend, `${label} attackTrend must be a string.`)
+  assert(typeof side.defenseTrend === 'string' && side.defenseTrend, `${label} defenseTrend must be a string.`)
+  assert(typeof side.volatility === 'string' && side.volatility, `${label} volatility must be a string.`)
+  assert(typeof side.dataQuality === 'string' && side.dataQuality, `${label} dataQuality must be a string.`)
+  assert(Array.isArray(side.reviewPoints), `${label} reviewPoints must be an array.`)
+  assert(Array.isArray(side.riskNotes), `${label} riskNotes must be an array.`)
 }
 
 function assertProtectedFields(resultMatch, originalMatch, label) {
@@ -205,9 +261,15 @@ assertRemoteTeamSide(merged[0].remoteTeamForm.away, 'remoteTeamForm.away')
 assert(merged[0].remoteTeamForm.provider === 'mock', 'remoteTeamForm must include provider.')
 assert(merged[0].remoteTeamForm.dataSource === 'mock', 'remoteTeamForm must include dataSource.')
 assert(merged[0].remoteTeamForm.updatedAt === teamFormSnapshot.updatedAt, 'remoteTeamForm must include updatedAt.')
+assert(merged[0].remoteTeamForm.status === 'mock', 'remoteTeamForm must include status.')
+assert(merged[0].remoteTeamForm.matchKey === 'France__Senegal', 'remoteTeamForm must include matchKey.')
+assertComparisonShape(merged[0].remoteTeamForm.comparison, 'remoteTeamForm')
+assert(merged[0].remoteTeamForm.rawAvailable === false, 'remoteTeamForm must include rawAvailable.')
 assert(merged[0].remoteTeamForm.home.recentMatches !== teamFormSnapshot.teams[0].recentMatches, 'home recentMatches must be cloned.')
+assert(merged[0].remoteTeamForm.home.recentResults !== teamFormSnapshot.teams[0].recentResults, 'home recentResults must be cloned.')
 assert(merged[0].remoteTeamForm.home.trendFlags !== teamFormSnapshot.teams[0].trendFlags, 'home trendFlags must be cloned.')
 assert(merged[0].remoteTeamForm.away.riskFlags !== teamFormSnapshot.teams[1].riskFlags, 'away riskFlags must be cloned.')
+assert(merged[0].remoteTeamForm.away.riskNotes !== teamFormSnapshot.teams[1].riskNotes, 'away riskNotes must be cloned.')
 assertProtectedFields(merged[0], baseMatch, 'matched item')
 
 assert(merged[1] !== homeOnlyMatch, 'one-sided match must be returned as a new match object.')

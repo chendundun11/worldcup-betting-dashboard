@@ -1,6 +1,8 @@
 export const TEAM_FORM_SNAPSHOT_SCHEMA_VERSION = 'team-form-snapshot-v1'
 
 const statusValues = new Set(['strong', 'stable', 'mixed', 'weak', 'unknown'])
+const formTrendValues = new Set(['strong', 'stable', 'weak', 'volatile', 'unknown'])
+const attackDefenseTrendValues = new Set(['strong', 'normal', 'weak', 'unknown'])
 const loadValues = new Set(['low', 'medium', 'high', 'unknown'])
 
 export const mockTeamFormSnapshot = {
@@ -9,8 +11,10 @@ export const mockTeamFormSnapshot = {
   updatedAt: '2026-06-02T00:00:00.000Z',
   teams: [
     {
+      status: 'mock',
       teamName: 'France',
       formStatus: 'stable',
+      formTrend: 'stable',
       confidence: 'medium',
       recentMatches: {
         sampleSize: null,
@@ -20,6 +24,11 @@ export const mockTeamFormSnapshot = {
         goalsFor: null,
         goalsAgainst: null,
       },
+      recentResults: [],
+      attackTrend: 'normal',
+      defenseTrend: 'normal',
+      volatility: 'medium',
+      dataQuality: 'low',
       homeAwaySplit: {
         homeStatus: 'stable',
         awayStatus: 'mixed',
@@ -41,11 +50,15 @@ export const mockTeamFormSnapshot = {
         'Mock team form only; do not treat as a real recent-match source.',
         'Use future real source data for risk review before scoring changes.',
       ],
+      riskNotes: [],
       fallbackReason: null,
+      rawAvailable: false,
     },
     {
+      status: 'mock',
       teamName: 'Portugal',
       formStatus: 'mixed',
+      formTrend: 'volatile',
       confidence: 'low',
       recentMatches: {
         sampleSize: null,
@@ -55,6 +68,11 @@ export const mockTeamFormSnapshot = {
         goalsFor: null,
         goalsAgainst: null,
       },
+      recentResults: [],
+      attackTrend: 'unknown',
+      defenseTrend: 'unknown',
+      volatility: 'high',
+      dataQuality: 'low',
       homeAwaySplit: {
         homeStatus: 'stable',
         awayStatus: 'unknown',
@@ -76,11 +94,15 @@ export const mockTeamFormSnapshot = {
       reviewPoints: [
         'Future provider data should confirm rest days before any risk use.',
       ],
+      riskNotes: [],
       fallbackReason: 'MOCK_FORM_PARTIAL',
+      rawAvailable: false,
     },
     {
+      status: 'mock',
       teamName: 'Senegal',
       formStatus: 'unknown',
+      formTrend: 'unknown',
       confidence: 'low',
       recentMatches: {
         sampleSize: null,
@@ -90,6 +112,11 @@ export const mockTeamFormSnapshot = {
         goalsFor: null,
         goalsAgainst: null,
       },
+      recentResults: [],
+      attackTrend: 'unknown',
+      defenseTrend: 'unknown',
+      volatility: 'unknown',
+      dataQuality: 'low',
       homeAwaySplit: {
         homeStatus: 'unknown',
         awayStatus: 'unknown',
@@ -110,17 +137,30 @@ export const mockTeamFormSnapshot = {
       reviewPoints: [
         'Missing team form data should stay a review signal only.',
       ],
+      riskNotes: [],
       fallbackReason: 'MOCK_FORM_MISSING',
+      rawAvailable: false,
     },
   ],
   meta: {
     schemaVersion: TEAM_FORM_SNAPSHOT_SCHEMA_VERSION,
+    status: 'mock',
+    error: null,
+    source: 'mock-fallback',
     message: 'Mock team form snapshot for disabled fallback only.',
   },
 }
 
 function normalizeStatus(value) {
   return statusValues.has(value) ? value : 'unknown'
+}
+
+function normalizeFormTrend(value) {
+  return formTrendValues.has(value) ? value : 'unknown'
+}
+
+function normalizeAttackDefenseTrend(value) {
+  return attackDefenseTrendValues.has(value) ? value : 'unknown'
 }
 
 function normalizeLoad(value) {
@@ -131,7 +171,13 @@ function cloneTeamForm(teamForm) {
   return {
     ...teamForm,
     formStatus: normalizeStatus(teamForm.formStatus),
+    formTrend: normalizeFormTrend(teamForm.formTrend),
     recentMatches: { ...teamForm.recentMatches },
+    recentResults: [...teamForm.recentResults],
+    attackTrend: normalizeAttackDefenseTrend(teamForm.attackTrend),
+    defenseTrend: normalizeAttackDefenseTrend(teamForm.defenseTrend),
+    volatility: normalizeLoad(teamForm.volatility),
+    dataQuality: normalizeLoad(teamForm.dataQuality),
     homeAwaySplit: {
       homeStatus: normalizeStatus(teamForm.homeAwaySplit.homeStatus),
       awayStatus: normalizeStatus(teamForm.homeAwaySplit.awayStatus),
@@ -144,6 +190,7 @@ function cloneTeamForm(teamForm) {
     trendFlags: [...teamForm.trendFlags],
     riskFlags: [...teamForm.riskFlags],
     reviewPoints: [...teamForm.reviewPoints],
+    riskNotes: [...teamForm.riskNotes],
   }
 }
 
