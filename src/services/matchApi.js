@@ -4,6 +4,8 @@ import {
 } from './adapters/mockMatchAdapter'
 import { fetchMatches as fetchRemoteMatches } from './adapters/remoteMatchAdapter'
 import { fetchMatches as fetchFootballDataMatches } from './adapters/footballDataAdapter'
+import { getOddsSnapshot } from './oddsApi'
+import { mergeOddsIntoMatches } from './oddsMerge'
 
 const adapters = {
   mock: fetchMockMatches,
@@ -38,6 +40,34 @@ function createEmptySnapshot(source = 'empty', fallbackReason = 'INVALID_RESPONS
   }
 }
 
+function createOddsMeta(oddsSnapshot) {
+  return {
+    provider: oddsSnapshot?.provider ?? null,
+    dataSource: oddsSnapshot?.dataSource ?? null,
+    updatedAt: oddsSnapshot?.updatedAt ?? null,
+    fallbackReason: oddsSnapshot?.fallbackReason ?? null,
+    disabled: oddsSnapshot?.disabled === true,
+  }
+}
+
+async function attachRemoteOdds(snapshot) {
+  try {
+    const oddsSnapshot = await getOddsSnapshot()
+    const mergedMatches = Array.isArray(snapshot.matches)
+      ? mergeOddsIntoMatches(snapshot.matches, oddsSnapshot)
+      : snapshot.matches
+
+    return {
+      ...snapshot,
+      matches: mergedMatches,
+      oddsMeta: createOddsMeta(oddsSnapshot),
+    }
+  } catch (error) {
+    console.warn('Odds snapshot merge failed, using match snapshot without remote odds.', error)
+    return snapshot
+  }
+}
+
 export function getInitialMatchSnapshot() {
   try {
     return getMockMatchSnapshot()
@@ -53,14 +83,14 @@ export async function getMatches(options = {}) {
 
   try {
     const snapshot = await fetchAdapter()
-    return {
+    return attachRemoteOdds({
       ...snapshot,
       meta: snapshot.meta ?? {
         dataSource: snapshot.dataSource ?? 'real',
         fallbackReason: snapshot.fallbackReason ?? null,
         provider: snapshot.provider ?? adapterName,
       },
-    }
+    })
   } catch (error) {
     console.warn(`Match adapter "${adapterName}" failed.`, error)
 
@@ -71,13 +101,13 @@ export async function getMatches(options = {}) {
         console.warn(
           `Fallback reason "${fallbackReason}" does not use mock match data.`,
         )
-        return createEmptySnapshot('empty-fallback', fallbackReason)
+        return attachRemoteOdds(createEmptySnapshot('empty-fallback', fallbackReason))
       }
 
       console.warn(`Using mock match fallback for reason "${fallbackReason}".`)
       const mockSnapshot = await fetchMockMatches()
 
-      return {
+      return attachRemoteOdds({
         ...mockSnapshot,
         source: 'mock',
         dataSource: 'fallback',
@@ -88,10 +118,10 @@ export async function getMatches(options = {}) {
           fallbackReason,
           provider: 'mock',
         },
-      }
+      })
     } catch (fallbackError) {
       console.warn('Mock match fallback failed, using empty match list.', fallbackError)
-      return createEmptySnapshot('empty-fallback')
+      return attachRemoteOdds(createEmptySnapshot('empty-fallback'))
     }
   }
 }

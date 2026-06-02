@@ -30,7 +30,7 @@ const packageText = readText(packagePath)
 assert(mergeText.includes('export function mergeOddsIntoMatches'), 'oddsMerge must export mergeOddsIntoMatches.')
 assert(!/oddsMerge|mergeOddsIntoMatches/.test(appText), 'App.jsx must not reference oddsMerge.')
 assert(!/oddsMerge|mergeOddsIntoMatches|remoteOdds/.test(betEngineText), 'BetEngine must not reference oddsMerge or remoteOdds.')
-assert(!/oddsMerge|mergeOddsIntoMatches|remoteOdds/.test(matchApiText), 'matchApi must not reference oddsMerge or remoteOdds.')
+assert(!/remoteOdds/.test(matchApiText), 'matchApi must not read or write remoteOdds directly.')
 
 const packageStatus = git(['status', '--short', '--', packagePath])
 assert(!packageStatus, 'package.json must not be modified for odds merge helper.')
