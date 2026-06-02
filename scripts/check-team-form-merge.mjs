@@ -4,7 +4,6 @@ import { existsSync, readFileSync } from 'node:fs'
 const mergePath = 'src/services/teamFormMerge.js'
 const appPath = 'src/App.jsx'
 const betEnginePath = 'src/services/betEngine.js'
-const matchApiPath = 'src/services/matchApi.js'
 const packagePath = 'package.json'
 
 function assert(condition, message) {
@@ -24,13 +23,11 @@ assert(existsSync(mergePath), `${mergePath} must exist.`)
 const mergeText = readText(mergePath)
 const appText = readText(appPath)
 const betEngineText = readText(betEnginePath)
-const matchApiText = readText(matchApiPath)
 const packageText = readText(packagePath)
 
 assert(mergeText.includes('export function mergeTeamFormIntoMatches'), 'teamFormMerge must export mergeTeamFormIntoMatches.')
 assert(!/teamFormMerge|mergeTeamFormIntoMatches|remoteTeamForm/.test(appText), 'App.jsx must not reference teamFormMerge or remoteTeamForm.')
 assert(!/teamFormMerge|mergeTeamFormIntoMatches|remoteTeamForm/.test(betEngineText), 'BetEngine must not reference teamFormMerge or remoteTeamForm.')
-assert(!/teamFormMerge|mergeTeamFormIntoMatches|remoteTeamForm/.test(matchApiText), 'matchApi must not reference teamFormMerge or remoteTeamForm.')
 
 const packageStatus = git(['status', '--short', '--', packagePath])
 assert(!packageStatus, 'package.json must not be modified for team form merge helper.')

@@ -6,6 +6,8 @@ import { fetchMatches as fetchRemoteMatches } from './adapters/remoteMatchAdapte
 import { fetchMatches as fetchFootballDataMatches } from './adapters/footballDataAdapter'
 import { getOddsSnapshot } from './oddsApi'
 import { mergeOddsIntoMatches } from './oddsMerge'
+import { getTeamFormSnapshot } from './teamFormApi'
+import { mergeTeamFormIntoMatches } from './teamFormMerge'
 
 const adapters = {
   mock: fetchMockMatches,
@@ -37,6 +39,37 @@ function createEmptySnapshot(source = 'empty', fallbackReason = 'INVALID_RESPONS
     provider: meta.provider,
     meta,
     matches: [],
+  }
+}
+
+function createTeamFormMeta(teamFormSnapshot) {
+  return {
+    provider: teamFormSnapshot?.provider ?? null,
+    dataSource: teamFormSnapshot?.dataSource ?? null,
+    updatedAt: teamFormSnapshot?.updatedAt ?? null,
+    fallbackReason: teamFormSnapshot?.fallbackReason ?? null,
+    disabled: teamFormSnapshot?.disabled === true,
+  }
+}
+
+async function attachRemoteTeamForm(snapshot) {
+  try {
+    const teamFormSnapshot = await getTeamFormSnapshot()
+    const mergedMatches = Array.isArray(snapshot.matches)
+      ? mergeTeamFormIntoMatches(snapshot.matches, teamFormSnapshot)
+      : snapshot.matches
+
+    return {
+      ...snapshot,
+      matches: mergedMatches,
+      teamFormMeta: createTeamFormMeta(teamFormSnapshot),
+    }
+  } catch (error) {
+    console.warn(
+      'Team form snapshot merge failed, using match snapshot without remote team form.',
+      error,
+    )
+    return snapshot
   }
 }
 
@@ -83,14 +116,14 @@ export async function getMatches(options = {}) {
 
   try {
     const snapshot = await fetchAdapter()
-    return attachRemoteOdds({
+    return attachRemoteTeamForm(await attachRemoteOdds({
       ...snapshot,
       meta: snapshot.meta ?? {
         dataSource: snapshot.dataSource ?? 'real',
         fallbackReason: snapshot.fallbackReason ?? null,
         provider: snapshot.provider ?? adapterName,
       },
-    })
+    }))
   } catch (error) {
     console.warn(`Match adapter "${adapterName}" failed.`, error)
 
@@ -101,13 +134,15 @@ export async function getMatches(options = {}) {
         console.warn(
           `Fallback reason "${fallbackReason}" does not use mock match data.`,
         )
-        return attachRemoteOdds(createEmptySnapshot('empty-fallback', fallbackReason))
+        return attachRemoteTeamForm(
+          await attachRemoteOdds(createEmptySnapshot('empty-fallback', fallbackReason)),
+        )
       }
 
       console.warn(`Using mock match fallback for reason "${fallbackReason}".`)
       const mockSnapshot = await fetchMockMatches()
 
-      return attachRemoteOdds({
+      return attachRemoteTeamForm(await attachRemoteOdds({
         ...mockSnapshot,
         source: 'mock',
         dataSource: 'fallback',
@@ -118,10 +153,12 @@ export async function getMatches(options = {}) {
           fallbackReason,
           provider: 'mock',
         },
-      })
+      }))
     } catch (fallbackError) {
       console.warn('Mock match fallback failed, using empty match list.', fallbackError)
-      return attachRemoteOdds(createEmptySnapshot('empty-fallback'))
+      return attachRemoteTeamForm(
+        await attachRemoteOdds(createEmptySnapshot('empty-fallback')),
+      )
     }
   }
 }

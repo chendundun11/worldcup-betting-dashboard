@@ -6,7 +6,6 @@ const servicePath = 'src/services/teamFormApi.js'
 const mockPath = 'src/data/mockTeamFormSnapshot.js'
 const appPath = 'src/App.jsx'
 const betEnginePath = 'src/services/betEngine.js'
-const matchApiPath = 'src/services/matchApi.js'
 const packagePath = 'package.json'
 const apiMatchesPath = 'api/matches.js'
 const apiOddsPath = 'api/odds.js'
@@ -30,7 +29,6 @@ for (const path of [
   mockPath,
   appPath,
   betEnginePath,
-  matchApiPath,
   packagePath,
 ]) {
   assert(existsSync(path), `${path} must exist.`)
@@ -41,7 +39,6 @@ const serviceText = readText(servicePath)
 const mockText = readText(mockPath)
 const appText = readText(appPath)
 const betEngineText = readText(betEnginePath)
-const matchApiText = readText(matchApiPath)
 const packageText = readText(packagePath)
 
 assert(!/\bfetch\s*\(/.test(apiText), 'Team form API endpoint must not fetch an external supplier.')
@@ -57,7 +54,6 @@ for (const match of apiText.matchAll(/from\s+['"]([^'"]+)['"]/g)) {
 
 assert(!/teamFormApi|getTeamFormSnapshot|api\/team-form/.test(appText), 'App.jsx must not reference teamFormApi or /api/team-form.')
 assert(!/teamFormApi|getTeamFormSnapshot|api\/team-form/.test(betEngineText), 'BetEngine must not reference teamFormApi or /api/team-form.')
-assert(!/teamFormApi|getTeamFormSnapshot|api\/team-form/.test(matchApiText), 'matchApi must not reference teamFormApi or /api/team-form.')
 assert(serviceText.includes("'/api/team-form'") || serviceText.includes('"/api/team-form"'), 'teamFormApi.js must request /api/team-form.')
 assert(!/src\/services\/teamFormApi|src\\services\\teamFormApi/.test(apiText), 'Team form API endpoint must not import frontend team form service.')
 assert(!/openai|\bgpt\b/i.test(mockText), 'Mock team form snapshot must not mention OpenAI or GPT.')
