@@ -19,6 +19,16 @@ function git(args) {
   return execFileSync('git', args, { encoding: 'utf8' }).trim()
 }
 
+function assertStandardMarketsShape(markets, label) {
+  assert(markets && typeof markets === 'object', `${label} markets must be an object.`)
+  assert(markets.matchWinner && typeof markets.matchWinner === 'object', `${label} markets.matchWinner must exist.`)
+  assert(markets.asianHandicap && typeof markets.asianHandicap === 'object', `${label} markets.asianHandicap must exist.`)
+  assert(markets.overUnder && typeof markets.overUnder === 'object', `${label} markets.overUnder must exist.`)
+  assert(['home', 'draw', 'away'].every((field) => Object.prototype.hasOwnProperty.call(markets.matchWinner, field)), `${label} markets.matchWinner must include home/draw/away.`)
+  assert(['line', 'homeOdds', 'awayOdds'].every((field) => Object.prototype.hasOwnProperty.call(markets.asianHandicap, field)), `${label} markets.asianHandicap must include line/homeOdds/awayOdds.`)
+  assert(['line', 'overOdds', 'underOdds'].every((field) => Object.prototype.hasOwnProperty.call(markets.overUnder, field)), `${label} markets.overUnder must include line/overOdds/underOdds.`)
+}
+
 assert(existsSync(mergePath), `${mergePath} must exist.`)
 
 const mergeText = readText(mergePath)
@@ -76,8 +86,13 @@ const oddsSnapshot = Object.freeze({
   updatedAt: '2026-06-02T00:00:00.000Z',
   markets: Object.freeze([
     Object.freeze({
+      status: 'mock',
       matchKey: 'France__Senegal',
+      homeTeam: 'France',
+      awayTeam: 'Senegal',
       marketStatus: 'available',
+      marketTone: 'neutral',
+      favoriteSide: 'home',
       oddsConfidence: 'medium',
       mainMarkets: Object.freeze({
         homeWin: 1.72,
@@ -94,13 +109,33 @@ const oddsSnapshot = Object.freeze({
         over: null,
         under: null,
       }),
+      markets: Object.freeze({
+        matchWinner: Object.freeze({
+          home: 1.72,
+          draw: 3.55,
+          away: 5.1,
+        }),
+        asianHandicap: Object.freeze({
+          line: -0.75,
+          homeOdds: null,
+          awayOdds: null,
+        }),
+        overUnder: Object.freeze({
+          line: 2.5,
+          overOdds: null,
+          underOdds: null,
+        }),
+      }),
       marketMovement: Object.freeze({
         favoriteTrend: 'stable',
         totalGoalsTrend: 'unknown',
       }),
+      valueFlags: Object.freeze([]),
       riskFlags: Object.freeze(['mockOnly', 'marketMovementMissing']),
       reviewPoints: Object.freeze(['fallback only']),
+      riskNotes: Object.freeze([]),
       fallbackReason: null,
+      rawAvailable: false,
     }),
   ]),
 })
@@ -123,18 +158,28 @@ assert(merged[0].scoreReference === baseMatch.scoreReference, 'merge must not ov
 assert(merged[0].totalGoalsDirection === baseMatch.totalGoalsDirection, 'merge must not overwrite totalGoalsDirection.')
 
 for (const field of [
+  'status',
   'provider',
   'dataSource',
   'updatedAt',
+  'matchKey',
+  'homeTeam',
+  'awayTeam',
   'marketStatus',
+  'marketTone',
+  'favoriteSide',
   'oddsConfidence',
   'mainMarkets',
   'handicap',
   'totalGoals',
+  'markets',
   'marketMovement',
+  'valueFlags',
   'riskFlags',
   'reviewPoints',
+  'riskNotes',
   'fallbackReason',
+  'rawAvailable',
 ]) {
   assert(Object.prototype.hasOwnProperty.call(merged[0].remoteOdds, field), `remoteOdds must include ${field}.`)
 }
@@ -142,12 +187,26 @@ for (const field of [
 assert(merged[0].remoteOdds.provider === 'mock', 'remoteOdds must include provider.')
 assert(merged[0].remoteOdds.dataSource === 'mock', 'remoteOdds must include dataSource.')
 assert(merged[0].remoteOdds.updatedAt === oddsSnapshot.updatedAt, 'remoteOdds must include updatedAt.')
+assert(merged[0].remoteOdds.status === 'mock', 'remoteOdds must include status.')
+assert(merged[0].remoteOdds.matchKey === 'France__Senegal', 'remoteOdds must include matchKey.')
+assert(merged[0].remoteOdds.homeTeam === 'France', 'remoteOdds must include homeTeam.')
+assert(merged[0].remoteOdds.awayTeam === 'Senegal', 'remoteOdds must include awayTeam.')
+assert(merged[0].remoteOdds.marketTone === 'neutral', 'remoteOdds must include marketTone.')
+assert(merged[0].remoteOdds.favoriteSide === 'home', 'remoteOdds must include favoriteSide.')
+assertStandardMarketsShape(merged[0].remoteOdds.markets, 'remoteOdds')
 assert(merged[0].remoteOdds.mainMarkets !== oddsSnapshot.markets[0].mainMarkets, 'remoteOdds mainMarkets must be cloned.')
 assert(merged[0].remoteOdds.handicap !== oddsSnapshot.markets[0].handicap, 'remoteOdds handicap must be cloned.')
 assert(merged[0].remoteOdds.totalGoals !== oddsSnapshot.markets[0].totalGoals, 'remoteOdds totalGoals must be cloned.')
+assert(merged[0].remoteOdds.markets !== oddsSnapshot.markets[0].markets, 'remoteOdds markets must be cloned.')
+assert(merged[0].remoteOdds.markets.matchWinner !== oddsSnapshot.markets[0].markets.matchWinner, 'remoteOdds markets.matchWinner must be cloned.')
+assert(merged[0].remoteOdds.markets.asianHandicap !== oddsSnapshot.markets[0].markets.asianHandicap, 'remoteOdds markets.asianHandicap must be cloned.')
+assert(merged[0].remoteOdds.markets.overUnder !== oddsSnapshot.markets[0].markets.overUnder, 'remoteOdds markets.overUnder must be cloned.')
 assert(merged[0].remoteOdds.marketMovement !== oddsSnapshot.markets[0].marketMovement, 'remoteOdds marketMovement must be cloned.')
+assert(Array.isArray(merged[0].remoteOdds.valueFlags), 'remoteOdds valueFlags must be an array.')
 assert(merged[0].remoteOdds.riskFlags !== oddsSnapshot.markets[0].riskFlags, 'remoteOdds riskFlags must be cloned.')
 assert(merged[0].remoteOdds.reviewPoints !== oddsSnapshot.markets[0].reviewPoints, 'remoteOdds reviewPoints must be cloned.')
+assert(Array.isArray(merged[0].remoteOdds.riskNotes), 'remoteOdds riskNotes must be an array.')
+assert(merged[0].remoteOdds.rawAvailable === false, 'remoteOdds rawAvailable must be preserved.')
 
 const homeAwayKeyMerge = mergeOddsIntoMatches(
   [{ homeTeam: 'France', awayTeam: 'Senegal' }],

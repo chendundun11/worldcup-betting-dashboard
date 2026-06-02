@@ -65,6 +65,16 @@ const { createDisabledOddsSnapshot, default: handler } = await import('../api/od
 const { createFallbackOddsSnapshot, getOddsSnapshot } = await import('../src/services/oddsApi.js')
 const { createMockOddsSnapshot } = await import('../src/data/mockOddsSnapshot.js')
 
+function assertMetaShape(meta, label) {
+  for (const field of ['status', 'error', 'source']) {
+    assert(Object.prototype.hasOwnProperty.call(meta, field), `${label} must include ${field}.`)
+  }
+
+  assert(typeof meta.status === 'string' && meta.status, `${label} status must be a string.`)
+  assert(meta.error === null || typeof meta.error === 'string', `${label} error must be null or a string.`)
+  assert(typeof meta.source === 'string' && meta.source, `${label} source must be a string.`)
+}
+
 function assertOddsShape(snapshot, label) {
   for (const field of [
     'ok',
@@ -81,6 +91,7 @@ function assertOddsShape(snapshot, label) {
 
   assert(Array.isArray(snapshot.markets), `${label} markets must be an array.`)
   assert(snapshot.meta && typeof snapshot.meta === 'object', `${label} meta must be an object.`)
+  assertMetaShape(snapshot.meta, `${label} meta`)
 }
 
 function assertDisabledShape(snapshot, label) {
@@ -99,44 +110,70 @@ function assertServiceFallbackShape(snapshot, label) {
 }
 
 const marketStatuses = new Set(['available', 'missing', 'stale'])
+const standardStatuses = new Set(['mock', 'disabled', 'fallback'])
 const confidenceValues = new Set(['high', 'medium', 'low'])
+const favoriteSideValues = new Set(['home', 'away', 'draw', 'none', 'unknown'])
 const favoriteTrendValues = new Set(['stable', 'shortening', 'drifting', 'unknown'])
 const totalGoalsTrendValues = new Set(['stable', 'over-heating', 'under-support', 'unknown'])
 const positiveRiskPattern = /guarantee|guaranteed|lock|sure|profit|boost|bonus|positive|must.?bet|稳胆|必中|必胜|稳赚|重仓|加分|抬高|提高|正向|盈利/i
 
+function assertStandardMarketsShape(markets, label) {
+  assert(markets && typeof markets === 'object', `${label} markets must be an object.`)
+  assert(markets.matchWinner && typeof markets.matchWinner === 'object', `${label} markets.matchWinner must exist.`)
+  assert(markets.asianHandicap && typeof markets.asianHandicap === 'object', `${label} markets.asianHandicap must exist.`)
+  assert(markets.overUnder && typeof markets.overUnder === 'object', `${label} markets.overUnder must exist.`)
+  assert(['home', 'draw', 'away'].every((field) => Object.prototype.hasOwnProperty.call(markets.matchWinner, field)), `${label} markets.matchWinner must include home/draw/away.`)
+  assert(['line', 'homeOdds', 'awayOdds'].every((field) => Object.prototype.hasOwnProperty.call(markets.asianHandicap, field)), `${label} markets.asianHandicap must include line/homeOdds/awayOdds.`)
+  assert(['line', 'overOdds', 'underOdds'].every((field) => Object.prototype.hasOwnProperty.call(markets.overUnder, field)), `${label} markets.overUnder must include line/overOdds/underOdds.`)
+}
+
 function assertMarketShape(market, label) {
   for (const field of [
+    'status',
     'matchKey',
     'homeTeam',
     'awayTeam',
     'marketStatus',
+    'marketTone',
+    'favoriteSide',
     'oddsConfidence',
     'bookmakers',
     'mainMarkets',
     'handicap',
     'totalGoals',
+    'markets',
     'marketMovement',
+    'valueFlags',
     'riskFlags',
     'reviewPoints',
+    'riskNotes',
     'fallbackReason',
+    'rawAvailable',
   ]) {
     assert(Object.prototype.hasOwnProperty.call(market, field), `${label} must include ${field}.`)
   }
 
+  assert(standardStatuses.has(market.status), `${label} status must use the allowed enum.`)
   assert(typeof market.matchKey === 'string' && market.matchKey.includes('__'), `${label} must include a stable matchKey.`)
   assert(typeof market.homeTeam === 'string' && market.homeTeam, `${label} must include homeTeam.`)
   assert(typeof market.awayTeam === 'string' && market.awayTeam, `${label} must include awayTeam.`)
   assert(marketStatuses.has(market.marketStatus), `${label} marketStatus must use the allowed enum.`)
+  assert(typeof market.marketTone === 'string' && market.marketTone, `${label} marketTone must be a string.`)
+  assert(favoriteSideValues.has(market.favoriteSide), `${label} favoriteSide must use the allowed enum.`)
   assert(confidenceValues.has(market.oddsConfidence), `${label} oddsConfidence must use the allowed enum.`)
   assert(Array.isArray(market.bookmakers), `${label} bookmakers must be an array.`)
   assert(market.bookmakers.length === 0, `${label} must not include real bookmaker data.`)
   assert(['homeWin', 'draw', 'awayWin'].every((field) => Object.prototype.hasOwnProperty.call(market.mainMarkets, field)), `${label} mainMarkets must include 1X2 fields.`)
   assert(['line', 'home', 'away'].every((field) => Object.prototype.hasOwnProperty.call(market.handicap, field)), `${label} handicap must include line/home/away.`)
   assert(['line', 'over', 'under'].every((field) => Object.prototype.hasOwnProperty.call(market.totalGoals, field)), `${label} totalGoals must include line/over/under.`)
+  assertStandardMarketsShape(market.markets, label)
   assert(favoriteTrendValues.has(market.marketMovement.favoriteTrend), `${label} favoriteTrend must use the allowed enum.`)
   assert(totalGoalsTrendValues.has(market.marketMovement.totalGoalsTrend), `${label} totalGoalsTrend must use the allowed enum.`)
+  assert(Array.isArray(market.valueFlags), `${label} valueFlags must be an array.`)
   assert(Array.isArray(market.riskFlags), `${label} riskFlags must be an array.`)
   assert(Array.isArray(market.reviewPoints), `${label} reviewPoints must be an array.`)
+  assert(Array.isArray(market.riskNotes), `${label} riskNotes must be an array.`)
+  assert(typeof market.rawAvailable === 'boolean', `${label} rawAvailable must be a boolean.`)
 
   for (const riskFlag of market.riskFlags) {
     assert(typeof riskFlag === 'string', `${label} riskFlags must be strings.`)
@@ -154,6 +191,7 @@ function assertMockOddsSnapshot(snapshot, label) {
   assert(Array.isArray(snapshot.markets), `${label} markets must be an array.`)
   assert(snapshot.markets.length > 0, `${label} must include at least one mock market.`)
   assert(snapshot.meta?.schemaVersion === 'odds-snapshot-v1', `${label} must use odds-snapshot-v1.`)
+  assertMetaShape(snapshot.meta, `${label} meta`)
   snapshot.markets.forEach((market, index) => assertMarketShape(market, `${label} market ${index}`))
 }
 

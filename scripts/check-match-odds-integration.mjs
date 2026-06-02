@@ -67,7 +67,7 @@ assert(!/remoteOdds/.test(betEngineText), 'BetEngine must not read remoteOdds.')
 assert(!/oddsMeta/.test(appText), 'App.jsx must not read oddsMeta.')
 assert(!/oddsMeta/.test(betEngineText), 'BetEngine must not read oddsMeta.')
 
-for (const path of [apiMatchesPath, apiOddsPath, packagePath]) {
+for (const path of [matchApiPath, appPath, betEnginePath, apiMatchesPath, packagePath]) {
   const status = git(['status', '--short', '--', path])
   assert(!status, `${path} must not be modified.`)
 }
