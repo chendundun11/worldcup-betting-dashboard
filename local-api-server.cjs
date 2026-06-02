@@ -87,6 +87,29 @@ function sendJson(response, statusCode, body, headers = {}) {
   )
 }
 
+function createDisabledOddsSnapshot() {
+  return {
+    ok: false,
+    disabled: true,
+    provider: 'none',
+    dataSource: 'disabled',
+    updatedAt: new Date().toISOString(),
+    fallbackReason: 'ODDS_API_DISABLED',
+    markets: [],
+    meta: {
+      message: 'Odds API is not enabled.',
+    },
+  }
+}
+
+function sendRawJson(response, statusCode, body, headers = {}) {
+  response.writeHead(statusCode, {
+    'Content-Type': 'application/json; charset=utf-8',
+    ...headers,
+  })
+  response.end(JSON.stringify(body))
+}
+
 function normalizeStatus(status) {
   if (status === 'FINISHED' || status === 'AWARDED') return 'finished'
   if (status === 'IN_PLAY' || status === 'PAUSED' || status === 'LIVE') {
@@ -265,8 +288,24 @@ async function handleMatches(request, response) {
   }
 }
 
+function handleOdds(request, response) {
+  if (request.method !== 'GET') {
+    sendRawJson(response, 405, createDisabledOddsSnapshot(), { Allow: 'GET' })
+    return
+  }
+
+  sendRawJson(response, 200, createDisabledOddsSnapshot(), {
+    'Cache-Control': 's-maxage=60, stale-while-revalidate=300',
+  })
+}
+
 const server = http.createServer((request, response) => {
   const requestUrl = new URL(request.url, `http://${request.headers.host}`)
+
+  if (requestUrl.pathname === '/api/odds') {
+    handleOdds(request, response)
+    return
+  }
 
   if (requestUrl.pathname === '/api/matches') {
     handleMatches(request, response)
