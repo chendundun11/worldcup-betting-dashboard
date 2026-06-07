@@ -6,9 +6,9 @@ const servicePath = 'src/services/teamFormApi.js'
 const mockPath = 'src/data/mockTeamFormSnapshot.js'
 const appPath = 'src/App.jsx'
 const betEnginePath = 'src/services/betEngine.js'
+const matchApiPath = 'src/services/matchApi.js'
 const packagePath = 'package.json'
 const apiMatchesPath = 'api/matches.js'
-const apiOddsPath = 'api/odds.js'
 const databaseUrlToken = 'DATABASE_' + 'URL'
 
 function assert(condition, message) {
@@ -29,6 +29,8 @@ for (const path of [
   mockPath,
   appPath,
   betEnginePath,
+  matchApiPath,
+  apiMatchesPath,
   packagePath,
 ]) {
   assert(existsSync(path), `${path} must exist.`)
@@ -58,7 +60,16 @@ assert(serviceText.includes("'/api/team-form'") || serviceText.includes('"/api/t
 assert(!/src\/services\/teamFormApi|src\\services\\teamFormApi/.test(apiText), 'Team form API endpoint must not import frontend team form service.')
 assert(!/openai|\bgpt\b/i.test(mockText), 'Mock team form snapshot must not mention OpenAI or GPT.')
 
-for (const path of [packagePath, apiMatchesPath, apiOddsPath]) {
+for (const path of [
+  apiPath,
+  servicePath,
+  mockPath,
+  appPath,
+  betEnginePath,
+  matchApiPath,
+  apiMatchesPath,
+  packagePath,
+]) {
   const status = git(['status', '--short', '--', path])
   assert(!status, `${path} must not be modified.`)
 }
