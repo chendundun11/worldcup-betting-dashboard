@@ -65,7 +65,6 @@ for (const path of [
   servicePath,
   mockPath,
   appPath,
-  betEnginePath,
   matchApiPath,
   apiMatchesPath,
   packagePath,

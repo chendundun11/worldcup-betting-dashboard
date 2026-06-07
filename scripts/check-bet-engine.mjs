@@ -1,10 +1,17 @@
-import buildBetPlan from '../src/services/betEngine.js'
+import buildBetPlan, { getRemoteOddsSignal } from '../src/services/betEngine.js'
 import { localOdds } from '../src/data/localOdds.js'
 import { TEAM_PROFILES } from '../src/data/teamProfiles.js'
 import { SQUAD_INSIGHTS } from '../src/data/squadInsights.js'
 
 const BANKROLL = 10000
 const MAX_STAKE_PER_MATCH = 500
+const recommendLevelRank = {
+  观望: 0,
+  轻仓试探: 1,
+  标准参考: 2,
+  强参考: 3,
+  极强参考: 4,
+}
 const forbiddenPublicWords = [
   '必' + '中',
   '稳' + '赢',
@@ -251,6 +258,37 @@ function assertRiskPlanDoesNotGrow(baselinePlan, nextPlan, name) {
     assert(nextPlan.totalStake === 0, `${name}: 低分 totalStake 必须为 0`)
     assert(nextPlan.mainPick.action === 'observe', `${name}: 低分 mainPick 必须观望`)
   }
+}
+
+function getScorePrediction(plan) {
+  return plan.scorePicks.map(({ score, highVariance, note }) => ({
+    score,
+    highVariance,
+    note,
+  }))
+}
+
+function assertRemoteOddsDoesNotPromote(baselinePlan, nextPlan, name) {
+  assert(nextPlan.betScore <= baselinePlan.betScore, `${name}: remoteOdds 不得提高 betScore`)
+  assert(
+    recommendLevelRank[nextPlan.recommendLevel] <= recommendLevelRank[baselinePlan.recommendLevel],
+    `${name}: remoteOdds 不得提高 recommendLevel`,
+  )
+  assert(nextPlan.totalStake <= baselinePlan.totalStake, `${name}: remoteOdds 不得提高 totalStake`)
+  assert(
+    JSON.stringify(nextPlan.mainPick) === JSON.stringify(baselinePlan.mainPick),
+    `${name}: remoteOdds 不得改变 mainPick`,
+  )
+  assert(
+    JSON.stringify(nextPlan.secondaryPick) === JSON.stringify(baselinePlan.secondaryPick),
+    `${name}: remoteOdds 不得改变 secondaryPick`,
+  )
+  assert(
+    JSON.stringify(getScorePrediction(nextPlan)) ===
+      JSON.stringify(getScorePrediction(baselinePlan)),
+    `${name}: remoteOdds 不得改变比分预测`,
+  )
+  assertPositiveScorePartsDoNotGrow(baselinePlan, nextPlan, name)
 }
 
 function compact(plan) {
@@ -526,6 +564,162 @@ assert(
 assert(
   !/(totalStake|stakePlan|bankroll)/.test(lightDataInternalText),
   '新增风险字段测试: internalAnalysis 不应包含公开金额字段',
+)
+
+const remoteOddsBaseMatch = samples.find((sample) => sample.target === 'standard').match
+const remoteOddsBaselinePlan = buildBetPlan(remoteOddsBaseMatch, {
+  bankroll: BANKROLL,
+  maxStakePerMatch: MAX_STAKE_PER_MATCH,
+})
+const missingRemoteOddsPlan = buildBetPlan(
+  { ...remoteOddsBaseMatch, remoteOdds: undefined },
+  {
+    bankroll: BANKROLL,
+    maxStakePerMatch: MAX_STAKE_PER_MATCH,
+  },
+)
+
+assert(
+  JSON.stringify(missingRemoteOddsPlan) === JSON.stringify(remoteOddsBaselinePlan),
+  '缺失 remoteOdds 时，BetEngine 输出必须与当前基线一致',
+)
+
+const safeRemoteOdds = {
+  status: 'available',
+  provider: 'the-odds-api',
+  dataSource: 'remote',
+  updatedAt: '2026-06-07T00:00:00.000Z',
+  marketStatus: 'available',
+  marketTone: 'neutral',
+  oddsConfidence: 'high',
+  valueFlags: [],
+  riskFlags: [],
+  reviewPoints: [],
+  riskNotes: [],
+  fallbackReason: null,
+  rawAvailable: true,
+  bookmakers: [{ sentinel: 'BOOKMAKER_SENTINEL' }],
+  mainMarkets: { sentinel: 'MAIN_MARKETS_SENTINEL' },
+  markets: { sentinel: 'MARKETS_SENTINEL' },
+  handicap: { sentinel: 'HANDICAP_SENTINEL' },
+  totalGoals: { sentinel: 'TOTAL_GOALS_SENTINEL' },
+  favoriteSide: 'away',
+  rawResponse: { sentinel: 'RAW_RESPONSE_SENTINEL' },
+}
+
+function buildRemoteOddsPlan(name, overrides = {}) {
+  const plan = buildBetPlan(
+    {
+      ...remoteOddsBaseMatch,
+      remoteOdds: {
+        ...safeRemoteOdds,
+        ...overrides,
+      },
+    },
+    {
+      bankroll: BANKROLL,
+      maxStakePerMatch: MAX_STAKE_PER_MATCH,
+    },
+  )
+
+  assertRemoteOddsDoesNotPromote(remoteOddsBaselinePlan, plan, name)
+  return plan
+}
+
+const safeRemoteOddsPlan = buildRemoteOddsPlan('真实 remoteOdds 安全基线')
+const conflictRemoteOddsPlan = buildRemoteOddsPlan('odds_conflict 风险', {
+  marketTone: 'odds-conflict',
+  valueFlags: ['odds_conflict'],
+})
+const favoriteHeatRemoteOddsPlan = buildRemoteOddsPlan('favorite_too_hot 风险', {
+  marketTone: 'favorite-heated',
+  valueFlags: ['favorite_too_hot'],
+})
+const overHeatRemoteOddsPlan = buildRemoteOddsPlan('over_line_hot 风险', {
+  valueFlags: ['over_line_hot'],
+})
+const unavailableRemoteOddsPlan = buildRemoteOddsPlan('远端赔率不可用风险', {
+  rawAvailable: false,
+  marketStatus: 'missing',
+  oddsConfidence: 'low',
+  fallbackReason: 'ODDS_API_FAILED',
+})
+
+assert(
+  safeRemoteOddsPlan.betScore === remoteOddsBaselinePlan.betScore,
+  'rawAvailable true / oddsConfidence high / provider the-odds-api 不得提高 betScore',
+)
+for (const [name, plan] of [
+  ['odds_conflict', conflictRemoteOddsPlan],
+  ['favorite_too_hot', favoriteHeatRemoteOddsPlan],
+  ['over_line_hot', overHeatRemoteOddsPlan],
+  ['remote unavailable', unavailableRemoteOddsPlan],
+]) {
+  assert(
+    plan.betScore <= remoteOddsBaselinePlan.betScore,
+    `${name}: remoteOdds 风险只能降低或保持 betScore`,
+  )
+}
+assert(
+  conflictRemoteOddsPlan.betScore < remoteOddsBaselinePlan.betScore,
+  'odds_conflict 必须触发信息扣分',
+)
+assert(
+  favoriteHeatRemoteOddsPlan.betScore < remoteOddsBaselinePlan.betScore,
+  'favorite_too_hot 必须触发过热扣分',
+)
+assert(
+  overHeatRemoteOddsPlan.betScore < remoteOddsBaselinePlan.betScore,
+  'over_line_hot 必须触发过热扣分',
+)
+
+const remoteSignal = getRemoteOddsSignal({
+  remoteOdds: {
+    ...safeRemoteOdds,
+    unknownField: { nested: true },
+  },
+})
+assert(remoteSignal.hasRemoteOdds === true, 'getRemoteOddsSignal 必须识别 remoteOdds')
+assert(remoteSignal.rawAvailable === true, 'getRemoteOddsSignal 必须保留 rawAvailable')
+assert(remoteSignal.riskPenalty === 0, '安全 remoteOdds 不得产生正向或隐藏风险分')
+assert(remoteSignal.infoPenalty === 0, '高置信真实 remoteOdds 不得产生正向信息分')
+
+const remoteInternalText = JSON.stringify(unavailableRemoteOddsPlan.internalAnalysis)
+for (const forbiddenValue of [
+  'BOOKMAKER_SENTINEL',
+  'MAIN_MARKETS_SENTINEL',
+  'MARKETS_SENTINEL',
+  'HANDICAP_SENTINEL',
+  'TOTAL_GOALS_SENTINEL',
+  'RAW_RESPONSE_SENTINEL',
+]) {
+  assert(
+    !remoteInternalText.includes(forbiddenValue),
+    `remoteOdds 轻量摘要不得包含 ${forbiddenValue}`,
+  )
+}
+assert(
+  !Object.prototype.hasOwnProperty.call(
+    unavailableRemoteOddsPlan.internalAnalysis.remoteOddsSignal,
+    'bookmakers',
+  ),
+  'internalAnalysis.remoteOddsSignal 不得包含 bookmakers',
+)
+assert(
+  unavailableRemoteOddsPlan.dataQuality.remoteOdds?.rawAvailable === false,
+  'dataQuality 必须记录 remoteOdds.rawAvailable',
+)
+assert(
+  unavailableRemoteOddsPlan.cancelRules.some((rule) => rule.includes('真实赔率不可用')),
+  '远端赔率不可用时必须加入取消或观望规则',
+)
+assert(
+  conflictRemoteOddsPlan.scoreBreakdown.infoPenalty.reason.includes('赔率来源存在冲突'),
+  'odds_conflict 必须进入中文风险解释',
+)
+assert(
+  favoriteHeatRemoteOddsPlan.scoreBreakdown.heatPenalty.reason.includes('热门方向定价偏热'),
+  'favorite_too_hot 必须进入中文风险解释',
 )
 
 if (boundarySamples.extreme.plan.betScore >= 85) {

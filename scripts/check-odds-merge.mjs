@@ -39,7 +39,21 @@ const packageText = readText(packagePath)
 
 assert(mergeText.includes('export function mergeOddsIntoMatches'), 'oddsMerge must export mergeOddsIntoMatches.')
 assert(!/oddsMerge|mergeOddsIntoMatches/.test(appText), 'App.jsx must not reference oddsMerge.')
-assert(!/oddsMerge|mergeOddsIntoMatches|remoteOdds/.test(betEngineText), 'BetEngine must not reference oddsMerge or remoteOdds.')
+assert(!/oddsMerge|mergeOddsIntoMatches/.test(betEngineText), 'BetEngine must not reference the odds merge layer.')
+assert(
+  betEngineText.includes('export function getRemoteOddsSignal(match)'),
+  'BetEngine must isolate remoteOdds reads in getRemoteOddsSignal.',
+)
+assert(
+  !/remoteOdds\??\.(bookmakers|mainMarkets|markets|handicap|totalGoals|favoriteSide)\b/.test(
+    betEngineText,
+  ),
+  'BetEngine must not read remote odds values, bookmakers, handicap, totals, or favorite direction.',
+)
+assert(
+  !/fetch\s*\(|getOddsSnapshot|\/api\/odds/.test(betEngineText),
+  'BetEngine remote odds consumption must remain read-only and network-free.',
+)
 assert(!/remoteOdds/.test(matchApiText), 'matchApi must not read or write remoteOdds directly.')
 
 const packageStatus = git(['status', '--short', '--', packagePath])

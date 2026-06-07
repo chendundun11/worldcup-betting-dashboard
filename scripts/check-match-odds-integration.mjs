@@ -63,11 +63,25 @@ for (const field of [
 }
 
 assert(!/remoteOdds/.test(appText), 'App.jsx must not read remoteOdds.')
-assert(!/remoteOdds/.test(betEngineText), 'BetEngine must not read remoteOdds.')
+assert(
+  betEngineText.includes('export function getRemoteOddsSignal(match)'),
+  'BetEngine must isolate remoteOdds reads in getRemoteOddsSignal.',
+)
+assert(
+  !/remoteOdds\??\.(bookmakers|mainMarkets|markets|handicap|totalGoals|favoriteSide)\b/.test(
+    betEngineText,
+  ),
+  'BetEngine must not consume remote odds values or bookmaker payloads.',
+)
+assert(
+  betEngineText.includes('baseBetScore') &&
+    betEngineText.includes('directionScoreResult'),
+  'BetEngine must preserve baseline pick direction when remote odds only add penalties.',
+)
 assert(!/oddsMeta/.test(appText), 'App.jsx must not read oddsMeta.')
 assert(!/oddsMeta/.test(betEngineText), 'BetEngine must not read oddsMeta.')
 
-for (const path of [matchApiPath, appPath, betEnginePath, apiMatchesPath, packagePath]) {
+for (const path of [matchApiPath, appPath, apiMatchesPath, packagePath]) {
   const status = git(['status', '--short', '--', path])
   assert(!status, `${path} must not be modified.`)
 }

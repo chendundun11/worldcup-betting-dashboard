@@ -112,6 +112,121 @@ function asList(value) {
   return Array.isArray(value) ? value.map((item) => compactText(item)).filter(Boolean) : []
 }
 
+export function getRemoteOddsSignal(match) {
+  const remoteOdds =
+    match?.remoteOdds &&
+    typeof match.remoteOdds === 'object' &&
+    !Array.isArray(match.remoteOdds)
+      ? match.remoteOdds
+      : null
+
+  if (!remoteOdds) {
+    return {
+      hasRemoteOdds: false,
+      rawAvailable: false,
+      provider: null,
+      dataSource: null,
+      status: 'missing',
+      updatedAt: null,
+      marketStatus: 'missing',
+      marketTone: 'unknown',
+      oddsConfidence: 'missing',
+      valueFlags: [],
+      riskFlags: [],
+      reviewPoints: [],
+      riskNotes: [],
+      fallbackReason: null,
+      riskPenalty: 0,
+      infoPenalty: 0,
+      cancelRules: [],
+      summary: null,
+    }
+  }
+
+  const valueFlags = uniqueList(asList(remoteOdds.valueFlags)).slice(0, 12)
+  const riskFlags = uniqueList(asList(remoteOdds.riskFlags)).slice(0, 12)
+  const reviewPoints = uniqueList(asList(remoteOdds.reviewPoints)).slice(0, 3)
+  const riskNotes = uniqueList(asList(remoteOdds.riskNotes)).slice(0, 3)
+  const provider = compactText(remoteOdds.provider)
+  const dataSource = compactText(remoteOdds.dataSource)
+  const status = compactText(remoteOdds.status) ?? 'unknown'
+  const updatedAt = compactText(remoteOdds.updatedAt)
+  const marketStatus = compactText(remoteOdds.marketStatus) ?? 'missing'
+  const marketTone = compactText(remoteOdds.marketTone) ?? 'unknown'
+  const oddsConfidence = compactText(remoteOdds.oddsConfidence) ?? 'missing'
+  const fallbackReason = compactText(remoteOdds.fallbackReason)
+  const rawAvailable = remoteOdds.rawAvailable === true
+  const hasOddsConflict =
+    marketTone === 'odds-conflict' ||
+    valueFlags.includes('odds_conflict') ||
+    riskFlags.includes('odds_conflict')
+  const hasFavoriteHeat =
+    marketTone === 'favorite-heated' ||
+    valueFlags.includes('favorite_too_hot') ||
+    valueFlags.includes('favoritePriceThin')
+  const hasOverHeat =
+    valueFlags.includes('over_line_hot') ||
+    riskFlags.includes('over_line_hot')
+  const hasDeepHandicapRisk = riskFlags.includes('deepHandicapReviewRequired')
+
+  let riskPenalty = 0
+  let infoPenalty = 0
+
+  if (hasFavoriteHeat) riskPenalty += 2
+  if (hasOverHeat) riskPenalty += 1
+  if (hasDeepHandicapRisk) riskPenalty += 1
+  if (!rawAvailable) infoPenalty += 1
+  if (oddsConfidence === 'low') infoPenalty += 1
+  if (marketStatus === 'missing') infoPenalty += 3
+  else if (marketStatus === 'stale') infoPenalty += 1
+  if (hasOddsConflict) infoPenalty += 2
+  if (fallbackReason) infoPenalty += 2
+
+  const cancelRules = uniqueList([
+    hasOddsConflict && '赔率来源存在明显冲突，临场必须复核，无法确认时取消或降级。',
+    hasFavoriteHeat && '热门方向定价偏热，若继续下压则降级或取消。',
+    hasOverHeat && '大小球方向定价偏热，降低比分玩法权重并复核进球线。',
+    hasDeepHandicapRisk && '深盘结构需要复核，盘口继续加深时不追高。',
+    (!rawAvailable || marketStatus === 'missing') &&
+      '真实赔率不可用或市场数据缺失，保持观望。',
+    marketStatus === 'stale' && '赔率快照可能过期，更新前取消或降级。',
+    oddsConfidence === 'low' && '赔率置信度偏低，临场确认前取消或降级。',
+    fallbackReason && '赔率接口已进入回退状态，恢复真实数据前保持观望。',
+    reviewPoints.length && `赔率复核：${formatList(reviewPoints, 2)}，不确认时取消或降级。`,
+    riskNotes.length && `赔率风险：${formatList(riskNotes, 2)}，与临场信息冲突时降级。`,
+  ])
+  const summaryParts = [
+    rawAvailable
+      ? '真实赔率已接入，但仅用于风险复核，不进入正向评分。'
+      : '远端赔率不可用或仅为回退数据，按信息不足降权。',
+    hasOddsConflict && '赔率来源存在冲突，降低推荐强度。',
+    hasFavoriteHeat && '热门方向定价偏热，触发降级观察。',
+    hasOverHeat && '大小球方向定价偏热，需要复核进球线。',
+    oddsConfidence === 'low' && '赔率数据置信度偏低，需要临场复核。',
+  ].filter(Boolean)
+
+  return {
+    hasRemoteOdds: true,
+    rawAvailable,
+    provider,
+    dataSource,
+    status,
+    updatedAt,
+    marketStatus,
+    marketTone,
+    oddsConfidence,
+    valueFlags,
+    riskFlags,
+    reviewPoints,
+    riskNotes,
+    fallbackReason,
+    riskPenalty: Math.min(riskPenalty, 5),
+    infoPenalty: Math.min(infoPenalty, 7),
+    cancelRules,
+    summary: summaryParts.join(''),
+  }
+}
+
 function uniqueList(values) {
   return [...new Set(values.filter(Boolean))]
 }
@@ -621,8 +736,10 @@ function getUpsetElasticityScore(odds, valueEdge) {
   return 0
 }
 
-function getHeatPenalty(match, odds, valueEdge) {
-  if (!odds.hasOneXTwo) return 0
+function getHeatPenalty(match, odds, valueEdge, remoteOddsSignal = null) {
+  if (!odds.hasOneXTwo) {
+    return clamp(-(remoteOddsSignal?.riskPenalty ?? 0), -20, 0)
+  }
 
   const favorite = getFavoriteOutcome(odds)
   const favoriteOdd = odds[favorite]
@@ -633,11 +750,12 @@ function getHeatPenalty(match, odds, valueEdge) {
   if (favoriteOdd < 1.55 && valueEdge.edges[favorite] < 0.02) penalty -= 6
   if (favorite === valueEdge.bestOutcome && valueEdge.bestEdge < 0.015) penalty -= 4
   penalty -= lightDataAdjustments.heatPenalty
+  penalty -= remoteOddsSignal?.riskPenalty ?? 0
 
   return clamp(penalty, -20, 0)
 }
 
-function getInfoPenalty(match, odds, valueEdge) {
+function getInfoPenalty(match, odds, valueEdge, remoteOddsSignal = null) {
   let penalty = 0
 
   if (!odds.hasOneXTwo) penalty -= 8
@@ -646,6 +764,7 @@ function getInfoPenalty(match, odds, valueEdge) {
   if (valueEdge.limitations.length) penalty -= Math.min(4, valueEdge.limitations.length * 2)
   if (!match?.oddsHistory?.length) penalty -= 2
   penalty -= getLightDataAdjustments(match).infoPenalty
+  penalty -= remoteOddsSignal?.infoPenalty ?? 0
 
   return clamp(penalty, -15, 0)
 }
@@ -653,6 +772,9 @@ function getInfoPenalty(match, odds, valueEdge) {
 export function calculateBetScore(match) {
   const odds = getOdds(match)
   const valueEdge = calculateValueEdge(match)
+  const remoteOddsSignal = getRemoteOddsSignal(match)
+  const baseHeatPenalty = getHeatPenalty(match, odds, valueEdge)
+  const baseInfoPenalty = getInfoPenalty(match, odds, valueEdge)
   const scoreParts = {
     valueEdge: getValueEdgeScore(valueEdge),
     directionClarity: getDirectionClarityScore(odds, valueEdge),
@@ -660,17 +782,26 @@ export function calculateBetScore(match) {
     recentAttackDefense: getRecentAttackDefenseScore(match),
     marketStability: getMarketStabilityScore(match, odds, valueEdge),
     upsetElasticity: getUpsetElasticityScore(odds, valueEdge),
-    heatPenalty: getHeatPenalty(match, odds, valueEdge),
-    infoPenalty: getInfoPenalty(match, odds, valueEdge),
+    heatPenalty: getHeatPenalty(match, odds, valueEdge, remoteOddsSignal),
+    infoPenalty: getInfoPenalty(match, odds, valueEdge, remoteOddsSignal),
+  }
+  const baseScoreParts = {
+    ...scoreParts,
+    heatPenalty: baseHeatPenalty,
+    infoPenalty: baseInfoPenalty,
   }
 
   const rawScore = Object.values(scoreParts).reduce((sum, value) => sum + value, 0)
+  const baseRawScore = Object.values(baseScoreParts).reduce((sum, value) => sum + value, 0)
   const betScore = clamp(Math.round(rawScore), 0, 100)
+  const baseBetScore = clamp(Math.round(baseRawScore), 0, 100)
 
   return {
     betScore,
+    baseBetScore,
     scoreParts,
     valueEdge,
+    remoteOddsSignal,
   }
 }
 
@@ -680,6 +811,16 @@ function buildScoreBreakdown(match, scoreResult) {
   const favorite = odds.hasOneXTwo ? getFavoriteOutcome(odds) : 'none'
   const powerDiff = round(getPowerDiff(match), 1)
   const lightReasonNotes = getLightDataReasonNotes(match)
+  const remoteOddsSignal = scoreResult.remoteOddsSignal
+  const remoteHeatNotes =
+    remoteOddsSignal?.hasRemoteOdds && remoteOddsSignal.riskPenalty > 0
+      ? [remoteOddsSignal.summary]
+      : []
+  const remoteInfoNotes =
+    remoteOddsSignal?.hasRemoteOdds &&
+    (remoteOddsSignal.infoPenalty > 0 || remoteOddsSignal.rawAvailable)
+      ? [remoteOddsSignal.summary]
+      : []
   const oddsSourceText =
     valueEdge.oddsSource === 'localSnapshot'
       ? '本地赔率快照'
@@ -697,13 +838,13 @@ function buildScoreBreakdown(match, scoreResult) {
     scoreResult.scoreParts.heatPenalty < 0
       ? '热门方向赔率偏低或价值不足，V1 按静态过热信号降权。'
       : '未触发静态过热扣分。',
-    lightReasonNotes.heat,
+    [...remoteHeatNotes, ...lightReasonNotes.heat],
   )
   const infoPenaltyReason = appendReason(
     scoreResult.scoreParts.infoPenalty < 0
       ? '盘口变化、真实伤停、预计首发或模型来源存在缺口，按信息不足降权。'
       : '当前输入未触发明显信息缺口扣分。',
-    lightReasonNotes.info,
+    [...remoteInfoNotes, ...lightReasonNotes.info],
     3,
   )
 
@@ -931,7 +1072,7 @@ export function buildUpsetPick(match, scoreParts) {
   }
 }
 
-export function buildCancelRules(match, scoreParts) {
+export function buildCancelRules(match, scoreParts, remoteOddsSignal = null) {
   const rules = []
 
   if (scoreParts?.betScore < 55) {
@@ -943,6 +1084,7 @@ export function buildCancelRules(match, scoreParts) {
   }
 
   rules.push(
+    ...(remoteOddsSignal?.cancelRules ?? []),
     ...getLightCancelRules(match),
     '临场阵容明显不利时取消或降级。',
     '盘口反向变化且无法解释时取消。',
@@ -1064,7 +1206,7 @@ function getModelProbabilityQuality(match, valueEdge) {
   return 'missing'
 }
 
-function getDataQuality(match, valueEdge) {
+function getDataQuality(match, valueEdge, remoteOddsSignal = null) {
   const odds = getOdds(match)
   const lightDataLayer = buildLightDataLayer(match)
   const squads = getLightSquads(lightDataLayer)
@@ -1112,6 +1254,19 @@ function getDataQuality(match, valueEdge) {
   if (profiles.some((profile) => toNumber(profile.upsetRisk) >= 55)) {
     limitations.push('teamUpsetRiskReview')
   }
+  if (remoteOddsSignal?.hasRemoteOdds) {
+    if (!remoteOddsSignal.rawAvailable) limitations.push('remoteOddsRawUnavailable')
+    if (remoteOddsSignal.oddsConfidence === 'low') limitations.push('remoteOddsConfidenceLow')
+    if (remoteOddsSignal.marketStatus === 'missing') limitations.push('remoteOddsMarketMissing')
+    if (remoteOddsSignal.marketStatus === 'stale') limitations.push('remoteOddsMarketStale')
+    if (
+      remoteOddsSignal.valueFlags.includes('odds_conflict') ||
+      remoteOddsSignal.riskFlags.includes('odds_conflict')
+    ) {
+      limitations.push('remoteOddsConflict')
+    }
+    if (remoteOddsSignal.fallbackReason) limitations.push('remoteOddsFallback')
+  }
 
   return {
     odds: odds.source,
@@ -1130,6 +1285,22 @@ function getDataQuality(match, valueEdge) {
     rotationRisk,
     injuryDataQuality,
     limitations,
+    ...(remoteOddsSignal?.hasRemoteOdds
+      ? {
+          remoteOdds: {
+            hasRemoteOdds: true,
+            rawAvailable: remoteOddsSignal.rawAvailable,
+            provider: remoteOddsSignal.provider,
+            dataSource: remoteOddsSignal.dataSource,
+            status: remoteOddsSignal.status,
+            updatedAt: remoteOddsSignal.updatedAt,
+            oddsConfidence: remoteOddsSignal.oddsConfidence,
+            marketStatus: remoteOddsSignal.marketStatus,
+            riskFlags: remoteOddsSignal.riskFlags,
+            valueFlags: remoteOddsSignal.valueFlags,
+          },
+        }
+      : {}),
   }
 }
 
@@ -1156,8 +1327,12 @@ export function buildBetPlan(match, options = {}) {
   )
   const scoreResult = calculateBetScore(match)
   const recommendLevel = getRecommendLevel(scoreResult.betScore).label
-  const mainPick = buildMainPick(match, scoreResult)
-  const secondaryPick = buildSecondaryPick(match, scoreResult)
+  const directionScoreResult = {
+    ...scoreResult,
+    betScore: scoreResult.baseBetScore,
+  }
+  const mainPick = buildMainPick(match, directionScoreResult)
+  const secondaryPick = buildSecondaryPick(match, directionScoreResult)
   const scorePicks = buildScorePicks(match, mainPick)
   const stakeResult = buildStakePlan(
     scoreResult.betScore,
@@ -1170,8 +1345,12 @@ export function buildBetPlan(match, options = {}) {
   const cancelRules = buildCancelRules(match, {
     ...scoreResult.scoreParts,
     betScore: scoreResult.betScore,
-  })
-  const dataQuality = getDataQuality(match, scoreResult.valueEdge)
+  }, scoreResult.remoteOddsSignal)
+  const dataQuality = getDataQuality(
+    match,
+    scoreResult.valueEdge,
+    scoreResult.remoteOddsSignal,
+  )
   const scoreBreakdown = buildScoreBreakdown(match, scoreResult)
   const lightDataAdjustments = getLightDataAdjustments(match)
   const plan = {
@@ -1219,6 +1398,13 @@ export function buildBetPlan(match, options = {}) {
         heatPenalty: -lightDataAdjustments.heatPenalty,
         totalPenalty: -lightDataAdjustments.totalPenalty,
       },
+      ...(scoreResult.remoteOddsSignal.hasRemoteOdds
+        ? {
+            remoteOddsSignal: {
+              ...scoreResult.remoteOddsSignal,
+            },
+          }
+        : {}),
       ruleNotes: [
         'GPT 后续只负责解释，不改变方向、评分、金额。',
         'V1 为静态赛前规则引擎，盘口变化历史缺失时自动降权。',

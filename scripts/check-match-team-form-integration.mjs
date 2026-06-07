@@ -77,7 +77,7 @@ assert(!/process\.env|import\.meta\.env|API_KEY|TOKEN|SECRET|X-Auth-Token/i.test
 assert(!new RegExp(`${databaseUrlToken}|@neondatabase|SNAPSHOT_WRITE|internal/snapshots|analysis_snapshots`, 'i').test(apiTeamFormText), 'Team form API endpoint must not touch database or snapshot writes.')
 assert(!/openai|\bgpt\b/i.test(apiTeamFormText), 'Team form API endpoint must not mention OpenAI or GPT.')
 
-for (const path of [matchApiPath, appPath, betEnginePath, apiMatchesPath, apiTeamFormPath, packagePath]) {
+for (const path of [matchApiPath, appPath, apiMatchesPath, apiTeamFormPath, packagePath]) {
   const status = git(['status', '--short', '--', path])
   assert(!status, `${path} must not be modified.`)
 }
