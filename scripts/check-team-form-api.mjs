@@ -114,8 +114,12 @@ assert(adapterText.includes('API_FOOTBALL_PROVIDER_ERRORS'), 'Provider adapter m
 assert(adapterText.includes("providerStage: 'teams_search'"), 'Provider adapter must identify the teams search stage.')
 assert(adapterText.includes("providerStage: 'fixtures_recent'"), 'Provider adapter must identify the recent fixtures stage.')
 assert(adapterText.includes('this.upstreamStatus'), 'Provider adapter errors must expose a sanitized upstreamStatus.')
+assert(adapterText.includes('providerErrorKeys'), 'Provider adapter errors must expose sanitized provider error keys.')
+assert(adapterText.includes('MAX_PROVIDER_ERROR_KEYS = 10'), 'Provider adapter must limit provider error keys.')
 assert(apiText.includes('SAFE_ERROR_CODES'), 'Team form API endpoint must allowlist diagnostic error codes.')
 assert(apiText.includes('SAFE_PROVIDER_STAGES'), 'Team form API endpoint must allowlist provider stages.')
+assert(apiText.includes('providerErrorKeys'), 'Team form API endpoint must expose sanitized provider error keys.')
+assert(apiText.includes('MAX_PROVIDER_ERROR_KEYS = 10'), 'Team form API endpoint must limit provider error keys.')
 assert(!/process\.env|import\.meta\.env/.test(adapterText), 'Provider adapter must receive credentials from the API endpoint.')
 assert(!/src\/services\/teamFormApi|src\\services\\teamFormApi/.test(apiText), 'Team form API endpoint must not import frontend team form service.')
 assert(!/bookmakers|mainMarkets|handicap|totalGoals|oddsConfidence/i.test(adapterText), 'Team form adapter must not return odds structures.')
@@ -213,6 +217,7 @@ const providerErrorCodeValues = new Set([
   'API_FOOTBALL_TEAM_UNMATCHED',
   'API_FOOTBALL_DATA_UNAVAILABLE',
 ])
+const providerErrorKeyPattern = /^[A-Za-z0-9_-]{1,40}$/
 const positivePattern = /guarantee|guaranteed|lock|sure|profit|boost|bonus|positive|must.?bet|recommend|pick|stake|bankroll|guaranteedWin|sureWin|increaseScore|raiseScore|bestBet|heavy/i
 
 function assertMetaShape(meta, label) {
@@ -400,6 +405,22 @@ function assertNoForbiddenResponseKeys(value, label, path = 'body') {
   }
 }
 
+function assertProviderErrorKeys(keys, expectedKeys, label) {
+  assert(Array.isArray(keys), `${label} providerErrorKeys must be an array.`)
+  assert(keys.length <= 10, `${label} providerErrorKeys must contain at most 10 items.`)
+  assert(new Set(keys).size === keys.length, `${label} providerErrorKeys must not contain duplicates.`)
+
+  for (const key of keys) {
+    assert(typeof key === 'string', `${label} providerErrorKeys must contain only strings.`)
+    assert(providerErrorKeyPattern.test(key), `${label} providerErrorKeys must contain only safe short keys.`)
+  }
+
+  assert(
+    JSON.stringify(keys) === JSON.stringify(expectedKeys),
+    `${label} providerErrorKeys must contain only the expected normalized keys.`,
+  )
+}
+
 async function assertEndpointFallback(options) {
   const {
     label,
@@ -408,6 +429,7 @@ async function assertEndpointFallback(options) {
     expectedErrorCode,
     expectedProviderStage,
     expectedUpstreamStatus = null,
+    expectedProviderErrorKeys,
   } = options
   const previousFetch = globalThis.fetch
   const response = createMockResponse()
@@ -431,6 +453,22 @@ async function assertEndpointFallback(options) {
   assert(providerErrorCodeValues.has(response.body.meta.errorCode), `${label} endpoint fallback errorCode must use the safe enum.`)
   assert(providerStageValues.has(response.body.meta.providerStage), `${label} endpoint fallback providerStage must use the safe enum.`)
   assert(response.body.meta?.upstreamStatus === expectedUpstreamStatus, `${label} endpoint fallback must expose only a real upstream HTTP status.`)
+  if (expectedErrorCode === 'API_FOOTBALL_PROVIDER_ERRORS') {
+    assert(
+      Object.prototype.hasOwnProperty.call(response.body.meta, 'providerErrorKeys'),
+      `${label} endpoint fallback must expose providerErrorKeys for provider errors.`,
+    )
+    assertProviderErrorKeys(
+      response.body.meta.providerErrorKeys,
+      expectedProviderErrorKeys ?? [],
+      `${label} endpoint fallback`,
+    )
+  } else {
+    assert(
+      !Object.prototype.hasOwnProperty.call(response.body.meta, 'providerErrorKeys'),
+      `${label} endpoint fallback must not expose providerErrorKeys for unrelated errors.`,
+    )
+  }
   assert(response.body.teams.length === mockSnapshot.teams.length, `${label} endpoint fallback must retain the mock team list.`)
   response.body.teams.forEach((team, index) =>
     assertTeamShape(team, `${label} endpoint fallback team ${index}`),
@@ -444,6 +482,10 @@ async function assertEndpointFallback(options) {
     'raw-private-field-must-not-leak',
     'provider failed',
     'provider fixture failed',
+    'provider-object-value-must-not-leak',
+    'provider-string-secret-must-not-leak',
+    'provider-array-secret-must-not-leak',
+    'provider-array-token-must-not-leak',
     'network down',
   ]) {
     assert(!serialized.includes(forbiddenValue), `${label} endpoint fallback must not expose ${forbiddenValue}.`)
@@ -578,6 +620,7 @@ assert(disabledSnapshot.teams.length === mockSnapshot.teams.length, 'Disabled te
 assert(disabledSnapshot.meta.schemaVersion === 'team-form-snapshot-v1', 'Disabled team form snapshot must expose the schema version.')
 assert(!Object.prototype.hasOwnProperty.call(disabledSnapshot.meta, 'providerStage'), 'Disabled team form snapshot must not expose a misleading providerStage.')
 assert(!Object.prototype.hasOwnProperty.call(disabledSnapshot.meta, 'errorCode'), 'Disabled team form snapshot must not expose a misleading provider errorCode.')
+assert(!Object.prototype.hasOwnProperty.call(disabledSnapshot.meta, 'providerErrorKeys'), 'Disabled team form snapshot must not expose misleading providerErrorKeys.')
 
 const fallbackSnapshot = createFallbackTeamFormSnapshot()
 assertDisabledShape(fallbackSnapshot, 'createFallbackTeamFormSnapshot')
@@ -603,6 +646,7 @@ try {
   assert(getResponse.body.teams.length === mockSnapshot.teams.length, 'GET /api/team-form must return mock fallback teams.')
   assert(!Object.prototype.hasOwnProperty.call(getResponse.body.meta, 'providerStage'), 'Default GET /api/team-form must not expose a providerStage.')
   assert(!Object.prototype.hasOwnProperty.call(getResponse.body.meta, 'errorCode'), 'Default GET /api/team-form must not expose a provider errorCode.')
+  assert(!Object.prototype.hasOwnProperty.call(getResponse.body.meta, 'providerErrorKeys'), 'Default GET /api/team-form must not expose providerErrorKeys.')
   assert(supplierCallCount === 0, 'Default GET /api/team-form must not call the supplier.')
 
   const postResponse = createMockResponse()
@@ -626,6 +670,7 @@ try {
   assert(missingKeyResponse.body.meta.error === 'TEAM_FORM_API_KEY_MISSING', 'Missing key fallback must expose only a safe error code.')
   assert(missingKeyResponse.body.meta.errorCode === 'API_FOOTBALL_KEY_MISSING', 'Missing key fallback must expose a safe diagnostic errorCode.')
   assert(missingKeyResponse.body.meta.providerStage === 'unknown', 'Missing key fallback must not claim that a provider request stage ran.')
+  assert(!Object.prototype.hasOwnProperty.call(missingKeyResponse.body.meta, 'providerErrorKeys'), 'Missing key fallback must not expose providerErrorKeys.')
   assert(supplierCallCount === 0, 'Missing key fallback must not call the supplier.')
 
   process.env.API_FOOTBALL_KEY = 'test-key-not-real'
@@ -747,14 +792,42 @@ try {
       expectedFallbackReason: 'TEAM_FORM_API_PROVIDER_ERROR',
       expectedErrorCode: 'API_FOOTBALL_PROVIDER_ERRORS',
       expectedProviderStage: 'teams_search',
+      expectedProviderErrorKeys: [
+        'requests',
+        'subscription',
+        'plan',
+        'access',
+        'token',
+        'parameters',
+        'endpoint',
+        'quota',
+        'season',
+        'league',
+      ],
       fetchImpl: async () => createSupplierResponse({
         payload: [{ raw_private_field: 'raw-private-field-must-not-leak' }],
         errors: {
-          provider: 'provider failed',
-          rawResponse: 'raw-response-must-not-leak',
-          headers: {
-            authorization: 'provider-header-must-not-leak',
+          requests: {
+            message: 'provider-object-value-must-not-leak',
+            rawResponse: 'raw-response-must-not-leak',
+            headers: {
+              authorization: 'provider-header-must-not-leak',
+            },
           },
+          subscription: 'provider-object-value-must-not-leak',
+          plan: 'provider-object-value-must-not-leak',
+          access: 'provider-object-value-must-not-leak',
+          token: 'provider-object-value-must-not-leak',
+          parameters: 'provider-object-value-must-not-leak',
+          endpoint: 'provider-object-value-must-not-leak',
+          quota: 'provider-object-value-must-not-leak',
+          season: 'provider-object-value-must-not-leak',
+          league: 'provider-object-value-must-not-leak',
+          extra_one: 'provider-object-value-must-not-leak',
+          extra_two: 'provider-object-value-must-not-leak',
+          'bad key': 'provider-object-value-must-not-leak',
+          'https://bad.example': 'provider-object-value-must-not-leak',
+          ['x'.repeat(41)]: 'provider-object-value-must-not-leak',
         },
       }),
     },
@@ -763,6 +836,7 @@ try {
       expectedFallbackReason: 'TEAM_FORM_API_PROVIDER_ERROR',
       expectedErrorCode: 'API_FOOTBALL_PROVIDER_ERRORS',
       expectedProviderStage: 'fixtures_recent',
+      expectedProviderErrorKeys: ['access', 'parameters'],
       fetchImpl: async (url) => {
         if (url.pathname === '/teams') {
           return createSupplierResponse({
@@ -772,14 +846,44 @@ try {
         return createSupplierResponse({
           payload: [{ raw_private_field: 'raw-private-field-must-not-leak' }],
           errors: {
-            provider: 'provider fixture failed',
-            rawResponse: 'raw-response-must-not-leak',
-            headers: {
-              authorization: 'provider-header-must-not-leak',
+            access: {
+              message: 'provider fixture failed',
+              rawResponse: 'raw-response-must-not-leak',
+              headers: {
+                authorization: 'provider-header-must-not-leak',
+              },
             },
+            parameters: 'provider-object-value-must-not-leak',
           },
         })
       },
+    },
+    {
+      label: 'provider response errors string',
+      expectedFallbackReason: 'TEAM_FORM_API_PROVIDER_ERROR',
+      expectedErrorCode: 'API_FOOTBALL_PROVIDER_ERRORS',
+      expectedProviderStage: 'teams_search',
+      expectedProviderErrorKeys: ['unknown'],
+      fetchImpl: async () => createSupplierResponse({
+        payload: [],
+        errors: 'provider-string-secret-must-not-leak',
+      }),
+    },
+    {
+      label: 'provider response errors array',
+      expectedFallbackReason: 'TEAM_FORM_API_PROVIDER_ERROR',
+      expectedErrorCode: 'API_FOOTBALL_PROVIDER_ERRORS',
+      expectedProviderStage: 'teams_search',
+      expectedProviderErrorKeys: ['unknown'],
+      fetchImpl: async () => createSupplierResponse({
+        payload: [],
+        errors: [
+          'provider-array-secret-must-not-leak',
+          {
+            token: 'provider-array-token-must-not-leak',
+          },
+        ],
+      }),
     },
     {
       label: 'timeout',
@@ -867,6 +971,7 @@ async function assertAdapterError(
   expectedErrorCode,
   expectedProviderStage = 'teams_search',
   expectedStatus = null,
+  expectedProviderErrorKeys,
 ) {
   let caught = null
 
@@ -889,6 +994,18 @@ async function assertAdapterError(
   assert(caught.status === expectedStatus, `${expectedCode} must expose only a real upstream HTTP status.`)
   assert(providerErrorCodeValues.has(caught.errorCode), `${expectedCode} errorCode must use the safe enum.`)
   assert(providerStageValues.has(caught.providerStage), `${expectedCode} providerStage must use the safe enum.`)
+  if (expectedErrorCode === 'API_FOOTBALL_PROVIDER_ERRORS') {
+    assertProviderErrorKeys(
+      caught.providerErrorKeys,
+      expectedProviderErrorKeys ?? [],
+      expectedCode,
+    )
+  } else {
+    assert(
+      !Object.prototype.hasOwnProperty.call(caught, 'providerErrorKeys'),
+      `${expectedCode} must not expose providerErrorKeys for unrelated errors.`,
+    )
+  }
   assert(!caught.message.includes('test-key-not-real'), `${expectedCode} must not expose the API key.`)
 }
 
@@ -942,6 +1059,48 @@ await assertAdapterError(
   { payload: [], errors: { key: 'bad key' } },
   'TEAM_FORM_API_PROVIDER_ERROR',
   'API_FOOTBALL_PROVIDER_ERRORS',
+  'teams_search',
+  null,
+  ['key'],
+)
+
+const sanitizedProviderKeysError = new ApiFootballTeamFormError(
+  'TEAM_FORM_API_PROVIDER_ERROR',
+  {
+    providerErrorKeys: [
+      'requests',
+      'subscription',
+      'plan',
+      'access',
+      'token',
+      'parameters',
+      'endpoint',
+      'quota',
+      'season',
+      'league',
+      'extra_one',
+      'bad key',
+      'x'.repeat(41),
+      'requests',
+      42,
+    ],
+  },
+)
+assertProviderErrorKeys(
+  sanitizedProviderKeysError.providerErrorKeys,
+  [
+    'requests',
+    'subscription',
+    'plan',
+    'access',
+    'token',
+    'parameters',
+    'endpoint',
+    'quota',
+    'season',
+    'league',
+  ],
+  'Sanitized provider error',
 )
 
 const sanitizedDiagnosticError = new ApiFootballTeamFormError(

@@ -28,6 +28,8 @@ const ERROR_CODE_BY_LEGACY_CODE = new Map([
 ])
 
 const SAFE_ERROR_CODES = new Set(ERROR_CODE_BY_LEGACY_CODE.values())
+const PROVIDER_ERROR_KEY_PATTERN = /^[A-Za-z0-9_-]{1,40}$/
+const MAX_PROVIDER_ERROR_KEYS = 10
 
 const TEAM_NAME_ALIASES = new Map([
   ['czechia', 'Czech Republic'],
@@ -57,6 +59,11 @@ export class ApiFootballTeamFormError extends Error {
         ? options.status
         : null
     this.status = this.upstreamStatus
+    if (this.errorCode === 'API_FOOTBALL_PROVIDER_ERRORS') {
+      this.providerErrorKeys = sanitizeProviderErrorKeys(
+        options.providerErrorKeys,
+      )
+    }
   }
 }
 
@@ -85,16 +92,52 @@ function getErrorCode(status) {
   return 'TEAM_FORM_API_REQUEST_FAILED'
 }
 
+function hasProviderErrorValue(value) {
+  if (Array.isArray(value)) return value.length > 0
+  if (typeof value === 'string') return value.trim().length > 0
+  return value != null
+}
+
 function hasProviderErrors(errors) {
-  if (Array.isArray(errors)) return errors.length > 0
-  if (typeof errors === 'string') return errors.trim().length > 0
+  if (Array.isArray(errors) || typeof errors === 'string') {
+    return hasProviderErrorValue(errors)
+  }
   if (!errors || typeof errors !== 'object') return false
 
-  return Object.values(errors).some((value) => {
-    if (Array.isArray(value)) return value.length > 0
-    if (typeof value === 'string') return value.trim().length > 0
-    return value != null
-  })
+  return Object.values(errors).some(hasProviderErrorValue)
+}
+
+function sanitizeProviderErrorKeys(keys) {
+  if (!Array.isArray(keys)) return []
+
+  const safeKeys = []
+  for (const key of keys) {
+    if (
+      typeof key !== 'string' ||
+      !PROVIDER_ERROR_KEY_PATTERN.test(key) ||
+      safeKeys.includes(key)
+    ) {
+      continue
+    }
+
+    safeKeys.push(key)
+    if (safeKeys.length === MAX_PROVIDER_ERROR_KEYS) break
+  }
+
+  return safeKeys
+}
+
+function getProviderErrorKeys(errors) {
+  if (Array.isArray(errors) || typeof errors === 'string') {
+    return hasProviderErrorValue(errors) ? ['unknown'] : []
+  }
+  if (!errors || typeof errors !== 'object') return []
+
+  return sanitizeProviderErrorKeys(
+    Object.entries(errors)
+      .filter(([, value]) => hasProviderErrorValue(value))
+      .map(([key]) => key),
+  )
 }
 
 async function requestProvider(options) {
@@ -157,6 +200,7 @@ async function requestProvider(options) {
       throw new ApiFootballTeamFormError('TEAM_FORM_API_PROVIDER_ERROR', {
         errorCode: 'API_FOOTBALL_PROVIDER_ERRORS',
         providerStage,
+        providerErrorKeys: getProviderErrorKeys(payload.errors),
       })
     }
 

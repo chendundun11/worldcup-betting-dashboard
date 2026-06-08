@@ -27,6 +27,9 @@ const SAFE_ERROR_CODES = new Set([
   'API_FOOTBALL_DATA_UNAVAILABLE',
 ])
 
+const PROVIDER_ERROR_KEY_PATTERN = /^[A-Za-z0-9_-]{1,40}$/
+const MAX_PROVIDER_ERROR_KEYS = 10
+
 const DISABLED_TEAM_FORM_SNAPSHOT = {
   ok: false,
   disabled: true,
@@ -72,6 +75,26 @@ export function createDisabledTeamFormSnapshot(options = {}) {
   }
 }
 
+function sanitizeProviderErrorKeys(keys) {
+  if (!Array.isArray(keys)) return []
+
+  const safeKeys = []
+  for (const key of keys) {
+    if (
+      typeof key !== 'string' ||
+      !PROVIDER_ERROR_KEY_PATTERN.test(key) ||
+      safeKeys.includes(key)
+    ) {
+      continue
+    }
+
+    safeKeys.push(key)
+    if (safeKeys.length === MAX_PROVIDER_ERROR_KEYS) break
+  }
+
+  return safeKeys
+}
+
 function createProviderFallback(error) {
   const fallbackReason = error?.code ?? 'TEAM_FORM_API_FAILED'
   const errorCode = SAFE_ERROR_CODES.has(error?.errorCode)
@@ -87,6 +110,14 @@ function createProviderFallback(error) {
     errorUpstreamStatus <= 599
       ? errorUpstreamStatus
       : null
+  const providerErrorMeta =
+    errorCode === 'API_FOOTBALL_PROVIDER_ERRORS'
+      ? {
+          providerErrorKeys: sanitizeProviderErrorKeys(
+            error?.providerErrorKeys,
+          ),
+        }
+      : {}
   const fallbackSnapshot = createMockTeamFormSnapshot()
   const teams = fallbackSnapshot.teams.map((team) => ({
     ...team,
@@ -115,6 +146,7 @@ function createProviderFallback(error) {
       errorCode,
       providerStage,
       upstreamStatus,
+      ...providerErrorMeta,
     },
   })
 }
