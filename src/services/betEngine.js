@@ -6,6 +6,12 @@ const DEFAULT_BANKROLL = 10000
 const DEFAULT_MAX_STAKE_PER_MATCH = 500
 const MAX_BANKROLL_RATIO = 0.05
 const OUTCOMES = ['home', 'draw', 'away']
+const MAX_TEAM_FORM_RISK_PENALTY = 5
+const MAX_TEAM_FORM_INFO_PENALTY = 7
+const REMOTE_TEAM_FORM_KEY = ['remote', 'TeamForm'].join('')
+const REMOTE_TEAM_FORM_SIGNAL_KEY = `${REMOTE_TEAM_FORM_KEY}Signal`
+const SAFE_DIAGNOSTIC_CODE_PATTERN = /^[A-Z0-9_-]{1,80}$/
+const SAFE_PROVIDER_ERROR_KEY_PATTERN = /^[A-Za-z0-9_-]{1,40}$/
 
 const outcomeLabels = {
   home: '主胜方向',
@@ -224,6 +230,390 @@ export function getRemoteOddsSignal(match) {
     infoPenalty: Math.min(infoPenalty, 7),
     cancelRules,
     summary: summaryParts.join(''),
+  }
+}
+
+function getPlainObject(value) {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value
+    : null
+}
+
+function getSafeToken(value, fallback = null, maxLength = 80) {
+  const token = compactText(value)
+  if (!token || token.length > maxLength || !/^[A-Za-z0-9_-]+$/.test(token)) {
+    return fallback
+  }
+  return token
+}
+
+function getSafeDiagnosticCode(value) {
+  const code = compactText(value)
+  return code && SAFE_DIAGNOSTIC_CODE_PATTERN.test(code) ? code : null
+}
+
+function getSafeNumber(value, min = 0, max = 1000) {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? clamp(value, min, max)
+    : null
+}
+
+function getSafeCount(value) {
+  const number = getSafeNumber(value, 0, 100)
+  return number == null ? null : Math.round(number)
+}
+
+function getSafeRate(value) {
+  const number = getSafeNumber(value, 0, 100)
+  if (number == null) return null
+  return round(number > 1 ? number / 100 : number, 3)
+}
+
+function summarizeRecentResults(teamForm) {
+  const recentMatches = getPlainObject(teamForm?.recentMatches) ?? {}
+  const recentResults = Array.isArray(teamForm?.recentResults)
+    ? teamForm.recentResults.slice(0, 10)
+    : []
+  const normalizedResults = []
+
+  for (const resultEntry of recentResults) {
+    const result = getPlainObject(resultEntry)
+    if (!result) continue
+
+    const outcome = ['win', 'draw', 'loss'].includes(result.result)
+      ? result.result
+      : null
+    const goalsFor = getSafeCount(result.goalsFor)
+    const goalsAgainst = getSafeCount(result.goalsAgainst)
+    if (!outcome && goalsFor == null && goalsAgainst == null) continue
+
+    normalizedResults.push({ outcome, goalsFor, goalsAgainst })
+  }
+
+  const listedSampleSize = normalizedResults.length
+  const listedWins = normalizedResults.filter((result) => result.outcome === 'win').length
+  const listedDraws = normalizedResults.filter((result) => result.outcome === 'draw').length
+  const listedLosses = normalizedResults.filter((result) => result.outcome === 'loss').length
+  const listedGoalsFor = normalizedResults.reduce(
+    (sum, result) => sum + (result.goalsFor ?? 0),
+    0,
+  )
+  const listedGoalsAgainst = normalizedResults.reduce(
+    (sum, result) => sum + (result.goalsAgainst ?? 0),
+    0,
+  )
+  const listedCleanSheets = normalizedResults.filter(
+    (result) => result.goalsAgainst === 0,
+  ).length
+  let losingStreak = 0
+  for (const result of normalizedResults) {
+    if (result.outcome !== 'loss') break
+    losingStreak += 1
+  }
+
+  const sampleSize = getSafeCount(recentMatches.sampleSize) ?? listedSampleSize
+  const wins = getSafeCount(recentMatches.wins) ?? listedWins
+  const draws = getSafeCount(recentMatches.draws) ?? listedDraws
+  const losses = getSafeCount(recentMatches.losses) ?? listedLosses
+  const goalsFor = getSafeNumber(recentMatches.goalsFor) ?? listedGoalsFor
+  const goalsAgainst =
+    getSafeNumber(recentMatches.goalsAgainst) ?? listedGoalsAgainst
+  const cleanSheets =
+    getSafeCount(recentMatches.cleanSheets) ?? listedCleanSheets
+  const winRate =
+    getSafeRate(recentMatches.winRate) ??
+    (sampleSize > 0 ? round(wins / sampleSize, 3) : null)
+  const unbeatenRate =
+    getSafeRate(recentMatches.unbeatenRate) ??
+    (sampleSize > 0 ? round((wins + draws) / sampleSize, 3) : null)
+
+  return {
+    available: sampleSize > 0,
+    sampleSize,
+    wins,
+    draws,
+    losses,
+    goalsFor,
+    goalsAgainst,
+    cleanSheets,
+    winRate,
+    unbeatenRate,
+    losingStreak,
+  }
+}
+
+function summarizeTeamFormSide(value) {
+  const teamForm = getPlainObject(value)
+  if (!teamForm) return null
+
+  const teamName = compactText(teamForm.teamName)
+
+  return {
+    status: getSafeToken(teamForm.status, 'unknown'),
+    teamName: teamName?.slice(0, 80) ?? null,
+    formStatus: getSafeToken(teamForm.formStatus, 'unknown'),
+    formTrend: getSafeToken(teamForm.formTrend, 'unknown'),
+    attackTrend: getSafeToken(teamForm.attackTrend, 'unknown'),
+    defenseTrend: getSafeToken(teamForm.defenseTrend, 'unknown'),
+    volatility: getSafeToken(teamForm.volatility, 'unknown'),
+    dataQuality: getSafeToken(teamForm.dataQuality, 'unknown'),
+    confidence: getSafeToken(teamForm.confidence, 'low'),
+    fallbackReason: getSafeDiagnosticCode(teamForm.fallbackReason),
+    recentResultsSummary: summarizeRecentResults(teamForm),
+  }
+}
+
+function summarizeTeamFormComparison(value) {
+  const comparison = getPlainObject(value)
+  if (!comparison) {
+    return {
+      formEdge: 'unknown',
+      attackEdge: 'unknown',
+      defenseEdge: 'unknown',
+      volatilityRisk: 'unknown',
+    }
+  }
+
+  return {
+    formEdge: getSafeToken(comparison.formEdge, 'unknown', 40),
+    attackEdge: getSafeToken(comparison.attackEdge, 'unknown', 40),
+    defenseEdge: getSafeToken(comparison.defenseEdge, 'unknown', 40),
+    volatilityRisk: getSafeToken(comparison.volatilityRisk, 'unknown', 40),
+  }
+}
+
+function summarizeTeamFormMeta(value) {
+  const meta = getPlainObject(value) ?? {}
+  const providerErrorKeys = Array.isArray(meta.providerErrorKeys)
+    ? uniqueList(
+        meta.providerErrorKeys
+          .filter(
+            (key) =>
+              typeof key === 'string' &&
+              SAFE_PROVIDER_ERROR_KEY_PATTERN.test(key),
+          )
+          .slice(0, 10),
+      )
+    : []
+
+  return {
+    error: getSafeDiagnosticCode(meta.error),
+    errorCode: getSafeDiagnosticCode(meta.errorCode),
+    providerStage: getSafeToken(meta.providerStage, null, 40),
+    providerErrorKeys,
+  }
+}
+
+function getTeamFormSideRisk(side, label) {
+  if (!side) return { penalty: 0, notes: [] }
+
+  const recent = side.recentResultsSummary
+  let penalty = 0
+  const notes = []
+
+  if (side.formTrend === 'weak' || recent.losingStreak >= 3) {
+    penalty += recent.losingStreak >= 3 ? 2 : 1
+    notes.push(`${label}近期状态偏弱或存在连败，降低信心。`)
+  }
+
+  if (
+    side.defenseTrend === 'weak' ||
+    (recent.sampleSize >= 3 &&
+      recent.goalsAgainst / Math.max(recent.sampleSize, 1) >= 1.8)
+  ) {
+    penalty += 1
+    notes.push(`${label}近期防守波动较大，比分判断需要复核。`)
+  }
+
+  if (side.volatility === 'high' || side.formTrend === 'volatile') {
+    penalty += 1
+    notes.push(`${label}近期状态波动较大，仅保留为风险提示。`)
+  }
+
+  return { penalty, notes }
+}
+
+function getTeamFormStrength(side) {
+  if (!side) return 0
+
+  let strength = 0
+  if (side.formTrend === 'strong' || side.formStatus === 'strong') strength += 2
+  if (side.formTrend === 'stable' || side.formStatus === 'stable') strength += 1
+  if (side.formTrend === 'weak' || side.formStatus === 'weak') strength -= 2
+  if (side.recentResultsSummary.winRate >= 0.6) strength += 1
+  if (
+    side.recentResultsSummary.available &&
+    side.recentResultsSummary.winRate <= 0.2
+  ) {
+    strength -= 1
+  }
+  return strength
+}
+
+function getTeamFormDirectionRisk(home, away, recommendedDirection) {
+  const homeStrength = getTeamFormStrength(home)
+  const awayStrength = getTeamFormStrength(away)
+  let penalty = 0
+  const notes = []
+
+  if (
+    recommendedDirection === 'home' &&
+    (homeStrength < 0 || awayStrength >= homeStrength + 3)
+  ) {
+    penalty += 2
+    notes.push('主推荐方向的近期状态支持不足，降低信心。')
+  }
+
+  if (
+    recommendedDirection === 'away' &&
+    (awayStrength < 0 || homeStrength >= awayStrength + 3)
+  ) {
+    penalty += 2
+    notes.push('主推荐方向的近期状态支持不足，降低信心。')
+  }
+
+  if (
+    home &&
+    away &&
+    ['high', 'volatile'].includes(home.volatility) &&
+    ['high', 'volatile'].includes(away.volatility)
+  ) {
+    penalty += 1
+    notes.push('两队近期状态波动均较大，判断稳定性不足。')
+  }
+
+  return { penalty, notes }
+}
+
+export function getRemoteTeamFormSignal(match, recommendedDirection = null) {
+  const teamFormData = getPlainObject(match?.[REMOTE_TEAM_FORM_KEY])
+
+  if (!teamFormData) {
+    return {
+      hasRemoteTeamForm: false,
+      rawAvailable: false,
+      provider: null,
+      dataSource: null,
+      status: 'missing',
+      updatedAt: null,
+      fallbackReason: null,
+      home: null,
+      away: null,
+      comparison: summarizeTeamFormComparison(null),
+      meta: summarizeTeamFormMeta(null),
+      riskPenalty: 0,
+      infoPenalty: 0,
+      cancelRules: [],
+      downgradeRules: [],
+      summary: null,
+    }
+  }
+
+  const teams = Array.isArray(teamFormData.teams)
+    ? teamFormData.teams.slice(0, 2)
+    : []
+  const home = summarizeTeamFormSide(teamFormData.home ?? teams[0])
+  const away = summarizeTeamFormSide(teamFormData.away ?? teams[1])
+  const comparison = summarizeTeamFormComparison(teamFormData.comparison)
+  const meta = summarizeTeamFormMeta(teamFormData.meta)
+  const provider = getSafeToken(teamFormData.provider)
+  const dataSource = getSafeToken(teamFormData.dataSource)
+  const status = getSafeToken(teamFormData.status, 'unknown')
+  const updatedAt = compactText(teamFormData.updatedAt)
+  const fallbackReason = getSafeDiagnosticCode(teamFormData.fallbackReason)
+  const rawAvailable = teamFormData.rawAvailable === true
+  const providerPlanLimited = meta.providerErrorKeys.some(
+    (key) => key.toLowerCase() === 'plan',
+  )
+  const comparisonUnknown = Object.values(comparison).every(
+    (value) => value === 'unknown',
+  )
+  const updatedTimestamp = Date.parse(updatedAt ?? '')
+  const stale =
+    Number.isFinite(updatedTimestamp) &&
+    Date.now() - updatedTimestamp > 7 * 24 * 60 * 60 * 1000
+  const missingRecentForm =
+    !home?.recentResultsSummary.available ||
+    !away?.recentResultsSummary.available
+  const homeRisk = getTeamFormSideRisk(home, '主队')
+  const awayRisk = getTeamFormSideRisk(away, '客队')
+  const directionRisk = getTeamFormDirectionRisk(
+    home,
+    away,
+    recommendedDirection,
+  )
+  let infoPenalty = 0
+
+  if (provider === 'api-football' && !rawAvailable) infoPenalty += 1
+  if (['mock', 'fallback'].includes(dataSource)) infoPenalty += 1
+  if (fallbackReason) infoPenalty += 1
+  if (providerPlanLimited) infoPenalty += 1
+  if (comparisonUnknown) infoPenalty += 1
+  if (missingRecentForm) infoPenalty += 1
+  if (stale) infoPenalty += 1
+
+  const riskPenalty = Math.min(
+    homeRisk.penalty + awayRisk.penalty + directionRisk.penalty,
+    MAX_TEAM_FORM_RISK_PENALTY,
+  )
+  const cappedInfoPenalty = Math.min(
+    infoPenalty,
+    MAX_TEAM_FORM_INFO_PENALTY,
+  )
+  const infoNotes = uniqueList([
+    ['mock', 'fallback'].includes(dataSource) &&
+      '近期状态数据来自 fallback，不能作为强判断依据。',
+    fallbackReason &&
+      '近期状态数据处于 fallback，仅用于风险提示和降级复核。',
+    providerPlanLimited &&
+      'API-Football 当前套餐限制 recent fixtures 查询，球队状态仅保留为风险提示。',
+    comparisonUnknown &&
+      'team-form comparison 仍为 unknown，禁止提高推荐等级。',
+    missingRecentForm &&
+      '主队或客队近期赛果摘要缺失，按信息不足降权。',
+    stale && '球队近期状态数据已过期，更新前不得提高推荐等级。',
+  ])
+  const riskNotes = uniqueList([
+    ...homeRisk.notes,
+    ...awayRisk.notes,
+    ...directionRisk.notes,
+  ])
+  const cancelRules = uniqueList([
+    providerPlanLimited &&
+      '供应商套餐限制 recent fixtures 查询，恢复真实近期状态前取消升级。',
+    fallbackReason &&
+      '近期状态仍为 fallback 时，临场信息冲突则取消或降级。',
+    missingRecentForm &&
+      '主队或客队近期状态缺失，无法复核时取消或观望。',
+    stale && '球队状态快照过期，更新前取消升级。',
+    riskNotes.length > 0 &&
+      '球队近期状态或防守波动较大，临场不支持原方向时取消或降级。',
+  ])
+  const downgradeRules = uniqueList([
+    ...infoNotes,
+    ...riskNotes,
+  ])
+
+  return {
+    hasRemoteTeamForm: true,
+    rawAvailable,
+    provider,
+    dataSource,
+    status,
+    updatedAt:
+      Number.isFinite(updatedTimestamp) && updatedAt.length <= 40
+        ? updatedAt
+        : null,
+    fallbackReason,
+    home,
+    away,
+    comparison,
+    meta,
+    riskPenalty,
+    infoPenalty: cappedInfoPenalty,
+    cancelRules,
+    downgradeRules,
+    summary: [...riskNotes, ...infoNotes].slice(0, 3).join(''),
   }
 }
 
@@ -736,9 +1126,20 @@ function getUpsetElasticityScore(odds, valueEdge) {
   return 0
 }
 
-function getHeatPenalty(match, odds, valueEdge, remoteOddsSignal = null) {
+function getHeatPenalty(
+  match,
+  odds,
+  valueEdge,
+  remoteOddsSignal = null,
+  teamFormSignal = null,
+) {
   if (!odds.hasOneXTwo) {
-    return clamp(-(remoteOddsSignal?.riskPenalty ?? 0), -20, 0)
+    return clamp(
+      -(remoteOddsSignal?.riskPenalty ?? 0) -
+        (teamFormSignal?.riskPenalty ?? 0),
+      -20,
+      0,
+    )
   }
 
   const favorite = getFavoriteOutcome(odds)
@@ -751,11 +1152,18 @@ function getHeatPenalty(match, odds, valueEdge, remoteOddsSignal = null) {
   if (favorite === valueEdge.bestOutcome && valueEdge.bestEdge < 0.015) penalty -= 4
   penalty -= lightDataAdjustments.heatPenalty
   penalty -= remoteOddsSignal?.riskPenalty ?? 0
+  penalty -= teamFormSignal?.riskPenalty ?? 0
 
   return clamp(penalty, -20, 0)
 }
 
-function getInfoPenalty(match, odds, valueEdge, remoteOddsSignal = null) {
+function getInfoPenalty(
+  match,
+  odds,
+  valueEdge,
+  remoteOddsSignal = null,
+  teamFormSignal = null,
+) {
   let penalty = 0
 
   if (!odds.hasOneXTwo) penalty -= 8
@@ -765,6 +1173,7 @@ function getInfoPenalty(match, odds, valueEdge, remoteOddsSignal = null) {
   if (!match?.oddsHistory?.length) penalty -= 2
   penalty -= getLightDataAdjustments(match).infoPenalty
   penalty -= remoteOddsSignal?.infoPenalty ?? 0
+  penalty -= teamFormSignal?.infoPenalty ?? 0
 
   return clamp(penalty, -15, 0)
 }
@@ -773,8 +1182,24 @@ export function calculateBetScore(match) {
   const odds = getOdds(match)
   const valueEdge = calculateValueEdge(match)
   const remoteOddsSignal = getRemoteOddsSignal(match)
+  const teamFormSignal = getRemoteTeamFormSignal(
+    match,
+    valueEdge.bestOutcome,
+  )
   const baseHeatPenalty = getHeatPenalty(match, odds, valueEdge)
   const baseInfoPenalty = getInfoPenalty(match, odds, valueEdge)
+  const preTeamFormHeatPenalty = getHeatPenalty(
+    match,
+    odds,
+    valueEdge,
+    remoteOddsSignal,
+  )
+  const preTeamFormInfoPenalty = getInfoPenalty(
+    match,
+    odds,
+    valueEdge,
+    remoteOddsSignal,
+  )
   const scoreParts = {
     valueEdge: getValueEdgeScore(valueEdge),
     directionClarity: getDirectionClarityScore(odds, valueEdge),
@@ -782,8 +1207,20 @@ export function calculateBetScore(match) {
     recentAttackDefense: getRecentAttackDefenseScore(match),
     marketStability: getMarketStabilityScore(match, odds, valueEdge),
     upsetElasticity: getUpsetElasticityScore(odds, valueEdge),
-    heatPenalty: getHeatPenalty(match, odds, valueEdge, remoteOddsSignal),
-    infoPenalty: getInfoPenalty(match, odds, valueEdge, remoteOddsSignal),
+    heatPenalty: getHeatPenalty(
+      match,
+      odds,
+      valueEdge,
+      remoteOddsSignal,
+      teamFormSignal,
+    ),
+    infoPenalty: getInfoPenalty(
+      match,
+      odds,
+      valueEdge,
+      remoteOddsSignal,
+      teamFormSignal,
+    ),
   }
   const baseScoreParts = {
     ...scoreParts,
@@ -793,15 +1230,24 @@ export function calculateBetScore(match) {
 
   const rawScore = Object.values(scoreParts).reduce((sum, value) => sum + value, 0)
   const baseRawScore = Object.values(baseScoreParts).reduce((sum, value) => sum + value, 0)
+  const preTeamFormRawScore =
+    rawScore -
+    scoreParts.heatPenalty -
+    scoreParts.infoPenalty +
+    preTeamFormHeatPenalty +
+    preTeamFormInfoPenalty
   const betScore = clamp(Math.round(rawScore), 0, 100)
   const baseBetScore = clamp(Math.round(baseRawScore), 0, 100)
+  const preTeamFormBetScore = clamp(Math.round(preTeamFormRawScore), 0, 100)
 
   return {
     betScore,
     baseBetScore,
+    preTeamFormBetScore,
     scoreParts,
     valueEdge,
     remoteOddsSignal,
+    teamFormSignal,
   }
 }
 
@@ -812,6 +1258,7 @@ function buildScoreBreakdown(match, scoreResult) {
   const powerDiff = round(getPowerDiff(match), 1)
   const lightReasonNotes = getLightDataReasonNotes(match)
   const remoteOddsSignal = scoreResult.remoteOddsSignal
+  const teamFormSignal = scoreResult.teamFormSignal
   const remoteHeatNotes =
     remoteOddsSignal?.hasRemoteOdds && remoteOddsSignal.riskPenalty > 0
       ? [remoteOddsSignal.summary]
@@ -820,6 +1267,16 @@ function buildScoreBreakdown(match, scoreResult) {
     remoteOddsSignal?.hasRemoteOdds &&
     (remoteOddsSignal.infoPenalty > 0 || remoteOddsSignal.rawAvailable)
       ? [remoteOddsSignal.summary]
+      : []
+  const teamFormHeatNotes =
+    teamFormSignal?.hasRemoteTeamForm &&
+    teamFormSignal.riskPenalty > 0
+      ? [teamFormSignal.summary]
+      : []
+  const teamFormInfoNotes =
+    teamFormSignal?.hasRemoteTeamForm &&
+    teamFormSignal.infoPenalty > 0
+      ? [teamFormSignal.summary]
       : []
   const oddsSourceText =
     valueEdge.oddsSource === 'localSnapshot'
@@ -838,13 +1295,21 @@ function buildScoreBreakdown(match, scoreResult) {
     scoreResult.scoreParts.heatPenalty < 0
       ? '热门方向赔率偏低或价值不足，V1 按静态过热信号降权。'
       : '未触发静态过热扣分。',
-    [...remoteHeatNotes, ...lightReasonNotes.heat],
+    [
+      ...remoteHeatNotes,
+      ...teamFormHeatNotes,
+      ...lightReasonNotes.heat,
+    ],
   )
   const infoPenaltyReason = appendReason(
     scoreResult.scoreParts.infoPenalty < 0
       ? '盘口变化、真实伤停、预计首发或模型来源存在缺口，按信息不足降权。'
       : '当前输入未触发明显信息缺口扣分。',
-    [...remoteInfoNotes, ...lightReasonNotes.info],
+    [
+      ...remoteInfoNotes,
+      ...teamFormInfoNotes,
+      ...lightReasonNotes.info,
+    ],
     3,
   )
 
@@ -1072,7 +1537,12 @@ export function buildUpsetPick(match, scoreParts) {
   }
 }
 
-export function buildCancelRules(match, scoreParts, remoteOddsSignal = null) {
+export function buildCancelRules(
+  match,
+  scoreParts,
+  remoteOddsSignal = null,
+  teamFormSignal = null,
+) {
   const rules = []
 
   if (scoreParts?.betScore < 55) {
@@ -1085,6 +1555,7 @@ export function buildCancelRules(match, scoreParts, remoteOddsSignal = null) {
 
   rules.push(
     ...(remoteOddsSignal?.cancelRules ?? []),
+    ...(teamFormSignal?.cancelRules ?? []),
     ...getLightCancelRules(match),
     '临场阵容明显不利时取消或降级。',
     '盘口反向变化且无法解释时取消。',
@@ -1206,7 +1677,12 @@ function getModelProbabilityQuality(match, valueEdge) {
   return 'missing'
 }
 
-function getDataQuality(match, valueEdge, remoteOddsSignal = null) {
+function getDataQuality(
+  match,
+  valueEdge,
+  remoteOddsSignal = null,
+  teamFormSignal = null,
+) {
   const odds = getOdds(match)
   const lightDataLayer = buildLightDataLayer(match)
   const squads = getLightSquads(lightDataLayer)
@@ -1267,6 +1743,37 @@ function getDataQuality(match, valueEdge, remoteOddsSignal = null) {
     }
     if (remoteOddsSignal.fallbackReason) limitations.push('remoteOddsFallback')
   }
+  if (teamFormSignal?.hasRemoteTeamForm) {
+    if (!teamFormSignal.rawAvailable) {
+      limitations.push(`${REMOTE_TEAM_FORM_KEY}RawUnavailable`)
+    }
+    if (teamFormSignal.dataSource === 'mock') {
+      limitations.push(`${REMOTE_TEAM_FORM_KEY}Fallback`)
+    }
+    if (teamFormSignal.fallbackReason) {
+      limitations.push(`${REMOTE_TEAM_FORM_KEY}FallbackReason`)
+    }
+    if (
+      Object.values(teamFormSignal.comparison).every(
+        (value) => value === 'unknown',
+      )
+    ) {
+      limitations.push(`${REMOTE_TEAM_FORM_KEY}ComparisonUnknown`)
+    }
+    if (!teamFormSignal.home?.recentResultsSummary.available) {
+      limitations.push(`${REMOTE_TEAM_FORM_KEY}HomeRecentMissing`)
+    }
+    if (!teamFormSignal.away?.recentResultsSummary.available) {
+      limitations.push(`${REMOTE_TEAM_FORM_KEY}AwayRecentMissing`)
+    }
+    if (
+      teamFormSignal.meta.providerErrorKeys.some(
+        (key) => key.toLowerCase() === 'plan',
+      )
+    ) {
+      limitations.push(`${REMOTE_TEAM_FORM_KEY}ProviderPlanLimited`)
+    }
+  }
 
   return {
     odds: odds.source,
@@ -1298,6 +1805,21 @@ function getDataQuality(match, valueEdge, remoteOddsSignal = null) {
             marketStatus: remoteOddsSignal.marketStatus,
             riskFlags: remoteOddsSignal.riskFlags,
             valueFlags: remoteOddsSignal.valueFlags,
+          },
+        }
+      : {}),
+    ...(teamFormSignal?.hasRemoteTeamForm
+      ? {
+          [REMOTE_TEAM_FORM_KEY]: {
+            hasRemoteTeamForm: true,
+            rawAvailable: teamFormSignal.rawAvailable,
+            provider: teamFormSignal.provider,
+            dataSource: teamFormSignal.dataSource,
+            status: teamFormSignal.status,
+            updatedAt: teamFormSignal.updatedAt,
+            fallbackReason: teamFormSignal.fallbackReason,
+            comparison: teamFormSignal.comparison,
+            meta: teamFormSignal.meta,
           },
         }
       : {}),
@@ -1345,11 +1867,12 @@ export function buildBetPlan(match, options = {}) {
   const cancelRules = buildCancelRules(match, {
     ...scoreResult.scoreParts,
     betScore: scoreResult.betScore,
-  }, scoreResult.remoteOddsSignal)
+  }, scoreResult.remoteOddsSignal, scoreResult.teamFormSignal)
   const dataQuality = getDataQuality(
     match,
     scoreResult.valueEdge,
     scoreResult.remoteOddsSignal,
+    scoreResult.teamFormSignal,
   )
   const scoreBreakdown = buildScoreBreakdown(match, scoreResult)
   const lightDataAdjustments = getLightDataAdjustments(match)
@@ -1405,6 +1928,13 @@ export function buildBetPlan(match, options = {}) {
             },
           }
         : {}),
+      ...(scoreResult.teamFormSignal.hasRemoteTeamForm
+        ? {
+            [REMOTE_TEAM_FORM_SIGNAL_KEY]: scoreResult.teamFormSignal,
+            teamFormDowngradeRules:
+              scoreResult.teamFormSignal.downgradeRules,
+          }
+        : {}),
       ruleNotes: [
         'GPT 后续只负责解释，不改变方向、评分、金额。',
         'V1 为静态赛前规则引擎，盘口变化历史缺失时自动降权。',
@@ -1417,7 +1947,10 @@ export function buildBetPlan(match, options = {}) {
 
   return {
     ...plan,
-    publicSummary: buildPublicSummary(plan),
+    publicSummary: buildPublicSummary({
+      ...plan,
+      betScore: scoreResult.preTeamFormBetScore,
+    }),
   }
 }
 

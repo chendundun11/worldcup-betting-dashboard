@@ -1,4 +1,7 @@
-import buildBetPlan, { getRemoteOddsSignal } from '../src/services/betEngine.js'
+import buildBetPlan, {
+  getRemoteOddsSignal,
+  getRemoteTeamFormSignal,
+} from '../src/services/betEngine.js'
 import { localOdds } from '../src/data/localOdds.js'
 import { TEAM_PROFILES } from '../src/data/teamProfiles.js'
 import { SQUAD_INSIGHTS } from '../src/data/squadInsights.js'
@@ -287,6 +290,40 @@ function assertRemoteOddsDoesNotPromote(baselinePlan, nextPlan, name) {
     JSON.stringify(getScorePrediction(nextPlan)) ===
       JSON.stringify(getScorePrediction(baselinePlan)),
     `${name}: remoteOdds 不得改变比分预测`,
+  )
+  assertPositiveScorePartsDoNotGrow(baselinePlan, nextPlan, name)
+}
+
+function assertRemoteTeamFormDoesNotPromote(baselinePlan, nextPlan, name) {
+  assert(nextPlan.betScore <= baselinePlan.betScore, `${name}: team-form 不得提高 betScore`)
+  assert(
+    recommendLevelRank[nextPlan.recommendLevel] <=
+      recommendLevelRank[baselinePlan.recommendLevel],
+    `${name}: team-form 不得提高 recommendLevel`,
+  )
+  assert(nextPlan.totalStake <= baselinePlan.totalStake, `${name}: team-form 不得增加 totalStake`)
+  assert(
+    JSON.stringify(nextPlan.mainPick) === JSON.stringify(baselinePlan.mainPick),
+    `${name}: team-form 不得改变 mainPick`,
+  )
+  assert(
+    JSON.stringify(nextPlan.secondaryPick) ===
+      JSON.stringify(baselinePlan.secondaryPick),
+    `${name}: team-form 不得改变 secondaryPick`,
+  )
+  assert(
+    JSON.stringify(getScorePrediction(nextPlan)) ===
+      JSON.stringify(getScorePrediction(baselinePlan)),
+    `${name}: team-form 不得改变比分预测`,
+  )
+  assert(
+    nextPlan.valueEdge.totalGoals.bestDirection ===
+      baselinePlan.valueEdge.totalGoals.bestDirection,
+    `${name}: team-form 不得改变大小球方向`,
+  )
+  assert(
+    nextPlan.publicSummary === baselinePlan.publicSummary,
+    `${name}: team-form 不得改变公开摘要`,
   )
   assertPositiveScorePartsDoNotGrow(baselinePlan, nextPlan, name)
 }
@@ -720,6 +757,215 @@ assert(
 assert(
   favoriteHeatRemoteOddsPlan.scoreBreakdown.heatPenalty.reason.includes('热门方向定价偏热'),
   'favorite_too_hot 必须进入中文风险解释',
+)
+
+function teamFormSide(overrides = {}) {
+  return {
+    status: 'available',
+    teamName: 'Team',
+    formStatus: 'stable',
+    formTrend: 'stable',
+    confidence: 'high',
+    recentMatches: {
+      sampleSize: 5,
+      wins: 3,
+      draws: 1,
+      losses: 1,
+      goalsFor: 8,
+      goalsAgainst: 4,
+      cleanSheets: 2,
+      winRate: 0.6,
+      unbeatenRate: 0.8,
+    },
+    recentResults: [
+      { result: 'win', goalsFor: 2, goalsAgainst: 0 },
+      { result: 'draw', goalsFor: 1, goalsAgainst: 1 },
+      { result: 'win', goalsFor: 2, goalsAgainst: 1 },
+      { result: 'loss', goalsFor: 0, goalsAgainst: 1 },
+      { result: 'win', goalsFor: 3, goalsAgainst: 1 },
+    ],
+    attackTrend: 'normal',
+    defenseTrend: 'normal',
+    volatility: 'low',
+    dataQuality: 'high',
+    fallbackReason: null,
+    ...overrides,
+  }
+}
+
+const teamFormBaseMatch = samples.find((sample) => sample.target === 'standard').match
+const teamFormBaselinePlan = buildBetPlan(teamFormBaseMatch, {
+  bankroll: BANKROLL,
+  maxStakePerMatch: MAX_STAKE_PER_MATCH,
+})
+const safeTeamForm = {
+  status: 'available',
+  provider: 'api-football',
+  dataSource: 'remote',
+  updatedAt: new Date().toISOString(),
+  rawAvailable: true,
+  fallbackReason: null,
+  home: teamFormSide({ teamName: 'France', formStatus: 'strong', formTrend: 'strong' }),
+  away: teamFormSide({ teamName: 'Senegal' }),
+  comparison: {
+    formEdge: 'home',
+    attackEdge: 'home',
+    defenseEdge: 'home',
+    volatilityRisk: 'low',
+  },
+  meta: {
+    error: null,
+    errorCode: null,
+    providerStage: null,
+    providerErrorKeys: [],
+  },
+  rawResponse: { sentinel: 'TEAM_FORM_RAW_RESPONSE_SENTINEL' },
+  headers: { sentinel: 'TEAM_FORM_HEADERS_SENTINEL' },
+  apiKey: 'TEAM_FORM_API_KEY_SENTINEL',
+  fixtures: [{ sentinel: 'TEAM_FORM_FIXTURES_SENTINEL' }],
+  upstreamBody: { sentinel: 'TEAM_FORM_UPSTREAM_BODY_SENTINEL' },
+}
+
+function buildRemoteTeamFormPlan(name, overrides = {}) {
+  const plan = buildBetPlan(
+    {
+      ...teamFormBaseMatch,
+      remoteTeamForm: {
+        ...safeTeamForm,
+        ...overrides,
+      },
+    },
+    {
+      bankroll: BANKROLL,
+      maxStakePerMatch: MAX_STAKE_PER_MATCH,
+    },
+  )
+
+  assertRemoteTeamFormDoesNotPromote(teamFormBaselinePlan, plan, name)
+  return plan
+}
+
+const safeTeamFormPlan = buildRemoteTeamFormPlan('正常 team-form')
+const fallbackTeamFormPlan = buildRemoteTeamFormPlan('team-form fallback', {
+  status: 'fallback',
+  dataSource: 'mock',
+  rawAvailable: false,
+  fallbackReason: 'TEAM_FORM_API_PROVIDER_ERROR',
+  comparison: {
+    formEdge: 'unknown',
+    attackEdge: 'unknown',
+    defenseEdge: 'unknown',
+    volatilityRisk: 'unknown',
+  },
+  meta: {
+    error: 'TEAM_FORM_API_PROVIDER_ERROR',
+    errorCode: 'API_FOOTBALL_PROVIDER_ERRORS',
+    providerStage: 'provider_errors',
+    providerErrorKeys: ['plan'],
+    providerErrors: {
+      plan: 'PROVIDER_ERROR_VALUE_SENTINEL',
+    },
+  },
+  errors: {
+    plan: 'TOP_LEVEL_PROVIDER_ERROR_VALUE_SENTINEL',
+  },
+})
+const rawUnavailableTeamFormPlan = buildRemoteTeamFormPlan('team-form raw unavailable', {
+  rawAvailable: false,
+})
+const riskTeamFormPlan = buildRemoteTeamFormPlan('team-form risk', {
+  home: teamFormSide({
+    teamName: 'France',
+    formStatus: 'weak',
+    formTrend: 'weak',
+    defenseTrend: 'weak',
+    volatility: 'high',
+    recentMatches: {
+      sampleSize: 5,
+      wins: 0,
+      draws: 1,
+      losses: 4,
+      goalsFor: 2,
+      goalsAgainst: 11,
+    },
+    recentResults: [
+      { result: 'loss', goalsFor: 0, goalsAgainst: 2 },
+      { result: 'loss', goalsFor: 1, goalsAgainst: 3 },
+      { result: 'loss', goalsFor: 0, goalsAgainst: 2 },
+      { result: 'draw', goalsFor: 1, goalsAgainst: 1 },
+      { result: 'loss', goalsFor: 0, goalsAgainst: 3 },
+    ],
+  }),
+})
+
+assert(
+  safeTeamFormPlan.betScore === teamFormBaselinePlan.betScore,
+  '正常真实 team-form 不得正向加分或改变 betScore',
+)
+assert(
+  fallbackTeamFormPlan.betScore < teamFormBaselinePlan.betScore,
+  'fallback team-form 必须只扣分或提示',
+)
+assert(
+  rawUnavailableTeamFormPlan.betScore <= teamFormBaselinePlan.betScore,
+  'rawAvailable:false 只能扣分或保持评分',
+)
+assert(
+  riskTeamFormPlan.betScore < teamFormBaselinePlan.betScore,
+  'team-form 风险必须降低评分',
+)
+assert(
+  fallbackTeamFormPlan.scoreBreakdown.infoPenalty.reason.includes('套餐限制'),
+  'providerErrorKeys:["plan"] 必须产生安全中文解释',
+)
+assert(
+  fallbackTeamFormPlan.cancelRules.some((rule) => rule.includes('套餐限制')),
+  'providerErrorKeys:["plan"] 必须进入取消或降级规则',
+)
+
+const safeTeamFormSignal = getRemoteTeamFormSignal({
+  remoteTeamForm: safeTeamForm,
+})
+const fallbackTeamFormSignal = getRemoteTeamFormSignal({
+  remoteTeamForm: fallbackTeamFormPlan.internalAnalysis.remoteTeamFormSignal,
+})
+assert(safeTeamFormSignal.hasRemoteTeamForm === true, 'BetEngine 必须识别 match.remoteTeamForm')
+assert(safeTeamFormSignal.riskPenalty === 0, '正常 team-form 不得产生正向或隐藏风险分')
+assert(safeTeamFormSignal.infoPenalty === 0, '正常 team-form 不得产生正向或隐藏信息分')
+assert(fallbackTeamFormSignal.riskPenalty <= 5, 'teamFormRiskPenalty 上限必须为 5')
+assert(fallbackTeamFormSignal.infoPenalty <= 7, 'teamFormInfoPenalty 上限必须为 7')
+
+const teamFormInternalText = JSON.stringify(fallbackTeamFormPlan.internalAnalysis)
+for (const forbiddenValue of [
+  'TEAM_FORM_RAW_RESPONSE_SENTINEL',
+  'TEAM_FORM_HEADERS_SENTINEL',
+  'TEAM_FORM_API_KEY_SENTINEL',
+  'TEAM_FORM_FIXTURES_SENTINEL',
+  'TEAM_FORM_UPSTREAM_BODY_SENTINEL',
+  'PROVIDER_ERROR_VALUE_SENTINEL',
+  'TOP_LEVEL_PROVIDER_ERROR_VALUE_SENTINEL',
+]) {
+  assert(
+    !teamFormInternalText.includes(forbiddenValue),
+    `team-form 白名单摘要不得包含 ${forbiddenValue}`,
+  )
+}
+assert(
+  fallbackTeamFormPlan.internalAnalysis.remoteTeamFormSignal.meta.providerErrorKeys.includes('plan'),
+  'internalAnalysis 必须只保留安全 providerErrorKeys',
+)
+assert(
+  !Object.prototype.hasOwnProperty.call(
+    fallbackTeamFormPlan.internalAnalysis.remoteTeamFormSignal.meta,
+    'providerErrors',
+  ),
+  'internalAnalysis 不得透传 provider errors value',
+)
+assert(
+  fallbackTeamFormPlan.dataQuality.limitations.includes(
+    'remoteTeamFormProviderPlanLimited',
+  ),
+  'provider plan 限制必须进入 dataQuality.limitations',
 )
 
 if (boundarySamples.extreme.plan.betScore >= 85) {
