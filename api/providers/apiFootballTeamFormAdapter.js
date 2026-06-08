@@ -1,5 +1,34 @@
 const API_FOOTBALL_BASE_URL = 'https://v3.football.api-sports.io'
 
+const PROVIDER_STAGES = new Set([
+  'teams_search',
+  'fixtures_recent',
+  'parse_json',
+  'provider_errors',
+  'timeout',
+  'network',
+  'unknown',
+])
+
+const ERROR_CODE_BY_LEGACY_CODE = new Map([
+  ['TEAM_FORM_API_KEY_MISSING', 'API_FOOTBALL_KEY_MISSING'],
+  ['TEAM_FORM_API_UNAVAILABLE', 'API_FOOTBALL_DATA_UNAVAILABLE'],
+  ['TEAM_FORM_TEAMS_MISSING', 'API_FOOTBALL_DATA_UNAVAILABLE'],
+  ['TEAM_FORM_API_UNAUTHORIZED', 'API_FOOTBALL_AUTH_ERROR'],
+  ['TEAM_FORM_API_FORBIDDEN', 'API_FOOTBALL_FORBIDDEN'],
+  ['TEAM_FORM_API_QUOTA_EXCEEDED', 'API_FOOTBALL_RATE_LIMIT'],
+  ['TEAM_FORM_API_UPSTREAM_ERROR', 'API_FOOTBALL_UPSTREAM_ERROR'],
+  ['TEAM_FORM_API_REQUEST_FAILED', 'API_FOOTBALL_UPSTREAM_ERROR'],
+  ['TEAM_FORM_API_INVALID_RESPONSE', 'API_FOOTBALL_INVALID_JSON'],
+  ['TEAM_FORM_API_PROVIDER_ERROR', 'API_FOOTBALL_PROVIDER_ERRORS'],
+  ['TEAM_FORM_API_TIMEOUT', 'API_FOOTBALL_TIMEOUT'],
+  ['TEAM_FORM_API_NETWORK_ERROR', 'API_FOOTBALL_NETWORK_ERROR'],
+  ['TEAM_FORM_TEAM_UNMATCHED', 'API_FOOTBALL_TEAM_UNMATCHED'],
+  ['TEAM_FORM_DATA_UNAVAILABLE', 'API_FOOTBALL_DATA_UNAVAILABLE'],
+])
+
+const SAFE_ERROR_CODES = new Set(ERROR_CODE_BY_LEGACY_CODE.values())
+
 const TEAM_NAME_ALIASES = new Map([
   ['czechia', 'Czech Republic'],
   ['south korea', 'South Korea'],
@@ -11,7 +40,23 @@ export class ApiFootballTeamFormError extends Error {
     super(code)
     this.name = 'ApiFootballTeamFormError'
     this.code = code
-    this.status = options.status ?? null
+    const errorCode =
+      options.errorCode ??
+      ERROR_CODE_BY_LEGACY_CODE.get(code) ??
+      'API_FOOTBALL_UPSTREAM_ERROR'
+    this.errorCode = SAFE_ERROR_CODES.has(errorCode)
+      ? errorCode
+      : 'API_FOOTBALL_UPSTREAM_ERROR'
+    this.providerStage = PROVIDER_STAGES.has(options.providerStage)
+      ? options.providerStage
+      : 'unknown'
+    this.upstreamStatus =
+      Number.isInteger(options.status) &&
+      options.status >= 100 &&
+      options.status <= 599
+        ? options.status
+        : null
+    this.status = this.upstreamStatus
   }
 }
 
@@ -57,6 +102,7 @@ async function requestProvider(options) {
     apiKey,
     path,
     params,
+    providerStage,
     timeoutMs,
     fetchImpl,
   } = options
@@ -83,7 +129,10 @@ async function requestProvider(options) {
     if (!response?.ok) {
       throw new ApiFootballTeamFormError(
         getErrorCode(response?.status ?? 0),
-        { status: response?.status ?? null },
+        {
+          status: response?.status,
+          providerStage,
+        },
       )
     }
 
@@ -91,32 +140,46 @@ async function requestProvider(options) {
     try {
       payload = await response.json()
     } catch {
-      throw new ApiFootballTeamFormError('TEAM_FORM_API_INVALID_RESPONSE')
+      throw new ApiFootballTeamFormError('TEAM_FORM_API_INVALID_RESPONSE', {
+        errorCode: 'API_FOOTBALL_INVALID_JSON',
+        providerStage: 'parse_json',
+      })
     }
 
-    if (
-      !payload ||
-      typeof payload !== 'object' ||
-      hasProviderErrors(payload.errors)
-    ) {
-      throw new ApiFootballTeamFormError(
-        hasProviderErrors(payload?.errors)
-          ? 'TEAM_FORM_API_PROVIDER_ERROR'
-          : 'TEAM_FORM_API_INVALID_RESPONSE',
-      )
+    if (!payload || typeof payload !== 'object') {
+      throw new ApiFootballTeamFormError('TEAM_FORM_API_INVALID_RESPONSE', {
+        errorCode: 'API_FOOTBALL_DATA_UNAVAILABLE',
+        providerStage,
+      })
+    }
+
+    if (hasProviderErrors(payload.errors)) {
+      throw new ApiFootballTeamFormError('TEAM_FORM_API_PROVIDER_ERROR', {
+        errorCode: 'API_FOOTBALL_PROVIDER_ERRORS',
+        providerStage,
+      })
     }
 
     if (!Array.isArray(payload.response)) {
-      throw new ApiFootballTeamFormError('TEAM_FORM_API_INVALID_RESPONSE')
+      throw new ApiFootballTeamFormError('TEAM_FORM_API_INVALID_RESPONSE', {
+        errorCode: 'API_FOOTBALL_DATA_UNAVAILABLE',
+        providerStage,
+      })
     }
 
     return payload.response
   } catch (error) {
     if (error instanceof ApiFootballTeamFormError) throw error
     if (controller.signal.aborted || error?.name === 'AbortError') {
-      throw new ApiFootballTeamFormError('TEAM_FORM_API_TIMEOUT')
+      throw new ApiFootballTeamFormError('TEAM_FORM_API_TIMEOUT', {
+        errorCode: 'API_FOOTBALL_TIMEOUT',
+        providerStage: 'timeout',
+      })
     }
-    throw new ApiFootballTeamFormError('TEAM_FORM_API_NETWORK_ERROR')
+    throw new ApiFootballTeamFormError('TEAM_FORM_API_NETWORK_ERROR', {
+      errorCode: 'API_FOOTBALL_NETWORK_ERROR',
+      providerStage: 'network',
+    })
   } finally {
     clearTimeout(timeout)
   }
@@ -384,6 +447,7 @@ async function fetchTeamForm(options) {
     apiKey,
     path: '/teams',
     params: { search: providerTeamName },
+    providerStage: 'teams_search',
     timeoutMs,
     fetchImpl,
   })
@@ -400,6 +464,7 @@ async function fetchTeamForm(options) {
       team: providerTeam.id,
       last: recentLimit,
     },
+    providerStage: 'fixtures_recent',
     timeoutMs,
     fetchImpl,
   })
@@ -452,7 +517,12 @@ export async function fetchApiFootballTeamFormSnapshot(options = {}) {
     )
       ? 'TEAM_FORM_TEAM_UNMATCHED'
       : 'TEAM_FORM_DATA_UNAVAILABLE'
-    throw new ApiFootballTeamFormError(fallbackReason)
+    throw new ApiFootballTeamFormError(fallbackReason, {
+      providerStage:
+        fallbackReason === 'TEAM_FORM_TEAM_UNMATCHED'
+          ? 'teams_search'
+          : 'fixtures_recent',
+    })
   }
 
   return {

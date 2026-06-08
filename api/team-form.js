@@ -3,6 +3,30 @@ import process from 'node:process'
 import { createMockTeamFormSnapshot } from '../src/data/mockTeamFormSnapshot.js'
 import { fetchApiFootballTeamFormSnapshot } from './providers/apiFootballTeamFormAdapter.js'
 
+const SAFE_PROVIDER_STAGES = new Set([
+  'teams_search',
+  'fixtures_recent',
+  'parse_json',
+  'provider_errors',
+  'timeout',
+  'network',
+  'unknown',
+])
+
+const SAFE_ERROR_CODES = new Set([
+  'API_FOOTBALL_KEY_MISSING',
+  'API_FOOTBALL_AUTH_ERROR',
+  'API_FOOTBALL_FORBIDDEN',
+  'API_FOOTBALL_RATE_LIMIT',
+  'API_FOOTBALL_UPSTREAM_ERROR',
+  'API_FOOTBALL_INVALID_JSON',
+  'API_FOOTBALL_PROVIDER_ERRORS',
+  'API_FOOTBALL_TIMEOUT',
+  'API_FOOTBALL_NETWORK_ERROR',
+  'API_FOOTBALL_TEAM_UNMATCHED',
+  'API_FOOTBALL_DATA_UNAVAILABLE',
+])
+
 const DISABLED_TEAM_FORM_SNAPSHOT = {
   ok: false,
   disabled: true,
@@ -50,6 +74,19 @@ export function createDisabledTeamFormSnapshot(options = {}) {
 
 function createProviderFallback(error) {
   const fallbackReason = error?.code ?? 'TEAM_FORM_API_FAILED'
+  const errorCode = SAFE_ERROR_CODES.has(error?.errorCode)
+    ? error.errorCode
+    : 'API_FOOTBALL_UPSTREAM_ERROR'
+  const providerStage = SAFE_PROVIDER_STAGES.has(error?.providerStage)
+    ? error.providerStage
+    : 'unknown'
+  const errorUpstreamStatus = error?.upstreamStatus ?? error?.status
+  const upstreamStatus =
+    Number.isInteger(errorUpstreamStatus) &&
+    errorUpstreamStatus >= 100 &&
+    errorUpstreamStatus <= 599
+      ? errorUpstreamStatus
+      : null
   const fallbackSnapshot = createMockTeamFormSnapshot()
   const teams = fallbackSnapshot.teams.map((team) => ({
     ...team,
@@ -75,7 +112,9 @@ function createProviderFallback(error) {
       error: fallbackReason,
       source: 'api-football',
       message: 'API-Football request failed. Mock fallback structure returned.',
-      upstreamStatus: error?.status ?? null,
+      errorCode,
+      providerStage,
+      upstreamStatus,
     },
   })
 }
@@ -120,7 +159,11 @@ export default async function handler(request, response) {
       sendJson(
         response,
         200,
-        createProviderFallback({ code: 'TEAM_FORM_API_KEY_MISSING' }),
+        createProviderFallback({
+          code: 'TEAM_FORM_API_KEY_MISSING',
+          errorCode: 'API_FOOTBALL_KEY_MISSING',
+          providerStage: 'unknown',
+        }),
         {
           'Cache-Control': 's-maxage=60, stale-while-revalidate=300',
         },

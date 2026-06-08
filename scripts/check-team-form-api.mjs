@@ -110,6 +110,12 @@ assert(adapterText.includes('TEAM_FORM_API_UPSTREAM_ERROR'), 'Provider adapter m
 assert(adapterText.includes('TEAM_FORM_API_INVALID_RESPONSE'), 'Provider adapter must normalize invalid JSON.')
 assert(adapterText.includes('TEAM_FORM_API_PROVIDER_ERROR'), 'Provider adapter must normalize provider response errors.')
 assert(adapterText.includes('TEAM_FORM_TEAM_UNMATCHED'), 'Provider adapter must keep unmatched teams as fallback.')
+assert(adapterText.includes('API_FOOTBALL_PROVIDER_ERRORS'), 'Provider adapter must expose a safe provider error category.')
+assert(adapterText.includes("providerStage: 'teams_search'"), 'Provider adapter must identify the teams search stage.')
+assert(adapterText.includes("providerStage: 'fixtures_recent'"), 'Provider adapter must identify the recent fixtures stage.')
+assert(adapterText.includes('this.upstreamStatus'), 'Provider adapter errors must expose a sanitized upstreamStatus.')
+assert(apiText.includes('SAFE_ERROR_CODES'), 'Team form API endpoint must allowlist diagnostic error codes.')
+assert(apiText.includes('SAFE_PROVIDER_STAGES'), 'Team form API endpoint must allowlist provider stages.')
 assert(!/process\.env|import\.meta\.env/.test(adapterText), 'Provider adapter must receive credentials from the API endpoint.')
 assert(!/src\/services\/teamFormApi|src\\services\\teamFormApi/.test(apiText), 'Team form API endpoint must not import frontend team form service.')
 assert(!/bookmakers|mainMarkets|handicap|totalGoals|oddsConfidence/i.test(adapterText), 'Team form adapter must not return odds structures.')
@@ -185,6 +191,28 @@ const formTrendValues = new Set(['strong', 'stable', 'weak', 'volatile', 'unknow
 const attackDefenseTrendValues = new Set(['strong', 'normal', 'weak', 'unknown'])
 const confidenceValues = new Set(['high', 'medium', 'low'])
 const loadValues = new Set(['low', 'medium', 'high', 'unknown'])
+const providerStageValues = new Set([
+  'teams_search',
+  'fixtures_recent',
+  'parse_json',
+  'provider_errors',
+  'timeout',
+  'network',
+  'unknown',
+])
+const providerErrorCodeValues = new Set([
+  'API_FOOTBALL_KEY_MISSING',
+  'API_FOOTBALL_AUTH_ERROR',
+  'API_FOOTBALL_FORBIDDEN',
+  'API_FOOTBALL_RATE_LIMIT',
+  'API_FOOTBALL_UPSTREAM_ERROR',
+  'API_FOOTBALL_INVALID_JSON',
+  'API_FOOTBALL_PROVIDER_ERRORS',
+  'API_FOOTBALL_TIMEOUT',
+  'API_FOOTBALL_NETWORK_ERROR',
+  'API_FOOTBALL_TEAM_UNMATCHED',
+  'API_FOOTBALL_DATA_UNAVAILABLE',
+])
 const positivePattern = /guarantee|guaranteed|lock|sure|profit|boost|bonus|positive|must.?bet|recommend|pick|stake|bankroll|guaranteedWin|sureWin|increaseScore|raiseScore|bestBet|heavy/i
 
 function assertMetaShape(meta, label) {
@@ -361,6 +389,7 @@ function assertNoForbiddenResponseKeys(value, label, path = 'body') {
     assert(
       ![
         'apikey',
+        'errors',
         'headers',
         'rawresponse',
         'xapisportskey',
@@ -376,6 +405,9 @@ async function assertEndpointFallback(options) {
     label,
     fetchImpl,
     expectedFallbackReason,
+    expectedErrorCode,
+    expectedProviderStage,
+    expectedUpstreamStatus = null,
   } = options
   const previousFetch = globalThis.fetch
   const response = createMockResponse()
@@ -394,6 +426,11 @@ async function assertEndpointFallback(options) {
   assert(['mock', 'disabled'].includes(response.body.dataSource), `${label} endpoint fallback must use a compatible dataSource.`)
   assert(['fallback', 'disabled'].includes(response.body.status), `${label} endpoint fallback must use fallback or disabled status.`)
   assert(response.body.meta?.error === expectedFallbackReason, `${label} endpoint fallback must expose only the normalized error code.`)
+  assert(response.body.meta?.errorCode === expectedErrorCode, `${label} endpoint fallback must expose the safe diagnostic errorCode.`)
+  assert(response.body.meta?.providerStage === expectedProviderStage, `${label} endpoint fallback must expose the safe providerStage.`)
+  assert(providerErrorCodeValues.has(response.body.meta.errorCode), `${label} endpoint fallback errorCode must use the safe enum.`)
+  assert(providerStageValues.has(response.body.meta.providerStage), `${label} endpoint fallback providerStage must use the safe enum.`)
+  assert(response.body.meta?.upstreamStatus === expectedUpstreamStatus, `${label} endpoint fallback must expose only a real upstream HTTP status.`)
   assert(response.body.teams.length === mockSnapshot.teams.length, `${label} endpoint fallback must retain the mock team list.`)
   response.body.teams.forEach((team, index) =>
     assertTeamShape(team, `${label} endpoint fallback team ${index}`),
@@ -405,6 +442,8 @@ async function assertEndpointFallback(options) {
     'provider-header-must-not-leak',
     'raw-response-must-not-leak',
     'raw-private-field-must-not-leak',
+    'provider failed',
+    'provider fixture failed',
     'network down',
   ]) {
     assert(!serialized.includes(forbiddenValue), `${label} endpoint fallback must not expose ${forbiddenValue}.`)
@@ -537,6 +576,8 @@ assert(disabledSnapshot.provider === 'mock', 'Disabled team form snapshot must u
 assert(disabledSnapshot.dataSource === 'mock', 'Disabled team form snapshot must use mock dataSource while disabled.')
 assert(disabledSnapshot.teams.length === mockSnapshot.teams.length, 'Disabled team form snapshot must expose mock fallback teams.')
 assert(disabledSnapshot.meta.schemaVersion === 'team-form-snapshot-v1', 'Disabled team form snapshot must expose the schema version.')
+assert(!Object.prototype.hasOwnProperty.call(disabledSnapshot.meta, 'providerStage'), 'Disabled team form snapshot must not expose a misleading providerStage.')
+assert(!Object.prototype.hasOwnProperty.call(disabledSnapshot.meta, 'errorCode'), 'Disabled team form snapshot must not expose a misleading provider errorCode.')
 
 const fallbackSnapshot = createFallbackTeamFormSnapshot()
 assertDisabledShape(fallbackSnapshot, 'createFallbackTeamFormSnapshot')
@@ -560,6 +601,8 @@ try {
   assert(getResponse.body.dataSource === 'mock', 'Default team form response must use dataSource=mock.')
   assert(getResponse.body.fallbackReason === 'TEAM_FORM_API_DISABLED', 'Default team form response must keep TEAM_FORM_API_DISABLED.')
   assert(getResponse.body.teams.length === mockSnapshot.teams.length, 'GET /api/team-form must return mock fallback teams.')
+  assert(!Object.prototype.hasOwnProperty.call(getResponse.body.meta, 'providerStage'), 'Default GET /api/team-form must not expose a providerStage.')
+  assert(!Object.prototype.hasOwnProperty.call(getResponse.body.meta, 'errorCode'), 'Default GET /api/team-form must not expose a provider errorCode.')
   assert(supplierCallCount === 0, 'Default GET /api/team-form must not call the supplier.')
 
   const postResponse = createMockResponse()
@@ -581,6 +624,8 @@ try {
   )
   assert(missingKeyResponse.body.provider === 'api-football', 'Missing key fallback must identify the configured provider.')
   assert(missingKeyResponse.body.meta.error === 'TEAM_FORM_API_KEY_MISSING', 'Missing key fallback must expose only a safe error code.')
+  assert(missingKeyResponse.body.meta.errorCode === 'API_FOOTBALL_KEY_MISSING', 'Missing key fallback must expose a safe diagnostic errorCode.')
+  assert(missingKeyResponse.body.meta.providerStage === 'unknown', 'Missing key fallback must not claim that a provider request stage ran.')
   assert(supplierCallCount === 0, 'Missing key fallback must not call the supplier.')
 
   process.env.API_FOOTBALL_KEY = 'test-key-not-real'
@@ -630,6 +675,9 @@ try {
     {
       label: '401',
       expectedFallbackReason: 'TEAM_FORM_API_UNAUTHORIZED',
+      expectedErrorCode: 'API_FOOTBALL_AUTH_ERROR',
+      expectedProviderStage: 'teams_search',
+      expectedUpstreamStatus: 401,
       fetchImpl: async () => createSupplierResponse({
         ok: false,
         status: 401,
@@ -639,6 +687,9 @@ try {
     {
       label: '403',
       expectedFallbackReason: 'TEAM_FORM_API_FORBIDDEN',
+      expectedErrorCode: 'API_FOOTBALL_FORBIDDEN',
+      expectedProviderStage: 'teams_search',
+      expectedUpstreamStatus: 403,
       fetchImpl: async () => createSupplierResponse({
         ok: false,
         status: 403,
@@ -648,6 +699,9 @@ try {
     {
       label: '429',
       expectedFallbackReason: 'TEAM_FORM_API_QUOTA_EXCEEDED',
+      expectedErrorCode: 'API_FOOTBALL_RATE_LIMIT',
+      expectedProviderStage: 'teams_search',
+      expectedUpstreamStatus: 429,
       fetchImpl: async () => createSupplierResponse({
         ok: false,
         status: 429,
@@ -657,6 +711,9 @@ try {
     {
       label: '5xx',
       expectedFallbackReason: 'TEAM_FORM_API_UPSTREAM_ERROR',
+      expectedErrorCode: 'API_FOOTBALL_UPSTREAM_ERROR',
+      expectedProviderStage: 'teams_search',
+      expectedUpstreamStatus: 503,
       fetchImpl: async () => createSupplierResponse({
         ok: false,
         status: 503,
@@ -666,6 +723,9 @@ try {
     {
       label: 'non-2xx',
       expectedFallbackReason: 'TEAM_FORM_API_REQUEST_FAILED',
+      expectedErrorCode: 'API_FOOTBALL_UPSTREAM_ERROR',
+      expectedProviderStage: 'teams_search',
+      expectedUpstreamStatus: 400,
       fetchImpl: async () => createSupplierResponse({
         ok: false,
         status: 400,
@@ -675,14 +735,18 @@ try {
     {
       label: 'invalid JSON',
       expectedFallbackReason: 'TEAM_FORM_API_INVALID_RESPONSE',
+      expectedErrorCode: 'API_FOOTBALL_INVALID_JSON',
+      expectedProviderStage: 'parse_json',
       fetchImpl: async () => createSupplierResponse({
         payload: null,
         jsonError: true,
       }),
     },
     {
-      label: 'provider response errors',
+      label: 'teams search provider response errors',
       expectedFallbackReason: 'TEAM_FORM_API_PROVIDER_ERROR',
+      expectedErrorCode: 'API_FOOTBALL_PROVIDER_ERRORS',
+      expectedProviderStage: 'teams_search',
       fetchImpl: async () => createSupplierResponse({
         payload: [{ raw_private_field: 'raw-private-field-must-not-leak' }],
         errors: {
@@ -695,8 +759,33 @@ try {
       }),
     },
     {
+      label: 'recent fixtures provider response errors',
+      expectedFallbackReason: 'TEAM_FORM_API_PROVIDER_ERROR',
+      expectedErrorCode: 'API_FOOTBALL_PROVIDER_ERRORS',
+      expectedProviderStage: 'fixtures_recent',
+      fetchImpl: async (url) => {
+        if (url.pathname === '/teams') {
+          return createSupplierResponse({
+            payload: teamPayload(2, 'France'),
+          })
+        }
+        return createSupplierResponse({
+          payload: [{ raw_private_field: 'raw-private-field-must-not-leak' }],
+          errors: {
+            provider: 'provider fixture failed',
+            rawResponse: 'raw-response-must-not-leak',
+            headers: {
+              authorization: 'provider-header-must-not-leak',
+            },
+          },
+        })
+      },
+    },
+    {
       label: 'timeout',
       expectedFallbackReason: 'TEAM_FORM_API_TIMEOUT',
+      expectedErrorCode: 'API_FOOTBALL_TIMEOUT',
+      expectedProviderStage: 'timeout',
       fetchImpl: async () => {
         const error = new Error('provider timeout')
         error.name = 'AbortError'
@@ -706,6 +795,8 @@ try {
     {
       label: 'network error throw',
       expectedFallbackReason: 'TEAM_FORM_API_NETWORK_ERROR',
+      expectedErrorCode: 'API_FOOTBALL_NETWORK_ERROR',
+      expectedProviderStage: 'network',
       fetchImpl() {
         throw new Error('network down')
       },
@@ -713,6 +804,8 @@ try {
     {
       label: 'network error reject',
       expectedFallbackReason: 'TEAM_FORM_API_NETWORK_ERROR',
+      expectedErrorCode: 'API_FOOTBALL_NETWORK_ERROR',
+      expectedProviderStage: 'network',
       fetchImpl() {
         return Promise.reject(new Error('network down'))
       },
@@ -768,7 +861,13 @@ assert(partialSnapshot.teams[1].rawAvailable === false, 'Unmatched team must kee
 assert(partialSnapshot.teams[1].fallbackReason === 'TEAM_FORM_TEAM_UNMATCHED', 'Unmatched team must expose TEAM_FORM_TEAM_UNMATCHED.')
 assert(partialSnapshot.teams[1].dataQuality === 'low', 'Unmatched team must use low data quality.')
 
-async function assertAdapterError(responseOptions, expectedCode) {
+async function assertAdapterError(
+  responseOptions,
+  expectedCode,
+  expectedErrorCode,
+  expectedProviderStage = 'teams_search',
+  expectedStatus = null,
+) {
   let caught = null
 
   try {
@@ -784,17 +883,78 @@ async function assertAdapterError(responseOptions, expectedCode) {
 
   assert(caught instanceof ApiFootballTeamFormError, `${expectedCode} must use ApiFootballTeamFormError.`)
   assert(caught.code === expectedCode, `${expectedCode} must be normalized.`)
+  assert(caught.errorCode === expectedErrorCode, `${expectedCode} must expose a safe diagnostic errorCode.`)
+  assert(caught.providerStage === expectedProviderStage, `${expectedCode} must expose a safe providerStage.`)
+  assert(caught.upstreamStatus === expectedStatus, `${expectedCode} must expose a sanitized upstreamStatus.`)
+  assert(caught.status === expectedStatus, `${expectedCode} must expose only a real upstream HTTP status.`)
+  assert(providerErrorCodeValues.has(caught.errorCode), `${expectedCode} errorCode must use the safe enum.`)
+  assert(providerStageValues.has(caught.providerStage), `${expectedCode} providerStage must use the safe enum.`)
   assert(!caught.message.includes('test-key-not-real'), `${expectedCode} must not expose the API key.`)
 }
 
-await assertAdapterError({ ok: false, status: 401, payload: [] }, 'TEAM_FORM_API_UNAUTHORIZED')
-await assertAdapterError({ ok: false, status: 403, payload: [] }, 'TEAM_FORM_API_FORBIDDEN')
-await assertAdapterError({ ok: false, status: 429, payload: [] }, 'TEAM_FORM_API_QUOTA_EXCEEDED')
-await assertAdapterError({ ok: false, status: 500, payload: [] }, 'TEAM_FORM_API_UPSTREAM_ERROR')
-await assertAdapterError({ ok: false, status: 400, payload: [] }, 'TEAM_FORM_API_REQUEST_FAILED')
-await assertAdapterError({ payload: { items: [] } }, 'TEAM_FORM_API_INVALID_RESPONSE')
-await assertAdapterError({ payload: null, jsonError: true }, 'TEAM_FORM_API_INVALID_RESPONSE')
-await assertAdapterError({ payload: [], errors: { key: 'bad key' } }, 'TEAM_FORM_API_PROVIDER_ERROR')
+await assertAdapterError(
+  { ok: false, status: 401, payload: [] },
+  'TEAM_FORM_API_UNAUTHORIZED',
+  'API_FOOTBALL_AUTH_ERROR',
+  'teams_search',
+  401,
+)
+await assertAdapterError(
+  { ok: false, status: 403, payload: [] },
+  'TEAM_FORM_API_FORBIDDEN',
+  'API_FOOTBALL_FORBIDDEN',
+  'teams_search',
+  403,
+)
+await assertAdapterError(
+  { ok: false, status: 429, payload: [] },
+  'TEAM_FORM_API_QUOTA_EXCEEDED',
+  'API_FOOTBALL_RATE_LIMIT',
+  'teams_search',
+  429,
+)
+await assertAdapterError(
+  { ok: false, status: 500, payload: [] },
+  'TEAM_FORM_API_UPSTREAM_ERROR',
+  'API_FOOTBALL_UPSTREAM_ERROR',
+  'teams_search',
+  500,
+)
+await assertAdapterError(
+  { ok: false, status: 400, payload: [] },
+  'TEAM_FORM_API_REQUEST_FAILED',
+  'API_FOOTBALL_UPSTREAM_ERROR',
+  'teams_search',
+  400,
+)
+await assertAdapterError(
+  { payload: { items: [] } },
+  'TEAM_FORM_API_INVALID_RESPONSE',
+  'API_FOOTBALL_DATA_UNAVAILABLE',
+)
+await assertAdapterError(
+  { payload: null, jsonError: true },
+  'TEAM_FORM_API_INVALID_RESPONSE',
+  'API_FOOTBALL_INVALID_JSON',
+  'parse_json',
+)
+await assertAdapterError(
+  { payload: [], errors: { key: 'bad key' } },
+  'TEAM_FORM_API_PROVIDER_ERROR',
+  'API_FOOTBALL_PROVIDER_ERRORS',
+)
+
+const sanitizedDiagnosticError = new ApiFootballTeamFormError(
+  'TEAM_FORM_API_PROVIDER_ERROR',
+  {
+    errorCode: 'provider-secret-error',
+    providerStage: 'provider-secret-stage',
+    status: 0,
+  },
+)
+assert(sanitizedDiagnosticError.errorCode === 'API_FOOTBALL_UPSTREAM_ERROR', 'Adapter errors must reject diagnostic error codes outside the safe enum.')
+assert(sanitizedDiagnosticError.providerStage === 'unknown', 'Adapter errors must reject provider stages outside the safe enum.')
+assert(sanitizedDiagnosticError.upstreamStatus === null, 'Adapter errors must reject values that are not upstream HTTP statuses.')
 
 let unmatchedError = null
 try {
@@ -814,6 +974,8 @@ try {
 }
 assert(unmatchedError instanceof ApiFootballTeamFormError, 'Exact mismatch must use ApiFootballTeamFormError.')
 assert(unmatchedError.code === 'TEAM_FORM_TEAM_UNMATCHED', 'Exact mismatch must normalize as TEAM_FORM_TEAM_UNMATCHED.')
+assert(unmatchedError.errorCode === 'API_FOOTBALL_TEAM_UNMATCHED', 'Exact mismatch must expose a safe diagnostic errorCode.')
+assert(unmatchedError.providerStage === 'teams_search', 'Exact mismatch must identify the teams search stage.')
 
 let timeoutError = null
 try {
@@ -839,6 +1001,8 @@ try {
 }
 assert(timeoutError instanceof ApiFootballTeamFormError, 'Timeout must use ApiFootballTeamFormError.')
 assert(timeoutError.code === 'TEAM_FORM_API_TIMEOUT', 'Timeout must use TEAM_FORM_API_TIMEOUT.')
+assert(timeoutError.errorCode === 'API_FOOTBALL_TIMEOUT', 'Timeout must expose a safe diagnostic errorCode.')
+assert(timeoutError.providerStage === 'timeout', 'Timeout must identify the timeout stage.')
 
 const serviceSnapshot = await getTeamFormSnapshot({
   fetchImpl: async () => ({
