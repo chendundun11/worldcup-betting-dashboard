@@ -18,6 +18,8 @@ import { localOdds } from './data/localOdds'
 import { SQUAD_INSIGHTS } from './data/squadInsights'
 import { TEAM_PROFILES } from './data/teamProfiles'
 import teamsData from './data/teams.json'
+import { requestAiAnalysis } from './services/aiAnalysisApi.js'
+import { buildAiAnalysisPayload } from './services/aiAnalysisPayload.js'
 import { getInitialMatchSnapshot, getMatches } from './services/matchApi'
 import buildBetPlan from './services/betEngine.js'
 import {
@@ -1999,6 +2001,7 @@ function App() {
   const [spotlightCopyStatus, setSpotlightCopyStatus] = useState('idle')
   const [expandedDateKeys, setExpandedDateKeys] = useState({})
   const [showInternalEngine, setShowInternalEngine] = useState(false)
+  const [, setAiAnalysis] = useState(null)
   const canShowInternalEngine = import.meta.env.DEV
 
   useEffect(() => {
@@ -2268,9 +2271,21 @@ function App() {
   function handleReanalyze() {
     if (isAnalyzing) return
 
+    const aiPayload = buildAiAnalysisPayload({
+      match: activeMatch,
+      analysis: buildBetPlan(activeMatch, {
+        bankroll: 10000,
+        maxStakePerMatch: 500,
+        engineMode: 'internal',
+      }),
+    })
+
     setAnalysisPhase('scanning')
     window.setTimeout(() => setAnalysisPhase('risk'), 650)
-    window.setTimeout(() => setAnalysisPhase('generating'), 1_150)
+    window.setTimeout(() => {
+      setAnalysisPhase('generating')
+      void requestAiAnalysis(aiPayload).then(setAiAnalysis)
+    }, 1_150)
     window.setTimeout(() => {
       setAnalysisPhase('done')
       setLastAnalyzedAt(new Date())
