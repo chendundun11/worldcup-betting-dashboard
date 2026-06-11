@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import betHistoryData from './data/betHistory.json'
 import { localOdds } from './data/localOdds'
+import { getManualLineupForMatch } from './data/manualLineups.js'
 import { SQUAD_INSIGHTS } from './data/squadInsights'
 import { TEAM_PROFILES } from './data/teamProfiles'
 import teamsData from './data/teams.json'
@@ -506,6 +507,124 @@ function LineupPlaceholderCard({ sideLabel, teamName }) {
         ))}
       </div>
     </article>
+  )
+}
+
+const lineupRoleLabels = {
+  goalkeeper: '门将',
+  defenders: '后卫',
+  midfielders: '中场',
+  forwards: '前锋',
+}
+
+function getLineupStatusLabel(status) {
+  if (status === 'confirmed') return '官方首发'
+  if (status === 'unavailable') return '暂未公布'
+  return '预计首发'
+}
+
+function getLineupStatusTone(status) {
+  if (status === 'confirmed') return 'low'
+  if (status === 'unavailable') return 'none'
+  return 'medium'
+}
+
+function formatLineupUpdatedAt(value) {
+  const date = value ? new Date(value) : null
+  if (!date || Number.isNaN(date.getTime())) return '更新时间待确认'
+  return `${formatUpdateTime(date)} 更新`
+}
+
+function getLineupPlayers(players) {
+  const validPlayers = Array.isArray(players)
+    ? players.map((player) => String(player ?? '').trim()).filter(Boolean)
+    : []
+
+  return validPlayers.length ? validPlayers : ['待确认']
+}
+
+function ManualLineupTeamCard({ sideLabel, lineup }) {
+  return (
+    <article className="lineup-team-card manual-lineup-team-card">
+      <div className="lineup-team-head">
+        <span>{sideLabel}</span>
+        <div>
+          <strong>{lineup.teamName}</strong>
+          <small>阵型：{lineup.formation || '待确认'}</small>
+        </div>
+      </div>
+
+      <div className="lineup-role-grid manual-lineup-role-grid">
+        {Object.entries(lineupRoleLabels).map(([roleKey, roleLabel]) => (
+          <p key={`${lineup.teamName}-${roleKey}`}>
+            <span>{roleLabel}</span>
+            <strong className="lineup-player-tags">
+              {getLineupPlayers(lineup[roleKey]).map((player) => (
+                <small key={`${roleKey}-${player}`}>{player}</small>
+              ))}
+            </strong>
+          </p>
+        ))}
+      </div>
+    </article>
+  )
+}
+
+function ManualLineupBlock({ lineup, match, compact = false }) {
+  if (!lineup) {
+    return (
+      <>
+        <div className="section-title compact-title">
+          <span>预计首发 / 临场待确认</span>
+          <h2>预计首发：待确认</h2>
+          <p>正式首发需临场复核，本页不把占位当作正式名单。</p>
+        </div>
+        {compact ? (
+          <div className="mobile-lineup-list">
+            <p>
+              <span>主队</span>
+              <strong>{match.homeTeam.name}</strong>
+              <small>阵型待确认｜首发待确认</small>
+            </p>
+            <p>
+              <span>客队</span>
+              <strong>{match.awayTeam.name}</strong>
+              <small>阵型待确认｜首发待确认</small>
+            </p>
+          </div>
+        ) : (
+          <div className="lineup-placeholder-grid">
+            <LineupPlaceholderCard sideLabel="主队" teamName={match.homeTeam.name} />
+            <LineupPlaceholderCard sideLabel="客队" teamName={match.awayTeam.name} />
+          </div>
+        )}
+      </>
+    )
+  }
+
+  const statusLabel = getLineupStatusLabel(lineup.lineupStatus)
+
+  return (
+    <>
+      <div className="section-title compact-title">
+        <span>手动阵容</span>
+        <h2>{statusLabel}</h2>
+        <p>
+          {lineup.sourceLabel || '手动整理'} · {formatLineupUpdatedAt(lineup.updatedAt)}
+        </p>
+        <p>{lineup.note || '正式首发需临场复核'}</p>
+      </div>
+      <div className="manual-lineup-meta">
+        <em className={`risk-tag ${getLineupStatusTone(lineup.lineupStatus)}`}>
+          {statusLabel}
+        </em>
+        <span>正式首发需临场复核</span>
+      </div>
+      <div className="lineup-placeholder-grid">
+        <ManualLineupTeamCard sideLabel="主队" lineup={lineup.home} />
+        <ManualLineupTeamCard sideLabel="客队" lineup={lineup.away} />
+      </div>
+    </>
   )
 }
 
@@ -1738,14 +1857,11 @@ function isSkipPrimary(match) {
 }
 
 function getPrimaryDisplay(match) {
-  const direction = getPrimaryDirectionDisplay(match)
-  const strength = getRecommendationStrength(match)
-
-  return `${direction}｜${strength}`
+  return getBeginnerPrimaryDisplay(match)
 }
 
 function getCompactDirectionDisplay(match) {
-  return getPrimaryDirectionDisplay(match).replace('等待盘口确认', '等待盘口')
+  return getBeginnerPrimaryDisplay(match).replace('等待盘口确认', '等待盘口')
 }
 
 function getAiConfidence(match) {
@@ -1762,6 +1878,57 @@ function getAiConfidence(match) {
   return Math.round(
     clamp(baseConfidence + strongestSignal * 120 + riskAdjustment, 58, 84),
   )
+}
+
+function getPlanBetScore(plan) {
+  const score = Number(plan?.betScore)
+  if (!Number.isFinite(score)) return null
+  return Math.round(clamp(score, 0, 100))
+}
+
+function getDisplayConfidenceScore(match, plan) {
+  return getPlanBetScore(plan) ?? getAiConfidence(match)
+}
+
+function formatConfidenceScore(score) {
+  return `${Math.round(clamp(Number(score) || 0, 0, 100))}/100`
+}
+
+function getConfidenceTier(score) {
+  if (score >= 85) return { label: '高信心', tone: 'low' }
+  if (score >= 75) return { label: '中高信心', tone: 'low' }
+  if (score >= 65) return { label: '中等信心', tone: 'medium' }
+  if (score >= 55) return { label: '谨慎参考', tone: 'medium' }
+  return { label: '观望', tone: 'none' }
+}
+
+function getPublicRiskLevel(match, confidenceScore) {
+  if (isSkipPrimary(match) || confidenceScore < 55) {
+    return { label: '谨慎', tone: 'high' }
+  }
+  if (match.risk?.tone === 'high') return { label: '偏高', tone: 'high' }
+  if (match.risk?.tone === 'medium') return { label: '中等', tone: 'medium' }
+  return { label: '中等', tone: 'low' }
+}
+
+function getBeginnerPrimaryDisplay(match) {
+  if (!hasWdlOdds(match.odds) || isSkipPrimary(match)) {
+    return '等待盘口确认｜先观察'
+  }
+
+  const matchType = getMatchType(match)
+  const direction =
+    matchType.favoriteDirection && matchType.id === 'strongFavorite'
+      ? matchType.favoriteDirection
+      : match.recommendation.direction
+
+  if (matchType.id === 'balanced' || direction === 'draw') {
+    return '平局防范更重要'
+  }
+  if (direction === 'home') return `${match.homeTeam.name}方向更稳`
+  if (direction === 'away') return `${match.awayTeam.name}方向更稳`
+
+  return getPrimaryDirectionDisplay(match)
 }
 
 function getFeaturedMatchScore(match, index) {
@@ -1894,7 +2061,7 @@ function buildJudgementLine(match) {
   }
 
   if (match.recommendation.direction !== 'noBet') {
-    return `${getPrimaryDirectionDisplay(match)}更清晰，${getRecommendationStrength(match)}。`
+    return `${getBeginnerPrimaryDisplay(match)}，临场阵容和盘口变化需复核。`
   }
 
   return `${match.totalGoals.recommendation.label}更清晰，胜平负先观望。`
@@ -1921,7 +2088,7 @@ function buildTotalGoalsReason(match) {
 function getTotalGoalsStrength(match) {
   if (!hasWdlOdds(match.odds)) return '谨慎观察'
   if (match.totalGoals.recommendation.direction === 'noBet') return '不够清晰'
-  return getRecommendationStrength(match)
+  return getConfidenceTier(getDisplayConfidenceScore(match, null)).label
 }
 
 function getSafePlanQualityField(plan, key) {
@@ -2153,19 +2320,15 @@ function formatDataSource(meta) {
   return '本地模拟'
 }
 
-function buildSpotlightCopyText(match, publicDisplay) {
+function buildSpotlightCopyText(match, publicDisplay, confidenceScore) {
   const { scoreReference, totalGoalsDirection } = publicDisplay
   const primaryDisplay = getPrimaryDisplay(match)
-  const recommendationStrength = getRecommendationStrength(match)
-  const directionText = primaryDisplay.includes(recommendationStrength)
-    ? primaryDisplay
-    : `${primaryDisplay}｜${recommendationStrength}`
 
   return [
     '赛前重点参考',
     `${match.homeTeam.name} vs ${match.awayTeam.name}`,
-    `方向：${directionText}`,
-    `信心指数：${getAiConfidence(match)}%`,
+    `本场倾向：${primaryDisplay}`,
+    `信心指数：${formatConfidenceScore(confidenceScore)}`,
     `比分参考：${scoreReference.main} / ${scoreReference.backup}`,
     `大小球：${totalGoalsDirection}`,
     '阶段：赛前初盘，赛前24小时建议复核',
@@ -2400,6 +2563,26 @@ function App() {
     () => groupMatchesByBeijingDate(normalizedMatches),
     [normalizedMatches],
   )
+  const confidenceScoreByMatchKey = useMemo(() => {
+    const scoreMap = new Map()
+
+    normalizedMatches.forEach((match) => {
+      const plan = buildBetPlan(match, {
+        bankroll: 0,
+        maxStakePerMatch: 0,
+      })
+      scoreMap.set(match.uiKey, getDisplayConfidenceScore(match, plan))
+    })
+
+    return scoreMap
+  }, [normalizedMatches])
+
+  function getConfidenceForMatch(match) {
+    return (
+      confidenceScoreByMatchKey.get(match.uiKey) ??
+      getDisplayConfidenceScore(match, null)
+    )
+  }
 
   useEffect(() => {
     if (!normalizedMatches.length) return
@@ -2468,7 +2651,10 @@ function App() {
   }
 
   const isAnalyzing = analysisPhase !== 'done'
-  const selectedConfidence = getAiConfidence(activeMatch)
+  const selectedConfidence = getConfidenceForMatch(activeMatch)
+  const selectedConfidenceTier = getConfidenceTier(selectedConfidence)
+  const selectedRiskLevel = getPublicRiskLevel(activeMatch, selectedConfidence)
+  const activeManualLineup = getManualLineupForMatch(activeMatch)
   const internalLightDataLayerSummary = getInternalLightDataLayerSummary(internalBetPlan)
   const internalDataQualityLimitationSummaries = getInternalLimitationSummaries(
     internalBetPlan?.dataQuality?.limitations ?? [],
@@ -2504,12 +2690,16 @@ function App() {
     : null
   const spotlightCopyText =
     spotlightMatch && spotlightPublicDisplay
-      ? buildSpotlightCopyText(spotlightMatch, spotlightPublicDisplay)
+      ? buildSpotlightCopyText(
+          spotlightMatch,
+          spotlightPublicDisplay,
+          getConfidenceForMatch(spotlightMatch),
+        )
       : ''
   const analyzedMatchCount = normalizedMatches.length
   const featuredMatchCount = featuredMatches.length
   const highConfidenceMatchCount = normalizedMatches.filter(
-    (match) => getAiConfidence(match) >= 80,
+    (match) => getConfidenceForMatch(match) >= 85,
   ).length
   const pendingMarketCount = normalizedMatches.filter(
     (match) => !hasLocalOdds(match) || !hasWdlOdds(match.odds),
@@ -2581,8 +2771,8 @@ function App() {
             {activePublicDisplay.totalGoalsDirection}
           </p>
           <div className="hero-system-tags" aria-label="系统状态摘要">
-            <b>{getRecommendationStrength(activeMatch)}</b>
-            <b>{activeMatchType.label}</b>
+            <b>信心指数 {formatConfidenceScore(selectedConfidence)}</b>
+            <b>风险等级 {selectedRiskLevel.label}</b>
           </div>
         </div>
         <div className="mobile-match-rail" aria-label="手机端快速选择比赛">
@@ -2603,7 +2793,7 @@ function App() {
                     {match.homeTeam.shortName} vs {match.awayTeam.shortName}
                   </strong>
                   <small>{formatKickoff(match.kickoff)}</small>
-                  <em>{getPrimaryDirectionDisplay(match)}</em>
+                  <em>{getCompactDirectionDisplay(match)}</em>
                   <b>{publicDisplay.scoreReference.main}</b>
                 </button>
               )
@@ -2625,7 +2815,7 @@ function App() {
           <div className="daily-ai-summary" aria-label="重点推荐摘要">
             <div className="daily-ai-primary-grid">
               <p className="daily-ai-direction">
-                <span>主推方向</span>
+                <span>本场倾向</span>
                 <strong>{getPrimaryDisplay(spotlightMatch)}</strong>
               </p>
               <p className="daily-ai-score-highlight">
@@ -2639,15 +2829,20 @@ function App() {
             <div className="daily-ai-facts">
               <p>
                 <span>信心指数</span>
-                <strong>{getAiConfidence(spotlightMatch)}%</strong>
+                <strong>{formatConfidenceScore(getConfidenceForMatch(spotlightMatch))}</strong>
               </p>
               <p>
                 <span>大小球方向</span>
                 <strong>{spotlightPublicDisplay.totalGoalsDirection}</strong>
               </p>
               <p className="daily-ai-secondary-fact">
-                <span>推荐强度</span>
-                <strong>{getRecommendationStrength(spotlightMatch)}</strong>
+                <span>风险等级</span>
+                <strong>
+                  {getPublicRiskLevel(
+                    spotlightMatch,
+                    getConfidenceForMatch(spotlightMatch),
+                  ).label}
+                </strong>
               </p>
               <p className="daily-ai-secondary-fact">
                 <span>分析阶段</span>
@@ -2721,6 +2916,7 @@ function App() {
               const matchType = getMatchType(match)
               const publicDisplay = getPublicMatchDisplay(match)
               const scoreReference = publicDisplay.scoreReference
+              const confidenceScore = getConfidenceForMatch(match)
 
               return (
                 <button
@@ -2743,12 +2939,12 @@ function App() {
 
                   <div className="featured-card-main">
                     <p className="featured-card-direction">
-                      <span>主推方向</span>
-                      <strong>{getPrimaryDirectionDisplay(match)}</strong>
+                      <span>本场倾向</span>
+                      <strong>{getPrimaryDisplay(match)}</strong>
                     </p>
                     <p>
-                      <span>信心</span>
-                      <strong>{getAiConfidence(match)}%</strong>
+                      <span>信心指数</span>
+                      <strong>{formatConfidenceScore(confidenceScore)}</strong>
                     </p>
                     <p>
                       <span>比分</span>
@@ -2759,8 +2955,8 @@ function App() {
                       <strong>{publicDisplay.totalGoalsDirection}</strong>
                     </p>
                     <p className="featured-card-muted">
-                      <span>强度</span>
-                      <strong>{getRecommendationStrength(match)}</strong>
+                      <span>风险等级</span>
+                      <strong>{getPublicRiskLevel(match, confidenceScore).label}</strong>
                     </p>
                   </div>
                 </button>
@@ -2815,6 +3011,7 @@ function App() {
                         const matchType = getMatchType(match)
                         const publicDisplay = getPublicMatchDisplay(match)
                         const scoreReference = publicDisplay.scoreReference
+                        const confidenceScore = getConfidenceForMatch(match)
 
                         return (
                           <button
@@ -2838,8 +3035,8 @@ function App() {
                             <span className="match-card-time">{formatKickoff(match.kickoff)}</span>
                             <div className="match-card-signal">
                               <strong>{getCompactDirectionDisplay(match)}</strong>
-                              <span>{getAiConfidence(match)}%</span>
-                              <em>{getRecommendationStrength(match)}</em>
+                              <span>{formatConfidenceScore(confidenceScore)}</span>
+                              <em>{getPublicRiskLevel(match, confidenceScore).label}</em>
                             </div>
                             <div className="match-card-detail">
                               <span>
@@ -2876,29 +3073,39 @@ function App() {
               <p className="quick-kickoff-time">
                 {formatKickoff(activeMatch.kickoff)}
               </p>
-            </div>
+          </div>
 
-            <div className="quick-recommendation">
-              <span>主推方向</span>
+          <div className="quick-recommendation">
+              <span>本场倾向</span>
               <strong className={isSkipPrimary(activeMatch) ? 'skip-primary' : ''}>
                 {getPrimaryDisplay(activeMatch)}
               </strong>
               <p>{buildPrimaryReason(activeMatch)}</p>
             </div>
 
-            <div className="public-risk-tags" aria-label="主推风险标签">
-              <em className="risk-tag low">
-                信心：{getRecommendationStrength(activeMatch)}
+            <div className="confidence-summary-grid" aria-label="信心指数与风险等级">
+              <p>
+                <span>信心指数</span>
+                <strong>{formatConfidenceScore(selectedConfidence)}</strong>
+                <small>{selectedConfidenceTier.label}</small>
+              </p>
+              <p>
+                <span>风险等级</span>
+                <strong>{selectedRiskLevel.label}</strong>
+                <small>临场阵容和盘口需复核</small>
+              </p>
+            </div>
+
+            <div className="public-risk-tags" aria-label="核心结论标签">
+              <em className={`risk-tag ${selectedConfidenceTier.tone}`}>
+                {selectedConfidenceTier.label}
               </em>
-              <em className={`risk-tag ${activeMatchType.tone}`}>
-                {activeMatchType.label}
-              </em>
-              <em className={`risk-tag ${activeMatch.risk.tone}`}>
-                {formatRiskLabel(activeMatch.risk)}
+              <em className={`risk-tag ${selectedRiskLevel.tone}`}>
+                风险等级：{selectedRiskLevel.label}
               </em>
               <em className="risk-tag medium">临场复核</em>
               {isSkipPrimary(activeMatch) ? (
-                <em className="risk-tag high">谨慎 / 观望</em>
+                <em className="risk-tag high">谨慎参考</em>
               ) : null}
             </div>
 
@@ -3085,23 +3292,7 @@ function App() {
           </section>
 
           <section className="lineup-placeholder-panel" aria-label="预计首发与临场待确认">
-            <div className="section-title compact-title">
-              <span>预计首发 / 临场待确认</span>
-              <h2>阵容占位展示</h2>
-              <p>
-                正式首发通常需要开赛前复核，本页当前仅保留阵容展示占位。
-              </p>
-            </div>
-            <div className="lineup-placeholder-grid">
-              <LineupPlaceholderCard
-                sideLabel="主队"
-                teamName={activeMatch.homeTeam.name}
-              />
-              <LineupPlaceholderCard
-                sideLabel="客队"
-                teamName={activeMatch.awayTeam.name}
-              />
-            </div>
+            <ManualLineupBlock lineup={activeManualLineup} match={activeMatch} />
           </section>
 
           <section className="public-data-status-panel" aria-label="数据状态">
@@ -3135,24 +3326,11 @@ function App() {
           </section>
 
           <section className="mobile-lineup-data-panel" aria-label="阵容与数据状态">
-            <div className="section-title compact-title">
-              <span>阵容与数据状态</span>
-              <h2>预计首发：待确认</h2>
-              <p>正式首发需临场复核，本页不把占位当作正式名单。</p>
-            </div>
-
-            <div className="mobile-lineup-list">
-              <p>
-                <span>主队</span>
-                <strong>{activeMatch.homeTeam.name}</strong>
-                <small>阵型待确认｜首发待确认</small>
-              </p>
-              <p>
-                <span>客队</span>
-                <strong>{activeMatch.awayTeam.name}</strong>
-                <small>阵型待确认｜首发待确认</small>
-              </p>
-            </div>
+            <ManualLineupBlock
+              compact
+              lineup={activeManualLineup}
+              match={activeMatch}
+            />
 
             <div className="mobile-data-pills" aria-label="简短数据状态">
               {compactDataStatusItems.map((item) => (

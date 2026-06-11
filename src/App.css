@@ -989,6 +989,7 @@
 
 .quick-card-top span,
 .quick-recommendation span,
+.confidence-summary-grid span,
 .quick-meta-grid span,
 .quick-judgement-block span {
   display: block;
@@ -1088,6 +1089,41 @@
   font-size: 17px;
   font-weight: 900;
   line-height: 1.65;
+}
+
+.confidence-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.confidence-summary-grid p {
+  min-width: 0;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid rgba(45, 212, 191, 0.18);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(45, 212, 191, 0.08), rgba(2, 6, 14, 0.22)),
+    rgba(2, 6, 14, 0.26);
+}
+
+.confidence-summary-grid strong {
+  display: block;
+  margin-top: 8px;
+  color: var(--mint);
+  font-family: var(--number);
+  font-size: clamp(30px, 4vw, 48px);
+  line-height: 1;
+}
+
+.confidence-summary-grid small {
+  display: block;
+  margin-top: 6px;
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.35;
 }
 
 .public-risk-tags {
@@ -1402,6 +1438,20 @@
   gap: 12px;
 }
 
+.manual-lineup-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.manual-lineup-meta span {
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 900;
+}
+
 .lineup-team-card,
 .public-status-grid p,
 .pregame-checklist li {
@@ -1487,6 +1537,25 @@
   color: var(--gold);
   font-size: 11px;
   font-weight: 900;
+}
+
+.manual-lineup-role-grid p {
+  gap: 7px;
+}
+
+.lineup-player-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.lineup-player-tags small {
+  max-width: 100%;
+  padding: 4px 7px;
+  border-radius: 999px;
+  color: var(--text-strong);
+  background: rgba(148, 163, 184, 0.12);
+  overflow-wrap: anywhere;
 }
 
 .public-status-grid p {
@@ -2765,6 +2834,24 @@
     -webkit-line-clamp: 2;
   }
 
+  .confidence-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .confidence-summary-grid p {
+    padding: 10px;
+    border-radius: 14px;
+  }
+
+  .confidence-summary-grid strong {
+    font-size: clamp(24px, 8vw, 34px);
+  }
+
+  .confidence-summary-grid small {
+    font-size: 11px;
+  }
+
   .public-risk-tags {
     margin-top: 12px;
     gap: 6px;
@@ -2918,6 +3005,37 @@
     margin-top: 6px;
     font-size: 12px;
     line-height: 1.5;
+  }
+
+  .mobile-lineup-data-panel .lineup-placeholder-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .mobile-lineup-data-panel .manual-lineup-meta {
+    margin-bottom: 8px;
+  }
+
+  .mobile-lineup-data-panel .lineup-team-card {
+    padding: 10px;
+    border-radius: 14px;
+  }
+
+  .mobile-lineup-data-panel .lineup-team-head {
+    margin-bottom: 8px;
+  }
+
+  .mobile-lineup-data-panel .lineup-team-head strong {
+    font-size: 18px;
+  }
+
+  .mobile-lineup-data-panel .lineup-role-grid {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .mobile-lineup-data-panel .lineup-role-grid p {
+    padding: 8px;
   }
 
   .mobile-lineup-list {
