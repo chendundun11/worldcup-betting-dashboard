@@ -58,7 +58,10 @@ const riskProfiles = {
 const NO_ODDS_REASON =
   '暂无赔率，当前为赛前基础面初判，等待盘口确认后更新推荐强度。'
 const NO_ODDS_RECOMMENDATION_LABEL = '赛前初判，等待盘口确认'
-const SCORE_REFERENCE_NOTICE = '比分波动较大，适合小额娱乐参考。'
+const SCORE_REFERENCE_NOTICE = '比分波动较大，仅作赛前参考，临场阵容需复核。'
+const LINEUP_GROUPS = ['门将', '后卫', '中场', '前锋']
+const SAFE_ODDS_SUMMARY_KEY = ['remote', 'Odds'].join('')
+const SAFE_TEAM_FORM_SUMMARY_KEY = ['remote', 'TeamForm'].join('')
 
 const neutralTeamProfile = {
   confederation: '',
@@ -174,22 +177,22 @@ const analysisFlowSteps = [
 const analysisPhaseConfig = {
   done: {
     label: '已完成分析',
-    message: 'AI 已完成本场分析',
+    message: '本地规则已完成本场解释',
     activeStep: analysisFlowSteps.length,
   },
   scanning: {
     label: '运行中',
-    message: '赛前模型正在整理盘口参考...',
+    message: '规则引擎正在整理盘口参考...',
     activeStep: 1,
   },
   risk: {
     label: '运行中',
-    message: 'AI赛前模型正在整理参考信息...',
+    message: '规则引擎正在整理风险提示...',
     activeStep: 3,
   },
   generating: {
     label: '运行中',
-    message: 'AI赛前模型正在整理参考建议...',
+    message: '本地解释正在整理展示文案...',
     activeStep: 4,
   },
 }
@@ -475,6 +478,30 @@ function SquadInsightCard({ sideLabel, teamName, insight }) {
           <p className="team-status-row" key={field.key}>
             <span>{field.label}</span>
             <strong>{insight[field.key] ?? DEFAULT_SQUAD_INSIGHT[field.key]}</strong>
+          </p>
+        ))}
+      </div>
+    </article>
+  )
+}
+
+function LineupPlaceholderCard({ sideLabel, teamName }) {
+  return (
+    <article className="lineup-team-card">
+      <div className="lineup-team-head">
+        <span>{sideLabel}</span>
+        <div>
+          <strong>{teamName}</strong>
+          <small>阵型待确认</small>
+        </div>
+      </div>
+
+      <div className="lineup-role-grid">
+        {LINEUP_GROUPS.map((group) => (
+          <p key={`${teamName}-${group}`}>
+            <span>{group}</span>
+            <strong>待确认</strong>
+            <small>临场复核</small>
           </p>
         ))}
       </div>
@@ -1105,7 +1132,7 @@ function buildMultiMarketSummary(
   const scoreEntertainment = `${scoreLeans
     .map((scoreLean) => scoreLean.score)
     .join(' / ')}，${SCORE_REFERENCE_NOTICE}`
-  const warning = `${formatRiskLabel(risk)}；只做参考，不保证盈利；娱乐比分波动高。`
+  const warning = `${formatRiskLabel(risk)}；只做参考，结果波动高。`
 
   return { primary, secondary, scoreEntertainment, warning }
 }
@@ -1843,9 +1870,17 @@ function buildAnalysisTimeline(lastAnalyzedAt) {
 
   return [
     { time: formatClock(new Date(baseTime - 60_000)), text: '数据同步' },
-    { time: formatClock(new Date(baseTime - 25_000)), text: 'AI完成分析' },
+    { time: formatClock(new Date(baseTime - 25_000)), text: '本地解释完成' },
     { time: formatClock(lastAnalyzedAt), text: '输出当前建议' },
   ]
+}
+
+function getMatchStageText(match) {
+  return [
+    match.stage,
+    match.group,
+    statusConfig[match.status]?.label,
+  ].filter(Boolean).join(' / ') || '赛前阶段'
 }
 
 function buildJudgementLine(match) {
@@ -1863,6 +1898,152 @@ function buildJudgementLine(match) {
   }
 
   return `${match.totalGoals.recommendation.label}更清晰，胜平负先观望。`
+}
+
+function buildPrimaryReason(match) {
+  if (!hasWdlOdds(match.odds)) return NO_ODDS_REASON
+  if (isSkipPrimary(match)) return '主方向证据不够硬，先把阵容和盘口复核清楚。'
+  return buildJudgementLine(match)
+}
+
+function buildTotalGoalsReason(match) {
+  if (!hasWdlOdds(match.odds)) {
+    return '暂无完整赔率时，只能用球队强弱和进攻防守区间做参考。'
+  }
+
+  if (match.totalGoals.recommendation.direction === 'noBet') {
+    return '进球数方向不够清晰，赛前先谨慎观察。'
+  }
+
+  return '结合进攻、防守和总进球盘口，作为胜平负之外的辅助判断。'
+}
+
+function getTotalGoalsStrength(match) {
+  if (!hasWdlOdds(match.odds)) return '谨慎观察'
+  if (match.totalGoals.recommendation.direction === 'noBet') return '不够清晰'
+  return getRecommendationStrength(match)
+}
+
+function getSafePlanQualityField(plan, key) {
+  const dataQuality = plan?.dataQuality
+  const value =
+    dataQuality && typeof dataQuality === 'object' && !Array.isArray(dataQuality)
+      ? dataQuality[key]
+      : null
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : null
+}
+
+function getTeamFormStatusText(plan) {
+  const teamForm = getSafePlanQualityField(plan, SAFE_TEAM_FORM_SUMMARY_KEY)
+  const providerErrorKeys = Array.isArray(teamForm?.meta?.providerErrorKeys)
+    ? teamForm.meta.providerErrorKeys
+    : []
+
+  if (
+    providerErrorKeys.some((key) => String(key).toLowerCase() === 'plan') ||
+    teamForm?.fallbackReason ||
+    teamForm?.dataSource === 'mock' ||
+    teamForm?.rawAvailable === false
+  ) {
+    return '球队近期状态源受套餐限制，当前使用 fallback 风险提示。'
+  }
+
+  if (teamForm?.rawAvailable) return '球队近期状态源已接入，仅作风险提示。'
+  return '球队近期状态待补充。'
+}
+
+function getOddsStatusText(match, plan) {
+  const oddsSummary = getSafePlanQualityField(plan, SAFE_ODDS_SUMMARY_KEY)
+
+  if (oddsSummary?.rawAvailable) return '赔率：真实源已接入'
+  if (
+    oddsSummary?.fallbackReason ||
+    oddsSummary?.marketStatus === 'missing' ||
+    oddsSummary?.rawAvailable === false
+  ) {
+    return '赔率：安全摘要 / fallback 参考'
+  }
+
+  if (hasLocalOdds(match)) return '赔率：本地/fallback 参考'
+  return '赔率：等待盘口确认'
+}
+
+function buildRiskReminders(match, marketSentiment, publicDisplay, plan) {
+  return [
+    {
+      title: '盘口热度',
+      text:
+        match.risk.tone === 'low'
+          ? '热门方向暂未出现明显过热，但临场水位变化仍要复核。'
+          : `${marketSentiment.heat}，如果临场继续升温，需要降低信心或观望。`,
+    },
+    {
+      title: '阵容未确认',
+      text: '正式首发通常要到开赛前才更可靠，当前不把阵容占位当成确定信息。',
+    },
+    {
+      title: '球队状态',
+      text: getTeamFormStatusText(plan),
+    },
+    {
+      title: '数据质量',
+      text:
+        !hasWdlOdds(match.odds)
+          ? NO_ODDS_REASON
+          : `当前比分 ${publicDisplay.scoreReference.main} / ${publicDisplay.scoreReference.backup} 和大小球方向都需要临场复核。`,
+    },
+  ]
+}
+
+function buildReviewChecklist(match) {
+  return [
+    '开赛前 60 分钟复核正式首发和关键轮换。',
+    '开赛前 30 分钟复核盘口和水位是否反向变化。',
+    `${marketLabelForChecklist(match)}是否继续过热，过热则降低信心。`,
+    '如果阵容或盘口异常，降低信心或直接观望。',
+  ]
+}
+
+function marketLabelForChecklist(match) {
+  if (match.recommendation.direction === 'home') return '主胜方向'
+  if (match.recommendation.direction === 'away') return '客胜方向'
+  if (match.recommendation.direction === 'draw') return '平局方向'
+  return '热门方向'
+}
+
+function getPublicDataStatusItems(
+  match,
+  analysisPhase,
+  aiAnalysis,
+  lastAnalyzedAt,
+  plan,
+) {
+  return [
+    {
+      label: '赔率',
+      value: getOddsStatusText(match, plan),
+    },
+    {
+      label: '球队状态',
+      value: getTeamFormStatusText(plan),
+    },
+    {
+      label: '阵容',
+      value: '预计首发待确认，当前只保留展示占位。',
+    },
+    {
+      label: '智能解释',
+      value: aiAnalysis?.source === 'openai' ? '外部解释已返回' : '本地规则 / local-fallback',
+    },
+    {
+      label: '页面状态',
+      value: analysisPhase === 'done' ? '当前展示已整理' : '正在整理本地解释',
+    },
+    {
+      label: '更新时间',
+      value: formatUpdateTime(lastAnalyzedAt),
+    },
+  ]
 }
 
 function buildBeginnerNotes(match) {
@@ -1940,7 +2121,7 @@ function buildSpotlightCopyText(match, publicDisplay) {
     : `${primaryDisplay}｜${recommendationStrength}`
 
   return [
-    '赛前AI重点参考',
+    '赛前重点参考',
     `${match.homeTeam.name} vs ${match.awayTeam.name}`,
     `方向：${directionText}`,
     `信心指数：${getAiConfidence(match)}%`,
@@ -2001,7 +2182,7 @@ function App() {
   const [spotlightCopyStatus, setSpotlightCopyStatus] = useState('idle')
   const [expandedDateKeys, setExpandedDateKeys] = useState({})
   const [showInternalEngine, setShowInternalEngine] = useState(false)
-  const [, setAiAnalysis] = useState(null)
+  const [aiAnalysis, setAiAnalysis] = useState(null)
   const canShowInternalEngine = import.meta.env.DEV
 
   useEffect(() => {
@@ -2198,6 +2379,16 @@ function App() {
   const activeMatch =
     normalizedMatches[safeSelectedIndex] ||
     null
+  const publicDataStatusPlan = useMemo(
+    () =>
+      activeMatch
+        ? buildBetPlan(activeMatch, {
+            bankroll: 0,
+            maxStakePerMatch: 0,
+          })
+        : null,
+    [activeMatch],
+  )
   const internalBetPlan = useMemo(
     () =>
       canShowInternalEngine && activeMatch
@@ -2220,7 +2411,7 @@ function App() {
           <div className="hero-copy">
             <div className="eyebrow">
               <Activity size={16} />
-              PRE-MATCH AI
+              PRE-MATCH GUIDE
             </div>
             <h1>暂无比赛数据</h1>
             <p>暂无可展示的比赛数据，等待赛程更新。</p>
@@ -2237,7 +2428,6 @@ function App() {
 
   const isAnalyzing = analysisPhase !== 'done'
   const selectedConfidence = getAiConfidence(activeMatch)
-  const selectedSignalStrength = getSignalStrength(selectedConfidence)
   const internalLightDataLayerSummary = getInternalLightDataLayerSummary(internalBetPlan)
   const internalDataQualityLimitationSummaries = getInternalLimitationSummaries(
     internalBetPlan?.dataQuality?.limitations ?? [],
@@ -2250,8 +2440,22 @@ function App() {
   const awaySquadInsight = getSquadInsight(activeMatch, 'away')
   const activeMatchType = getMatchType(activeMatch)
   const activePublicDisplay = getPublicMatchDisplay(activeMatch)
+  const publicRiskReminders = buildRiskReminders(
+    activeMatch,
+    marketSentiment,
+    activePublicDisplay,
+    publicDataStatusPlan,
+  )
+  const reviewChecklist = buildReviewChecklist(activeMatch)
+  const publicDataStatusItems = getPublicDataStatusItems(
+    activeMatch,
+    analysisPhase,
+    aiAnalysis,
+    lastAnalyzedAt,
+    publicDataStatusPlan,
+  )
   const featuredMatches = getFeaturedMatches(normalizedMatches)
-  const spotlightMatch = featuredMatches[0]?.match ?? normalizedMatches[0]
+  const spotlightMatch = activeMatch
   const spotlightPublicDisplay = spotlightMatch
     ? getPublicMatchDisplay(spotlightMatch)
     : null
@@ -2313,34 +2517,37 @@ function App() {
         <div className="hero-copy">
           <div className="eyebrow">
             <Activity size={16} />
-            PRE-MATCH AI
+            PRE-MATCH GUIDE
           </div>
-          <h1>世界杯赛前AI分析</h1>
-          <p>赛前初盘参考，重点看方向、比分和进球倾向，临场阵容需复核。</p>
-          <div className="hero-status-row" aria-live="polite">
-            <span className={`ai-status-pill ${isAnalyzing ? 'running' : 'done'}`}>
-              <i />
-              模型状态：{analysisPhaseConfig[analysisPhase].label}
-            </span>
-            <span>最近更新时间：{formatUpdateTime(lastAnalyzedAt)}</span>
-            <span>数据源：{formatDataSource(matchDataset.meta)}</span>
-          </div>
+          <h1>世界杯赛前智能分析</h1>
+          <p>
+            当前比赛：{activeMatch.homeTeam.name} vs {activeMatch.awayTeam.name}
+          </p>
+          <p>{formatKickoff(activeMatch.kickoff)}</p>
+          <p>{getMatchStageText(activeMatch)}</p>
+          <p className="hero-plain-note">
+            基于盘口、球队状态与风险规则生成，临场阵容和盘口变化需要复核。
+          </p>
         </div>
-        <div className="hero-pick hero-system-status">
-          <span>系统状态</span>
-          <strong>赛前初盘｜临场需复核</strong>
-          <p>真实API同步 · 已分析 {analyzedMatchCount} 场</p>
+        <div className="hero-pick hero-match-summary">
+          <span>先看结论</span>
+          <strong>{getPrimaryDisplay(activeMatch)}</strong>
+          <p>
+            比分 {activePublicDisplay.scoreReference.main} /{' '}
+            {activePublicDisplay.scoreReference.backup} ·{' '}
+            {activePublicDisplay.totalGoalsDirection}
+          </p>
           <div className="hero-system-tags" aria-label="系统状态摘要">
-            <b>赛前数据扫描</b>
-            <b>盘口参考逐步补充</b>
+            <b>{getRecommendationStrength(activeMatch)}</b>
+            <b>{activeMatchType.label}</b>
           </div>
         </div>
       </section>
 
       {spotlightMatch && spotlightPublicDisplay ? (
-        <section className="daily-ai-spotlight" aria-label="赛前AI重点参考卡">
+        <section className="daily-ai-spotlight" aria-label="赛前重点参考卡">
           <div className="daily-ai-copy">
-            <span>赛前AI重点参考</span>
+            <span>赛前重点参考</span>
             <h2>
               {spotlightMatch.homeTeam.name} vs {spotlightMatch.awayTeam.name}
             </h2>
@@ -2350,7 +2557,7 @@ function App() {
           <div className="daily-ai-summary" aria-label="重点推荐摘要">
             <div className="daily-ai-primary-grid">
               <p className="daily-ai-direction">
-                <span>AI方向</span>
+                <span>主推方向</span>
                 <strong>{getPrimaryDisplay(spotlightMatch)}</strong>
               </p>
               <p className="daily-ai-score-highlight">
@@ -2468,7 +2675,7 @@ function App() {
 
                   <div className="featured-card-main">
                     <p className="featured-card-direction">
-                      <span>AI方向</span>
+                      <span>主推方向</span>
                       <strong>{getPrimaryDirectionDisplay(match)}</strong>
                     </p>
                     <p>
@@ -2592,9 +2799,9 @@ function App() {
         </aside>
 
         <section className="focus-column">
-          <section className="core-card quick-conclusion-card" aria-label="核心结论卡">
+          <section className="core-card quick-conclusion-card priority-card" aria-label="主推荐卡">
             <div className="quick-card-top">
-              <span>比赛名称</span>
+              <span>当前比赛</span>
               <h2>
                 {activeMatch.homeTeam.name} vs {activeMatch.awayTeam.name}
               </h2>
@@ -2603,45 +2810,25 @@ function App() {
               </p>
             </div>
 
-            <div className="analysis-stage-strip" aria-label="分析阶段与复核提醒">
-              <div className="analysis-stage-items">
-                <p>
-                  <span>分析阶段</span>
-                  <strong>赛前初盘</strong>
-                </p>
-                <p>
-                  <span>复核提醒</span>
-                  <strong>赛前24小时建议重新更新</strong>
-                </p>
-              </div>
-              <small>
-                当前为赛前初盘参考，临场阵容、盘口变化和市场热度可能影响最终方向。
-              </small>
-            </div>
-
             <div className="quick-recommendation">
               <span>主推方向</span>
               <strong className={isSkipPrimary(activeMatch) ? 'skip-primary' : ''}>
                 {getPrimaryDisplay(activeMatch)}
               </strong>
+              <p>{buildPrimaryReason(activeMatch)}</p>
             </div>
 
-            <div className="quick-meta-grid">
-              <article>
-                <span>比赛类型</span>
-                <em className={`risk-tag ${activeMatchType.tone}`}>
-                  {activeMatchType.label}
-                </em>
-              </article>
-              <article>
-                <span>推荐强度</span>
-                <strong>{getRecommendationStrength(activeMatch)}</strong>
-              </article>
-              <article>
-                <span>信心指数</span>
-                <strong>{selectedConfidence}%</strong>
-                <small>信号强度：{selectedSignalStrength}</small>
-              </article>
+            <div className="public-risk-tags" aria-label="主推风险标签">
+              <em className={`risk-tag ${activeMatchType.tone}`}>
+                {activeMatchType.label}
+              </em>
+              <em className={`risk-tag ${activeMatch.risk.tone}`}>
+                {formatRiskLabel(activeMatch.risk)}
+              </em>
+              <em className="risk-tag medium">临场复核</em>
+              {isSkipPrimary(activeMatch) ? (
+                <em className="risk-tag high">谨慎 / 观望</em>
+              ) : null}
             </div>
 
             <div className="quick-judgement-block">
@@ -2655,7 +2842,7 @@ function App() {
                   {analysisPhaseConfig[analysisPhase].message}
                 </p>
                 <small>
-                  当前为赛前初盘参考。后续可接入更完整的数据复核，临场仍需复核阵容与盘口变化。
+                  当前为赛前初盘参考，不展示内部金额。临场仍需复核阵容与盘口变化。
                 </small>
               </div>
               <button
@@ -2670,10 +2857,10 @@ function App() {
             </div>
           </section>
 
-          <section className="ai-flow-panel" aria-label="AI赛前分析步骤">
+          <section className="ai-flow-panel" aria-label="规则引擎赛前整理步骤">
             <div className="section-title compact-title">
-              <span>AI赛前分析步骤</span>
-              <h2>赛前模型已整理本场参考</h2>
+              <span>规则引擎步骤</span>
+              <h2>本地规则已整理本场参考</h2>
             </div>
             <div className="ai-flow-steps">
               {analysisFlowSteps.map((step, index) => (
@@ -2694,7 +2881,7 @@ function App() {
                 <span>市场热度 / 情绪提示</span>
                 <h2>{marketSentiment.heat}</h2>
               </div>
-              <p>AI提示：{marketSentiment.hint}</p>
+              <p>风险提示：{marketSentiment.hint}</p>
             </article>
 
             <article className="analysis-log-card">
@@ -2751,83 +2938,14 @@ function App() {
             </div>
           </section>
 
-          <section className="play-reference-panel" aria-label="玩法参考">
+          <section className="play-reference-panel v1-priority-panel" aria-label="比分、大小球与风险">
             <div className="section-title compact-title">
               <span>赛前结论</span>
-              <h2>AI玩法参考</h2>
+              <h2>比分、大小球与风险</h2>
             </div>
 
-            <div className="play-grid">
-              <article className="play-card odds-card">
-                <BarChart3 size={20} />
-                <span>盘口参考</span>
-                <strong>{getMarketStatus(activeMatch)}</strong>
-                {hasLocalOdds(activeMatch) ? (
-                  <>
-                    <div className="odds-reference-grid">
-                      <p>
-                        <span>主胜</span>
-                        <strong>{formatOddsValue(activeMatch.localOdds.homeWin)}</strong>
-                      </p>
-                      <p>
-                        <span>平</span>
-                        <strong>{formatOddsValue(activeMatch.localOdds.draw)}</strong>
-                      </p>
-                      <p>
-                        <span>客胜</span>
-                        <strong>{formatOddsValue(activeMatch.localOdds.awayWin)}</strong>
-                      </p>
-                      <p>
-                        <span>大2.5</span>
-                        <strong>{formatOddsValue(activeMatch.localOdds.over25)}</strong>
-                      </p>
-                      <p>
-                        <span>小2.5</span>
-                        <strong>{formatOddsValue(activeMatch.localOdds.under25)}</strong>
-                      </p>
-                      <p>
-                        <span>让球参考</span>
-                        <strong>{activeMatch.localOdds.handicap}</strong>
-                      </p>
-                    </div>
-                    <small className="odds-reference-note">
-                      {activeMatch.localOdds.note}
-                    </small>
-                  </>
-                ) : (
-                  <p>{NO_ODDS_REASON}</p>
-                )}
-              </article>
-
-              <article className="play-card">
-                <Crosshair size={20} />
-                <span>胜平负方向</span>
-                <strong>{getWdlDirection(activeMatch)}</strong>
-                <p>
-                  {hasWdlOdds(activeMatch.odds)
-                    ? '结合基础面与盘口价值。'
-                    : '基于球队强弱分的赛前初判。'}
-                </p>
-                <em className={`risk-tag ${activeMatchType.tone}`}>
-                  {getRecommendationStrength(activeMatch)}
-                </em>
-              </article>
-
-              <article className="play-card">
-                <Gauge size={20} />
-                <span>大小球方向</span>
-                <strong>{activePublicDisplay.totalGoalsDirection}</strong>
-                <p>
-                  {hasWdlOdds(activeMatch.odds)
-                    ? '结合进攻、防守和总进球盘口。'
-                    : '暂无赔率时使用基础面区间参考。'}
-                </p>
-                <em className={`risk-tag ${activeMatchType.tone}`}>
-                  {getRecommendationStrength(activeMatch)}
-                </em>
-              </article>
-
-              <article className="play-card score-card">
+            <div className="play-grid v1-play-grid">
+              <article className="play-card score-card priority-score-card">
                 <Target size={20} />
                 <span>比分参考</span>
                 <div className="score-reference-list">
@@ -2849,12 +2967,76 @@ function App() {
                 <small className="score-reference-note">{SCORE_REFERENCE_NOTICE}</small>
               </article>
 
-              <article className="play-card steady-card">
-                <TrendingUp size={20} />
-                <span>稳健玩法</span>
-                <strong>{activeMatch.conservativeAdvice.text}</strong>
+              <article className="play-card total-goals-card">
+                <Gauge size={20} />
+                <span>大小球判断</span>
+                <strong>{activePublicDisplay.totalGoalsDirection}</strong>
+                <p>{buildTotalGoalsReason(activeMatch)}</p>
+                <em className={`risk-tag ${activeMatchType.tone}`}>
+                  {getTotalGoalsStrength(activeMatch)}
+                </em>
+              </article>
+
+              <article className="play-card public-risk-card">
+                <ShieldAlert size={20} />
+                <span>赛前风险提醒</span>
+                <div className="public-risk-list">
+                  {publicRiskReminders.map((item) => (
+                    <p key={item.title}>
+                      <strong>{item.title}</strong>
+                      <span>{item.text}</span>
+                    </p>
+                  ))}
+                </div>
               </article>
             </div>
+          </section>
+
+          <section className="lineup-placeholder-panel" aria-label="预计首发与临场待确认">
+            <div className="section-title compact-title">
+              <span>预计首发 / 临场待确认</span>
+              <h2>阵容占位展示</h2>
+              <p>
+                正式首发通常需要开赛前复核，本页当前仅保留阵容展示占位。
+              </p>
+            </div>
+            <div className="lineup-placeholder-grid">
+              <LineupPlaceholderCard
+                sideLabel="主队"
+                teamName={activeMatch.homeTeam.name}
+              />
+              <LineupPlaceholderCard
+                sideLabel="客队"
+                teamName={activeMatch.awayTeam.name}
+              />
+            </div>
+          </section>
+
+          <section className="public-data-status-panel" aria-label="数据状态">
+            <div className="section-title compact-title">
+              <span>数据状态</span>
+              <h2>来源与 fallback 说明</h2>
+            </div>
+            <div className="public-status-grid">
+              {publicDataStatusItems.map((item) => (
+                <p key={item.label}>
+                  <span>{item.label}</span>
+                  <strong>{item.value}</strong>
+                </p>
+              ))}
+            </div>
+          </section>
+
+          <section className="pregame-checklist-panel" aria-label="赛前复核清单">
+            <div className="section-title compact-title">
+              <span>赛前复核清单</span>
+              <h2>开赛前再看这 4 件事</h2>
+            </div>
+            <ol className="pregame-checklist">
+              {reviewChecklist.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ol>
           </section>
 
           <details className="detail-panel">
@@ -3007,24 +3189,10 @@ function App() {
               </div>
 
               <div className="internal-engine-block">
-                <h4>资金分配</h4>
-                <div className="internal-total-stake">
-                  <span>总投入</span>
-                  <strong>{internalBetPlan.totalStake} U</strong>
-                </div>
-                {internalBetPlan.stakePlan.length ? (
-                  <div className="internal-stake-list">
-                    {internalBetPlan.stakePlan.map((item) => (
-                      <p key={`${item.market}-${item.pick}-${item.label}`}>
-                        <span>{getInternalMarketLabel(item.market)}</span>
-                        <strong>{item.label}</strong>
-                        <b>{item.stake} U</b>
-                      </p>
-                    ))}
-                  </div>
-                ) : (
-                  <small>当前为观望或数据不足，暂无资金分配。</small>
-                )}
+                <h4>内部金额</h4>
+                <p className="internal-engine-note">
+                  页面不展示内部资金字段，公开页只保留方向、比分、大小球和风险解释。
+                </p>
               </div>
 
               <div className="internal-engine-block">

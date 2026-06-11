@@ -1,4 +1,6 @@
 ﻿.rookie-dashboard {
+  display: flex;
+  flex-direction: column;
   position: relative;
   z-index: 1;
   width: min(1500px, calc(100% - 36px));
@@ -15,6 +17,9 @@
 .market-sentiment-card,
 .analysis-log-card,
 .team-status-panel,
+.lineup-placeholder-panel,
+.public-data-status-panel,
+.pregame-checklist-panel,
 .play-card,
 .detail-panel,
 .internal-engine-panel,
@@ -28,6 +33,7 @@
 }
 
 .hero-card {
+  order: 1;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 360px;
   gap: 14px;
@@ -40,6 +46,30 @@
     radial-gradient(circle at 16% 10%, rgba(96, 165, 250, 0.18), transparent 30%),
     linear-gradient(135deg, rgba(11, 20, 36, 0.98), rgba(2, 6, 18, 0.96));
   box-shadow: var(--shadow-lg);
+}
+
+.main-layout {
+  order: 2;
+}
+
+.daily-ai-spotlight {
+  order: 3;
+}
+
+.overview-grid {
+  order: 4;
+}
+
+.featured-matches-panel {
+  order: 5;
+}
+
+.review-panel {
+  order: 6;
+}
+
+.risk-footer {
+  order: 7;
 }
 
 .eyebrow {
@@ -155,6 +185,15 @@
 .hero-system-status strong {
   color: var(--text-strong);
   font-size: 24px;
+}
+
+.hero-match-summary strong {
+  color: var(--green);
+}
+
+.hero-plain-note {
+  color: var(--text-strong) !important;
+  font-weight: 900;
 }
 
 .hero-system-tags {
@@ -869,11 +908,59 @@
   gap: 16px;
 }
 
+.quick-conclusion-card {
+  order: 1;
+}
+
+.v1-priority-panel {
+  order: 2;
+}
+
+.lineup-placeholder-panel {
+  order: 3;
+}
+
+.public-data-status-panel {
+  order: 4;
+}
+
+.pregame-checklist-panel {
+  order: 5;
+}
+
+.team-status-panel {
+  order: 6;
+}
+
+.squad-insight-panel {
+  order: 7;
+}
+
+.detail-panel {
+  order: 8;
+}
+
+.ai-flow-panel {
+  order: 9;
+}
+
+.ai-insight-grid {
+  order: 10;
+}
+
+.internal-engine-toggle-row,
+.internal-engine-panel {
+  order: 11;
+}
+
 .core-card,
 .ai-flow-panel,
 .market-sentiment-card,
 .analysis-log-card,
 .team-status-panel,
+.lineup-placeholder-panel,
+.public-data-status-panel,
+.pregame-checklist-panel,
 .detail-panel,
 .review-panel,
 .risk-footer {
@@ -984,6 +1071,21 @@
   font-size: clamp(42px, 6vw, 78px);
   line-height: 1;
   letter-spacing: -0.06em;
+}
+
+.quick-recommendation p {
+  max-width: 760px;
+  margin: 12px 0 0;
+  color: var(--text-strong);
+  font-size: 17px;
+  font-weight: 900;
+  line-height: 1.65;
+}
+
+.public-risk-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .skip-primary {
@@ -1260,10 +1362,166 @@
     linear-gradient(180deg, rgba(9, 17, 32, 0.96), rgba(5, 10, 22, 0.94));
 }
 
+.lineup-placeholder-panel,
+.public-data-status-panel,
+.pregame-checklist-panel {
+  overflow: hidden;
+  border-color: rgba(148, 163, 184, 0.14);
+  background:
+    radial-gradient(circle at 12% 0%, rgba(96, 165, 250, 0.1), transparent 30%),
+    linear-gradient(180deg, rgba(9, 17, 32, 0.95), rgba(5, 10, 22, 0.94));
+}
+
+.section-title p {
+  max-width: 760px;
+  margin: 8px 0 0;
+  color: var(--text-soft);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.65;
+}
+
 .team-status-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+.lineup-placeholder-grid,
+.public-status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.lineup-team-card,
+.public-status-grid p,
+.pregame-checklist li {
+  margin: 0;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 18px;
+  background: rgba(2, 6, 14, 0.28);
+}
+
+.lineup-team-card {
+  padding: 15px;
+}
+
+.lineup-team-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.lineup-team-head span {
+  padding: 5px 8px;
+  border-radius: 999px;
+  color: var(--mint);
+  background: rgba(45, 212, 191, 0.1);
+  font-size: 12px;
+  font-weight: 1000;
+}
+
+.lineup-team-head div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  text-align: right;
+}
+
+.lineup-team-head strong {
+  color: var(--text-strong);
+  font-family: var(--display);
+  font-size: clamp(22px, 3vw, 34px);
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.lineup-team-head small {
+  color: var(--text-muted);
+  font-weight: 900;
+}
+
+.lineup-role-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.lineup-role-grid p {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.34);
+}
+
+.lineup-role-grid span,
+.public-status-grid span {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.lineup-role-grid strong,
+.public-status-grid strong {
+  color: var(--text-strong);
+  font-size: 14px;
+  font-weight: 1000;
+  line-height: 1.45;
+}
+
+.lineup-role-grid small {
+  color: var(--gold);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.public-status-grid p {
+  display: grid;
+  gap: 7px;
+  padding: 13px 14px;
+}
+
+.pregame-checklist {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: pregame-check;
+}
+
+.pregame-checklist li {
+  position: relative;
+  min-height: 52px;
+  padding: 13px 14px 13px 48px;
+  color: var(--text-strong);
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1.6;
+}
+
+.pregame-checklist li::before {
+  position: absolute;
+  top: 13px;
+  left: 14px;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 999px;
+  color: #04120f;
+  background: var(--mint);
+  counter-increment: pregame-check;
+  content: counter(pregame-check);
+  font-family: var(--number);
+  font-size: 12px;
+  font-weight: 1000;
 }
 
 .team-status-card {
@@ -1430,6 +1688,10 @@
   margin-top: 14px;
 }
 
+.v1-play-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
 .summary-grid article,
 .play-card {
   min-height: 132px;
@@ -1450,6 +1712,69 @@
   color: var(--text-strong);
   font-size: 16px;
   line-height: 1.6;
+}
+
+.priority-score-card {
+  border-color: rgba(96, 165, 250, 0.24);
+  background:
+    radial-gradient(circle at 84% 12%, rgba(96, 165, 250, 0.16), transparent 30%),
+    rgba(2, 6, 14, 0.28);
+}
+
+.priority-score-card .score-reference-list strong {
+  font-size: clamp(32px, 4vw, 48px);
+}
+
+.total-goals-card {
+  border-color: rgba(45, 212, 191, 0.22);
+  background:
+    radial-gradient(circle at 86% 12%, rgba(45, 212, 191, 0.16), transparent 30%),
+    rgba(2, 6, 14, 0.28);
+}
+
+.total-goals-card > strong {
+  color: var(--mint);
+  font-family: var(--display);
+  font-size: clamp(30px, 4vw, 46px);
+  line-height: 1.05;
+}
+
+.public-risk-card {
+  grid-column: 1 / -1;
+  border-color: rgba(251, 191, 36, 0.24);
+  background:
+    radial-gradient(circle at 96% 0%, rgba(251, 191, 36, 0.12), transparent 32%),
+    rgba(2, 6, 14, 0.28);
+}
+
+.public-risk-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.public-risk-list p {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 11px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 16px;
+  background: rgba(2, 6, 14, 0.25);
+}
+
+.public-risk-list strong {
+  margin: 0;
+  color: var(--gold);
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.public-risk-list span {
+  color: var(--text-soft);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.65;
 }
 
 .play-card svg {
@@ -1993,8 +2318,11 @@
   .ai-flow-steps,
   .ai-insight-grid,
   .team-status-grid,
+  .lineup-placeholder-grid,
+  .public-status-grid,
   .summary-grid,
   .play-grid,
+  .v1-play-grid,
   .team-compare-list,
   .simple-match-list {
     grid-template-columns: 1fr;
@@ -2020,6 +2348,9 @@
   .market-sentiment-card,
   .analysis-log-card,
   .team-status-panel,
+  .lineup-placeholder-panel,
+  .public-data-status-panel,
+  .pregame-checklist-panel,
   .match-list-panel,
   .detail-panel,
   .internal-engine-panel,
@@ -2037,6 +2368,9 @@
   .market-sentiment-card,
   .analysis-log-card,
   .team-status-panel,
+  .lineup-placeholder-panel,
+  .public-data-status-panel,
+  .pregame-checklist-panel,
   .match-list-panel,
   .detail-panel,
   .internal-engine-panel,
@@ -2046,6 +2380,23 @@
 
   .analysis-stage-items {
     grid-template-columns: 1fr;
+  }
+
+  .main-layout {
+    gap: 12px;
+    margin-top: 12px;
+  }
+
+  .focus-column {
+    order: 1;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .match-list-panel {
+    order: 2;
+    max-height: 420px;
+    overflow-y: auto;
   }
 
   .hero-card {
@@ -2065,6 +2416,54 @@
   .hero-pick {
     min-height: 110px;
     padding: 14px;
+  }
+
+  .hero-status-row span,
+  .hero-system-tags b,
+  .public-risk-tags span,
+  .match-type-pill,
+  .status-pill,
+  .risk-tag,
+  .hit-state {
+    white-space: normal;
+  }
+
+  .quick-card-top,
+  .quick-recommendation,
+  .lineup-team-head,
+  .team-status-card-header,
+  .team-status-row,
+  .timeline-item {
+    min-width: 0;
+  }
+
+  .quick-card-top h2,
+  .section-title h2,
+  .match-heading h2 {
+    overflow-wrap: anywhere;
+  }
+
+  .quick-recommendation strong {
+    font-size: clamp(32px, 12vw, 48px);
+  }
+
+  .priority-score-card .score-reference-list strong,
+  .total-goals-card > strong {
+    font-size: clamp(30px, 11vw, 42px);
+  }
+
+  .public-risk-card {
+    grid-column: auto;
+  }
+
+  .lineup-placeholder-grid,
+  .public-status-grid,
+  .lineup-role-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pregame-checklist li {
+    padding-right: 12px;
   }
 
   .daily-ai-spotlight {
