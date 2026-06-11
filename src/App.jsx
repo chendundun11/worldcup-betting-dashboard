@@ -2004,6 +2004,25 @@ function buildReviewChecklist(match) {
   ]
 }
 
+function clampMobileText(text, maxLength = 34) {
+  const value = String(text ?? '').trim()
+  if (value.length <= maxLength) return value
+  return `${value.slice(0, maxLength)}...`
+}
+
+function buildCompactRiskItems(riskReminders, reviewChecklist) {
+  const reminderItems = riskReminders.slice(0, 2).map((item) => ({
+    title: item.title,
+    text: clampMobileText(item.text, 40),
+  }))
+  const checklistItems = reviewChecklist.slice(0, 2).map((item) => ({
+    title: '临场复核',
+    text: clampMobileText(item, 40),
+  }))
+
+  return [...reminderItems, ...checklistItems].slice(0, 4)
+}
+
 function marketLabelForChecklist(match) {
   if (match.recommendation.direction === 'home') return '主胜方向'
   if (match.recommendation.direction === 'away') return '客胜方向'
@@ -2044,6 +2063,28 @@ function getPublicDataStatusItems(
       value: formatUpdateTime(lastAnalyzedAt),
     },
   ]
+}
+
+function getCompactDataStatusItems(statusItems) {
+  return statusItems
+    .filter((item) => ['赔率', '球队状态', '智能解释'].includes(item.label))
+    .map((item) => {
+      if (item.label === '赔率') {
+        if (item.value.includes('真实')) return { label: '赔率', value: '真实源' }
+        if (item.value.includes('等待')) return { label: '赔率', value: '待确认' }
+        return { label: '赔率', value: 'fallback' }
+      }
+
+      if (item.label === '球队状态') {
+        if (item.value.includes('已接入')) return { label: '球队状态', value: '已接入' }
+        if (item.value.includes('fallback') || item.value.includes('套餐')) {
+          return { label: '球队状态', value: 'fallback' }
+        }
+        return { label: '球队状态', value: '待补充' }
+      }
+
+      return { label: '解释', value: '本地规则' }
+    })
 }
 
 function buildBeginnerNotes(match) {
@@ -2447,6 +2488,7 @@ function App() {
     publicDataStatusPlan,
   )
   const reviewChecklist = buildReviewChecklist(activeMatch)
+  const compactRiskItems = buildCompactRiskItems(publicRiskReminders, reviewChecklist)
   const publicDataStatusItems = getPublicDataStatusItems(
     activeMatch,
     analysisPhase,
@@ -2454,6 +2496,7 @@ function App() {
     lastAnalyzedAt,
     publicDataStatusPlan,
   )
+  const compactDataStatusItems = getCompactDataStatusItems(publicDataStatusItems)
   const featuredMatches = getFeaturedMatches(normalizedMatches)
   const spotlightMatch = activeMatch
   const spotlightPublicDisplay = spotlightMatch
@@ -2519,7 +2562,7 @@ function App() {
             <Activity size={16} />
             PRE-MATCH GUIDE
           </div>
-          <h1>世界杯赛前智能分析</h1>
+          <h1>世界杯赛前分析</h1>
           <p>
             当前比赛：{activeMatch.homeTeam.name} vs {activeMatch.awayTeam.name}
           </p>
@@ -2540,6 +2583,31 @@ function App() {
           <div className="hero-system-tags" aria-label="系统状态摘要">
             <b>{getRecommendationStrength(activeMatch)}</b>
             <b>{activeMatchType.label}</b>
+          </div>
+        </div>
+        <div className="mobile-match-rail" aria-label="手机端快速选择比赛">
+          <span>选择比赛</span>
+          <div className="mobile-match-scroll">
+            {normalizedMatches.map((match, index) => {
+              const publicDisplay = getPublicMatchDisplay(match)
+              const isActive = safeSelectedIndex === index
+
+              return (
+                <button
+                  className={isActive ? 'mobile-match-chip active' : 'mobile-match-chip'}
+                  key={`mobile-${match.uiKey}`}
+                  onClick={() => setSelectedIndex(index)}
+                  type="button"
+                >
+                  <strong>
+                    {match.homeTeam.shortName} vs {match.awayTeam.shortName}
+                  </strong>
+                  <small>{formatKickoff(match.kickoff)}</small>
+                  <em>{getPrimaryDirectionDisplay(match)}</em>
+                  <b>{publicDisplay.scoreReference.main}</b>
+                </button>
+              )
+            })}
           </div>
         </div>
       </section>
@@ -2819,6 +2887,9 @@ function App() {
             </div>
 
             <div className="public-risk-tags" aria-label="主推风险标签">
+              <em className="risk-tag low">
+                信心：{getRecommendationStrength(activeMatch)}
+              </em>
               <em className={`risk-tag ${activeMatchType.tone}`}>
                 {activeMatchType.label}
               </em>
@@ -2830,6 +2901,27 @@ function App() {
                 <em className="risk-tag high">谨慎 / 观望</em>
               ) : null}
             </div>
+
+            <button
+              className={
+                spotlightCopyStatus === 'copied'
+                  ? 'mobile-copy-button copied'
+                  : 'mobile-copy-button'
+              }
+              onClick={handleCopySpotlightText}
+              type="button"
+            >
+              {spotlightCopyStatus === 'copied' ? (
+                <Check size={15} />
+              ) : (
+                <Copy size={15} />
+              )}
+              {spotlightCopyStatus === 'copied'
+                ? '已复制'
+                : spotlightCopyStatus === 'failed'
+                  ? '复制失败'
+                  : '复制本场结论'}
+            </button>
 
             <div className="quick-judgement-block">
               <span>一句话判断</span>
@@ -2938,10 +3030,10 @@ function App() {
             </div>
           </section>
 
-          <section className="play-reference-panel v1-priority-panel" aria-label="比分、大小球与风险">
+          <section className="play-reference-panel v1-priority-panel" aria-label="比分参考与大小球">
             <div className="section-title compact-title">
-              <span>赛前结论</span>
-              <h2>比分、大小球与风险</h2>
+              <span>比分参考</span>
+              <h2>比分 + 大小球</h2>
             </div>
 
             <div className="play-grid v1-play-grid">
@@ -3029,14 +3121,47 @@ function App() {
 
           <section className="pregame-checklist-panel" aria-label="赛前复核清单">
             <div className="section-title compact-title">
-              <span>赛前复核清单</span>
-              <h2>开赛前再看这 4 件事</h2>
+              <span>赛前风险</span>
+              <h2>开赛前重点看</h2>
             </div>
-            <ol className="pregame-checklist">
-              {reviewChecklist.map((item) => (
-                <li key={item}>{item}</li>
+            <ol className="pregame-checklist compact-risk-checklist">
+              {compactRiskItems.map((item) => (
+                <li key={`${item.title}-${item.text}`}>
+                  <strong>{item.title}</strong>
+                  <span>{item.text}</span>
+                </li>
               ))}
             </ol>
+          </section>
+
+          <section className="mobile-lineup-data-panel" aria-label="阵容与数据状态">
+            <div className="section-title compact-title">
+              <span>阵容与数据状态</span>
+              <h2>预计首发：待确认</h2>
+              <p>正式首发需临场复核，本页不把占位当作正式名单。</p>
+            </div>
+
+            <div className="mobile-lineup-list">
+              <p>
+                <span>主队</span>
+                <strong>{activeMatch.homeTeam.name}</strong>
+                <small>阵型待确认｜首发待确认</small>
+              </p>
+              <p>
+                <span>客队</span>
+                <strong>{activeMatch.awayTeam.name}</strong>
+                <small>阵型待确认｜首发待确认</small>
+              </p>
+            </div>
+
+            <div className="mobile-data-pills" aria-label="简短数据状态">
+              {compactDataStatusItems.map((item) => (
+                <p key={`${item.label}-${item.value}`}>
+                  <span>{item.label}</span>
+                  <strong>{item.value}</strong>
+                </p>
+              ))}
+            </div>
           </section>
 
           <details className="detail-panel">
