@@ -4,6 +4,39 @@ const LINEUP_SIDE_KEYS = ['home', 'away']
 const LINEUP_ROLE_KEYS = ['goalkeeper', 'defenders', 'midfielders', 'forwards']
 
 export const manualLineups = {
+  mexico__south_africa: {
+    matchLabel: 'Mexico vs South Africa',
+    lineupStatus: 'predicted',
+    sourceLabel: 'Al Jazeera predicted XI',
+    updatedAt: '2026-06-12T00:00:00Z',
+    note: '\u9884\u8ba1\u9996\u53d1\uff0c\u6b63\u5f0f\u9996\u53d1\u9700\u4e34\u573a\u590d\u6838',
+    home: {
+      teamName: 'Mexico',
+      formation: '4-3-3',
+      goalkeeper: ['Raul Rangel'],
+      defenders: [
+        'Jesus Gallardo',
+        'Johan Vasquez',
+        'Cesar Montes',
+        'Israel Reyes',
+      ],
+      midfielders: ['Brian Gutierrez', 'Erik Lira', 'Alvaro Fidalgo'],
+      forwards: ['Julian Quinones', 'Roberto Alvarado', 'Raul Jimenez'],
+    },
+    away: {
+      teamName: 'South Africa',
+      formation: '4-3-3',
+      goalkeeper: ['Ronwen Williams'],
+      defenders: [
+        'Khuliso Mudau',
+        'Ime Okon',
+        'Mbekezeli Mbokazi',
+        'Aubrey Modiba',
+      ],
+      midfielders: ['Teboho Mokoena', 'Sphephelo Sithole', 'Thalente Mbatha'],
+      forwards: ['Tshepang Moremi', 'Lyle Foster', 'Oswin Appollis'],
+    },
+  },
   France__Germany: {
     matchLabel: 'France vs Germany',
     lineupStatus: 'predicted',
@@ -100,4 +133,3 @@ export function getManualLineupForMatch(match) {
 
   return null
 }
-
