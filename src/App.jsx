@@ -7,11 +7,15 @@ import {
   Clock3,
   Copy,
   Crosshair,
+  Download,
   Gauge,
+  Image as ImageIcon,
+  Loader2,
   ShieldAlert,
   Target,
   TrendingUp,
   WalletCards,
+  X,
 } from 'lucide-react'
 import betHistoryData from './data/betHistory.json'
 import { localOdds } from './data/localOdds'
@@ -21,6 +25,15 @@ import { TEAM_PROFILES } from './data/teamProfiles'
 import teamsData from './data/teams.json'
 import { requestAiAnalysis } from './services/aiAnalysisApi.js'
 import { buildAiAnalysisPayload } from './services/aiAnalysisPayload.js'
+import {
+  copyPosterImage,
+  createSharePosterPng,
+  downloadSharePoster,
+} from './services/sharePoster.js'
+import {
+  buildRecommendationShareText,
+  buildShareMatchPayload,
+} from './services/shareText.js'
 import {
   getDisplayConfidence,
   getDisplayConfidenceTier,
@@ -2724,8 +2737,15 @@ function App() {
   const [showOnboardingNotice, setShowOnboardingNotice] = useState(false)
   const [hasUserSelectedMatch, setHasUserSelectedMatch] = useState(false)
   const [showLineupDetails, setShowLineupDetails] = useState(false)
+  const [shareCopyStatus, setShareCopyStatus] = useState('idle')
+  const [shareNotice, setShareNotice] = useState(null)
+  const [isPosterModalOpen, setIsPosterModalOpen] = useState(false)
+  const [posterPreview, setPosterPreview] = useState(null)
+  const [posterStatus, setPosterStatus] = useState('idle')
+  const [posterCopyStatus, setPosterCopyStatus] = useState('idle')
   const [aiAnalysis, setAiAnalysis] = useState(null)
   const focusSectionRef = useRef(null)
+  const shareNoticeTimerRef = useRef(null)
 
   useEffect(() => {
     let isMounted = true
@@ -2738,6 +2758,15 @@ function App() {
       isMounted = false
     }
   }, [])
+
+  useEffect(
+    () => () => {
+      if (shareNoticeTimerRef.current) {
+        window.clearTimeout(shareNoticeTimerRef.current)
+      }
+    },
+    [],
+  )
 
   useEffect(() => {
     setShowOnboardingNotice(shouldShowOnboardingNotice())
@@ -3081,6 +3110,22 @@ function App() {
           getConfidenceForMatch(spotlightMatch),
         )
       : ''
+  const shareMatchPayload = buildShareMatchPayload({
+    awayFormation: activeManualLineup?.away?.formation,
+    awayTeam: activeMatch.awayTeam.name,
+    displayConfidence: selectedConfidence,
+    homeFormation: activeManualLineup?.home?.formation,
+    homeTeam: activeMatch.homeTeam.name,
+    kickoff: formatKickoff(activeMatch.kickoff),
+    lineupStatus: activeManualLineup?.lineupStatus,
+    mainPick: getPrimaryDisplay(activeMatch),
+    recommendLevel: selectedConfidenceTier.label,
+    scorePredictions: activePublicDisplay.scoreReference,
+    statusTags: activeFocusStageTags,
+    summary: buildJudgementLine(activeMatch),
+    totalGoalsDirection: activePublicDisplay.totalGoalsDirection,
+  })
+  const recommendationShareText = buildRecommendationShareText(shareMatchPayload)
   const analyzedMatchCount = normalizedMatches.length
   const featuredMatchCount = featuredMatches.length
   const highConfidenceMatchCount = normalizedMatches.filter(
@@ -3122,6 +3167,79 @@ function App() {
     window.setTimeout(() => setSpotlightCopyStatus('idle'), 1_800)
   }
 
+  function showShareNotice(message, tone = 'success') {
+    setShareNotice({ message, tone })
+
+    if (shareNoticeTimerRef.current) {
+      window.clearTimeout(shareNoticeTimerRef.current)
+    }
+
+    shareNoticeTimerRef.current = window.setTimeout(() => {
+      setShareNotice(null)
+      shareNoticeTimerRef.current = null
+    }, 2_200)
+  }
+
+  async function handleCopyRecommendationText() {
+    setShareCopyStatus('copying')
+
+    try {
+      const didCopy = await copyTextToClipboard(recommendationShareText)
+      setShareCopyStatus(didCopy ? 'copied' : 'failed')
+      showShareNotice(
+        didCopy ? '已复制推荐文案' : '复制失败，请手动复制',
+        didCopy ? 'success' : 'error',
+      )
+    } catch {
+      setShareCopyStatus('failed')
+      showShareNotice('复制失败，请手动复制', 'error')
+    }
+
+    window.setTimeout(() => setShareCopyStatus('idle'), 1_800)
+  }
+
+  async function handleCreateSharePoster() {
+    setIsPosterModalOpen(true)
+    setPosterStatus('generating')
+    setPosterCopyStatus('idle')
+
+    try {
+      const poster = await createSharePosterPng(shareMatchPayload)
+      setPosterPreview(poster)
+      setPosterStatus('ready')
+    } catch {
+      setPosterStatus('failed')
+      showShareNotice('海报生成失败，请稍后重试', 'error')
+    }
+  }
+
+  function handleDownloadPoster() {
+    if (!posterPreview) return
+
+    try {
+      downloadSharePoster(posterPreview, shareMatchPayload)
+      showShareNotice('海报 PNG 已开始下载')
+    } catch {
+      showShareNotice('下载失败，请重新生成海报', 'error')
+    }
+  }
+
+  async function handleCopyPosterImage() {
+    if (!posterPreview) return
+
+    setPosterCopyStatus('copying')
+    const result = await copyPosterImage(posterPreview)
+    setPosterCopyStatus(
+      result.ok ? 'copied' : result.reason === 'unsupported' ? 'unsupported' : 'failed',
+    )
+    showShareNotice(result.message, result.ok ? 'success' : 'error')
+  }
+
+  function handleCloseSharePoster() {
+    setIsPosterModalOpen(false)
+    setPosterCopyStatus('idle')
+  }
+
   function handleToggleDateGroup(dateKey, isExpanded) {
     setExpandedDateKeys((currentDateKeys) => ({
       ...currentDateKeys,
@@ -3133,6 +3251,10 @@ function App() {
     setHasUserSelectedMatch(true)
     setSelectedIndex(index)
     setShowLineupDetails(false)
+    setIsPosterModalOpen(false)
+    setPosterPreview(null)
+    setPosterStatus('idle')
+    setPosterCopyStatus('idle')
   }
 
   function handleCloseOnboardingNotice() {
@@ -3629,8 +3751,60 @@ function App() {
             </article>
           </section>
 
+          <section className="share-actions-panel" aria-label="分享当前重点比赛">
+            <button
+              className={
+                shareCopyStatus === 'copied'
+                  ? 'share-action-button copied'
+                  : 'share-action-button'
+              }
+              disabled={shareCopyStatus === 'copying'}
+              onClick={handleCopyRecommendationText}
+              type="button"
+            >
+              {shareCopyStatus === 'copied' ? (
+                <Check size={18} />
+              ) : shareCopyStatus === 'copying' ? (
+                <Loader2 className="share-spinner" size={18} />
+              ) : (
+                <Copy size={18} />
+              )}
+              <span>一键复制文案</span>
+              <small>
+                {shareCopyStatus === 'copied'
+                  ? '已复制推荐文案'
+                  : shareCopyStatus === 'failed'
+                    ? '复制失败，请手动复制'
+                    : '复制当前比赛文字推荐'}
+              </small>
+            </button>
+
+            <button
+              className="share-action-button share-action-button-primary"
+              disabled={posterStatus === 'generating'}
+              onClick={handleCreateSharePoster}
+              type="button"
+            >
+              {posterStatus === 'generating' ? (
+                <Loader2 className="share-spinner" size={18} />
+              ) : (
+                <ImageIcon size={18} />
+              )}
+              <span>生成分享海报</span>
+              <small>
+                {posterStatus === 'generating' ? '正在生成 4:5 PNG' : '预览、下载或复制图片'}
+              </small>
+            </button>
+          </section>
+
+          {shareNotice ? (
+            <p className={`share-toast ${shareNotice.tone}`} role="status">
+              {shareNotice.message}
+            </p>
+          ) : null}
+
           <section className="compact-risk-line-panel" aria-label="一句话风险提示">
-            临场首发、盘口异动、红牌与天气因素可能影响赛果，低信心建议轻仓或观望。
+            临场首发、盘口异动、红牌伤退与比赛进程可能影响赛果，仅供赛前参考。
           </section>
 
           <section className="mobile-focus-list-panel" aria-label="重点关注 3 场">
@@ -4041,6 +4215,94 @@ function App() {
           ))}
         </div>
       </section>
+
+      {isPosterModalOpen ? (
+        <div
+          className="share-poster-overlay"
+          onMouseDown={handleCloseSharePoster}
+          role="presentation"
+        >
+          <section
+            aria-label="分享海报预览"
+            aria-modal="true"
+            className="share-poster-dialog"
+            onMouseDown={(event) => event.stopPropagation()}
+            role="dialog"
+          >
+            <div className="share-poster-head">
+              <div>
+                <span>分享海报预览</span>
+                <h2>{shareMatchPayload.matchName}</h2>
+                <p>{posterPreview ? `${posterPreview.width} x ${posterPreview.height} PNG` : '1080 x 1350 PNG'}</p>
+              </div>
+              <button
+                aria-label="关闭分享海报"
+                className="share-poster-close"
+                onClick={handleCloseSharePoster}
+                type="button"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="share-poster-preview">
+              {posterStatus === 'generating' ? (
+                <div className="share-poster-loading">
+                  <Loader2 className="share-spinner" size={24} />
+                  <strong>正在生成分享海报</strong>
+                  <span>浏览器内 Canvas 输出 PNG</span>
+                </div>
+              ) : posterPreview ? (
+                <img
+                  alt={`${shareMatchPayload.matchName} 分享海报`}
+                  src={posterPreview.dataUrl}
+                />
+              ) : (
+                <div className="share-poster-loading failed">
+                  <ShieldAlert size={24} />
+                  <strong>海报生成失败</strong>
+                  <span>请关闭后重新生成</span>
+                </div>
+              )}
+            </div>
+
+            {posterCopyStatus === 'unsupported' ? (
+              <p className="poster-copy-fallback">
+                当前浏览器不支持直接复制图片，请下载后分享。
+              </p>
+            ) : null}
+
+            <div className="share-poster-actions">
+              <button
+                disabled={!posterPreview}
+                onClick={handleDownloadPoster}
+                type="button"
+              >
+                <Download size={17} />
+                下载海报
+              </button>
+              <button
+                disabled={!posterPreview || posterCopyStatus === 'copying'}
+                onClick={handleCopyPosterImage}
+                type="button"
+              >
+                {posterCopyStatus === 'copied' ? (
+                  <Check size={17} />
+                ) : posterCopyStatus === 'copying' ? (
+                  <Loader2 className="share-spinner" size={17} />
+                ) : (
+                  <Copy size={17} />
+                )}
+                {posterCopyStatus === 'copied' ? '已复制图片' : '复制图片'}
+              </button>
+              <button onClick={handleCloseSharePoster} type="button">
+                <X size={17} />
+                关闭
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
 
       <footer className="risk-footer">
         <span>
