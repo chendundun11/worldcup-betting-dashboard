@@ -106,6 +106,11 @@ function assertPosterConsistency(poster, label) {
     !(poster.totalGoalsValue === '0-2球' && poster.overUnderValue.includes('大')),
     `${label}: 0-2 goals must not map to over 2.5.`,
   )
+  assert(
+    !poster.overUnderText.includes(['小', '2.5'].join('')) &&
+      !poster.overUnderText.includes(['大', '2.5'].join('')),
+    `${label}: over-under copy must keep a space before 2.5.`,
+  )
 
   const primaryOutcome = scoreOutcome(poster.primaryScoreValue)
   const secondaryOutcome = scoreOutcome(poster.secondaryScoreValue)
@@ -158,6 +163,18 @@ assert(
     /createRadialGradient/.test(sharePosterText) &&
     /VS/.test(sharePosterText),
   'Poster canvas must render a sports-cover background and central VS visual.',
+)
+assert(
+  /function drawFootballBackdrop/.test(sharePosterText) &&
+    /drawFootballBackdrop\(ctx\)/.test(sharePosterText),
+  'Poster canvas must render a football-field backdrop.',
+)
+assert(
+  /const SAFE_X\s*=/.test(sharePosterText) &&
+    /const SAFE_RIGHT\s*=/.test(sharePosterText) &&
+    /const CONTENT_WIDTH\s*=/.test(sharePosterText) &&
+    /const CENTER_X\s*=/.test(sharePosterText),
+  'Poster canvas must define shared safe-area and center layout constants.',
 )
 assert(
   !/MATCH COVER|HOME|AWAY/.test(sharePosterText),
@@ -270,6 +287,7 @@ assert(samplePoster.secondaryScoreText.includes('备用比分：'), 'Poster must
 assert(samplePoster.totalGoalsText.includes('总进球：'), 'Poster must expose compact total goals text.')
 assert(samplePoster.totalGoalsShortText === '总进球：0-2球', '1-1 / 0-0 must use compact 0-2 goals copy.')
 assert(samplePoster.overUnderText === '大小球：小 2.5', '1-1 / 0-0 must use under 2.5 copy.')
+assert(!samplePoster.overUnderText.includes(['小', '2.5'].join('')), 'Under 2.5 copy must keep a visible space.')
 assert(samplePoster.footerNote === POSTER_DISCLAIMER_TEXT, 'Poster footer must use required disclaimer.')
 assert(samplePoster.homeFlagStyle.type === 'canada' && !samplePoster.homeFlagStyle.fallback, 'Canada flag style must be non-fallback.')
 assert(samplePoster.awayFlagStyle.type === 'bosnia' && !samplePoster.awayFlagStyle.fallback, 'Bosnia flag style must be non-fallback.')
@@ -309,6 +327,7 @@ assert(shareCopy.includes('主推比分：'), 'Share copy must include primary s
 assert(shareCopy.includes('备用比分：'), 'Share copy must include backup score.')
 assert(shareCopy.includes('总进球：'), 'Share copy must include compact total goals judgement.')
 assert(shareCopy.includes('大小球：小 2.5'), 'Share copy must include over-under judgement.')
+assert(!shareCopy.includes(['小', '2.5'].join('')), 'Share copy must not collapse the space in 小 2.5.')
 assert(shareCopy.includes('模型解读：'), 'Share copy must include model insight.')
 assert(shareCopy.includes('首发观察：'), 'Share copy must include lineup insight.')
 assert(shareCopy.includes('一句话：'), 'Share copy must include one-line summary.')

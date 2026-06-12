@@ -115,6 +115,11 @@ function assertOverUnderConsistent(poster) {
     !(poster.totalGoalsValue === '3球以上' && poster.overUnderValue.includes('小')),
     '3+ goals range must not map to under 2.5.',
   )
+  assert(
+    !poster.overUnderText.includes(['小', '2.5'].join('')) &&
+      !poster.overUnderText.includes(['大', '2.5'].join('')),
+    'Over-under copy must keep a visible space before 2.5.',
+  )
 }
 
 function assertDirectionConsistent(poster) {
