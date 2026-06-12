@@ -3,7 +3,11 @@ import {
   createShareFileSlug,
   safeShareText,
 } from './shareText.js'
-import { buildPosterPresentation } from './posterPresentation.js'
+import {
+  buildPosterPresentation,
+  deriveOverUnderValue,
+  resolveTeamFlagStyle,
+} from './posterPresentation.js'
 
 export const POSTER_WIDTH = 1080
 export const POSTER_HEIGHT = 1350
@@ -121,6 +125,233 @@ function drawCutPanel(ctx, points, fillStyle, strokeStyle) {
   }
 }
 
+function clipCutPanel(ctx, points) {
+  ctx.beginPath()
+  points.forEach(([x, y], index) => {
+    if (index === 0) ctx.moveTo(x, y)
+    else ctx.lineTo(x, y)
+  })
+  ctx.closePath()
+  ctx.clip()
+}
+
+function drawStar(ctx, x, y, radius, fillStyle) {
+  ctx.beginPath()
+  for (let index = 0; index < 10; index += 1) {
+    const angle = -Math.PI / 2 + (index * Math.PI) / 5
+    const currentRadius = index % 2 === 0 ? radius : radius * 0.42
+    const px = x + Math.cos(angle) * currentRadius
+    const py = y + Math.sin(angle) * currentRadius
+    if (index === 0) ctx.moveTo(px, py)
+    else ctx.lineTo(px, py)
+  }
+  ctx.closePath()
+  ctx.fillStyle = fillStyle
+  ctx.fill()
+}
+
+function drawFallbackFlagBackdrop(ctx, x, y, width, height, style, side) {
+  const colors = style?.fallbackColors ?? [
+    'rgba(20, 184, 166, 0.22)',
+    'rgba(245, 158, 11, 0.16)',
+  ]
+  const gradient =
+    side === 'right'
+      ? ctx.createLinearGradient(x + width, y, x, y + height)
+      : ctx.createLinearGradient(x, y, x + width, y + height)
+  gradient.addColorStop(0, colors[0])
+  gradient.addColorStop(1, colors[1])
+  ctx.fillStyle = gradient
+  ctx.fillRect(x, y, width, height)
+}
+
+function drawTeamFlagBackdrop(ctx, teamName, x, y, width, height, side, flagStyle) {
+  const style = flagStyle?.type ? flagStyle : resolveTeamFlagStyle(teamName)
+  const stripe = (color, rx, ry, rw, rh) => {
+    ctx.fillStyle = color
+    ctx.fillRect(x + rx * width, y + ry * height, rw * width, rh * height)
+  }
+
+  ctx.save()
+  ctx.globalAlpha = style.fallback ? 0.16 : 0.32
+
+  switch (style.type) {
+    case 'argentina':
+      stripe('#74acdf', 0, 0, 1, 1 / 3)
+      stripe('#ffffff', 0, 1 / 3, 1, 1 / 3)
+      stripe('#74acdf', 0, 2 / 3, 1, 1 / 3)
+      stripe('#f6b40e', 0.47, 0.43, 0.06, 0.14)
+      break
+    case 'bosnia':
+      stripe('#002f6c', 0, 0, 1, 1)
+      ctx.fillStyle = '#f7d117'
+      ctx.beginPath()
+      ctx.moveTo(x + width * 0.58, y)
+      ctx.lineTo(x + width, y)
+      ctx.lineTo(x + width, y + height)
+      ctx.closePath()
+      ctx.fill()
+      for (let index = 0; index < 7; index += 1) {
+        drawStar(ctx, x + width * (0.54 + index * 0.055), y + height * (0.16 + index * 0.1), 9, '#ffffff')
+      }
+      break
+    case 'brazil':
+      stripe('#009b3a', 0, 0, 1, 1)
+      ctx.fillStyle = '#ffdf00'
+      ctx.beginPath()
+      ctx.moveTo(x + width * 0.5, y + height * 0.16)
+      ctx.lineTo(x + width * 0.86, y + height * 0.5)
+      ctx.lineTo(x + width * 0.5, y + height * 0.84)
+      ctx.lineTo(x + width * 0.14, y + height * 0.5)
+      ctx.closePath()
+      ctx.fill()
+      ctx.fillStyle = '#002776'
+      ctx.beginPath()
+      ctx.arc(x + width * 0.5, y + height * 0.5, height * 0.17, 0, Math.PI * 2)
+      ctx.fill()
+      break
+    case 'canada':
+      stripe('#d52b1e', 0, 0, 0.26, 1)
+      stripe('#ffffff', 0.26, 0, 0.48, 1)
+      stripe('#d52b1e', 0.74, 0, 0.26, 1)
+      stripe('#d52b1e', 0.46, 0.35, 0.08, 0.3)
+      break
+    case 'capeVerde':
+      stripe('#003893', 0, 0, 1, 1)
+      stripe('#ffffff', 0, 0.54, 1, 0.08)
+      stripe('#cf2027', 0, 0.62, 1, 0.05)
+      for (let index = 0; index < 8; index += 1) {
+        const angle = (index / 8) * Math.PI * 2
+        drawStar(ctx, x + width * 0.28 + Math.cos(angle) * 34, y + height * 0.55 + Math.sin(angle) * 26, 6, '#ffce00')
+      }
+      break
+    case 'croatia':
+      stripe('#ff0000', 0, 0, 1, 1 / 3)
+      stripe('#ffffff', 0, 1 / 3, 1, 1 / 3)
+      stripe('#171796', 0, 2 / 3, 1, 1 / 3)
+      for (let row = 0; row < 3; row += 1) {
+        for (let col = 0; col < 3; col += 1) {
+          stripe((row + col) % 2 === 0 ? '#ff0000' : '#ffffff', 0.44 + col * 0.04, 0.38 + row * 0.07, 0.04, 0.07)
+        }
+      }
+      break
+    case 'czechia':
+      stripe('#ffffff', 0, 0, 1, 0.5)
+      stripe('#d7141a', 0, 0.5, 1, 0.5)
+      ctx.fillStyle = '#11457e'
+      ctx.beginPath()
+      ctx.moveTo(x, y)
+      ctx.lineTo(x + width * 0.48, y + height * 0.5)
+      ctx.lineTo(x, y + height)
+      ctx.closePath()
+      ctx.fill()
+      break
+    case 'england':
+      stripe('#ffffff', 0, 0, 1, 1)
+      stripe('#cf142b', 0.44, 0, 0.12, 1)
+      stripe('#cf142b', 0, 0.42, 1, 0.16)
+      break
+    case 'france':
+      stripe('#0055a4', 0, 0, 1 / 3, 1)
+      stripe('#ffffff', 1 / 3, 0, 1 / 3, 1)
+      stripe('#ef4135', 2 / 3, 0, 1 / 3, 1)
+      break
+    case 'germany':
+      stripe('#000000', 0, 0, 1, 1 / 3)
+      stripe('#dd0000', 0, 1 / 3, 1, 1 / 3)
+      stripe('#ffce00', 0, 2 / 3, 1, 1 / 3)
+      break
+    case 'japan':
+      stripe('#ffffff', 0, 0, 1, 1)
+      ctx.fillStyle = '#bc002d'
+      ctx.beginPath()
+      ctx.arc(x + width * 0.5, y + height * 0.5, height * 0.24, 0, Math.PI * 2)
+      ctx.fill()
+      break
+    case 'mexico':
+      stripe('#006847', 0, 0, 1 / 3, 1)
+      stripe('#ffffff', 1 / 3, 0, 1 / 3, 1)
+      stripe('#ce1126', 2 / 3, 0, 1 / 3, 1)
+      stripe('#c09300', 0.48, 0.42, 0.04, 0.16)
+      break
+    case 'morocco':
+      stripe('#c1272d', 0, 0, 1, 1)
+      drawStar(ctx, x + width * 0.5, y + height * 0.5, 35, '#006233')
+      break
+    case 'netherlands':
+      stripe('#ae1c28', 0, 0, 1, 1 / 3)
+      stripe('#ffffff', 0, 1 / 3, 1, 1 / 3)
+      stripe('#21468b', 0, 2 / 3, 1, 1 / 3)
+      break
+    case 'portugal':
+      stripe('#006600', 0, 0, 0.42, 1)
+      stripe('#ff0000', 0.42, 0, 0.58, 1)
+      ctx.fillStyle = '#ffcc00'
+      ctx.beginPath()
+      ctx.arc(x + width * 0.42, y + height * 0.5, height * 0.13, 0, Math.PI * 2)
+      ctx.fill()
+      break
+    case 'senegal':
+      stripe('#00853f', 0, 0, 1 / 3, 1)
+      stripe('#fdef42', 1 / 3, 0, 1 / 3, 1)
+      stripe('#e31b23', 2 / 3, 0, 1 / 3, 1)
+      drawStar(ctx, x + width * 0.5, y + height * 0.5, 20, '#00853f')
+      break
+    case 'southAfrica':
+      stripe('#de3831', 0, 0, 1, 0.5)
+      stripe('#002395', 0, 0.5, 1, 0.5)
+      ctx.fillStyle = '#007a4d'
+      ctx.beginPath()
+      ctx.moveTo(x, y)
+      ctx.lineTo(x + width * 0.48, y + height * 0.5)
+      ctx.lineTo(x, y + height)
+      ctx.closePath()
+      ctx.fill()
+      stripe('#ffb612', 0, 0.43, 0.48, 0.14)
+      break
+    case 'southKorea':
+      stripe('#ffffff', 0, 0, 1, 1)
+      ctx.fillStyle = '#c60c30'
+      ctx.beginPath()
+      ctx.arc(x + width * 0.5, y + height * 0.46, height * 0.15, Math.PI, 0)
+      ctx.fill()
+      ctx.fillStyle = '#003478'
+      ctx.beginPath()
+      ctx.arc(x + width * 0.5, y + height * 0.54, height * 0.15, 0, Math.PI)
+      ctx.fill()
+      break
+    case 'spain':
+      stripe('#aa151b', 0, 0, 1, 0.25)
+      stripe('#f1bf00', 0, 0.25, 1, 0.5)
+      stripe('#aa151b', 0, 0.75, 1, 0.25)
+      break
+    case 'switzerland':
+      stripe('#d52b1e', 0, 0, 1, 1)
+      stripe('#ffffff', 0.43, 0.25, 0.14, 0.5)
+      stripe('#ffffff', 0.32, 0.43, 0.36, 0.14)
+      break
+    case 'usa':
+      for (let index = 0; index < 7; index += 1) {
+        stripe(index % 2 === 0 ? '#b22234' : '#ffffff', 0, index / 7, 1, 1 / 7)
+      }
+      stripe('#3c3b6e', 0, 0, 0.42, 0.55)
+      for (let index = 0; index < 8; index += 1) {
+        drawStar(ctx, x + width * (0.08 + (index % 4) * 0.08), y + height * (0.12 + Math.floor(index / 4) * 0.18), 5, '#ffffff')
+      }
+      break
+    default:
+      drawFallbackFlagBackdrop(ctx, x, y, width, height, style, side)
+  }
+
+  ctx.globalAlpha = 1
+  const shade = ctx.createLinearGradient(x, y, x + width, y + height)
+  shade.addColorStop(0, side === 'left' ? 'rgba(2, 6, 23, 0.22)' : 'rgba(2, 6, 23, 0.4)')
+  shade.addColorStop(1, side === 'left' ? 'rgba(2, 6, 23, 0.4)' : 'rgba(2, 6, 23, 0.22)')
+  ctx.fillStyle = shade
+  ctx.fillRect(x, y, width, height)
+  ctx.restore()
+}
+
 function drawBackground(ctx) {
   const base = ctx.createLinearGradient(0, 0, POSTER_WIDTH, POSTER_HEIGHT)
   base.addColorStop(0, '#07111f')
@@ -222,15 +453,27 @@ function drawHeader(ctx, poster) {
 }
 
 function drawMatchVisual(ctx, poster) {
+  const leftPoints = [[72, 174], [486, 148], [506, 418], [72, 452]]
+  const rightPoints = [[594, 148], [1008, 174], [1008, 452], [574, 418]]
   const leftPanel = ctx.createLinearGradient(72, 166, 494, 422)
   leftPanel.addColorStop(0, 'rgba(20, 184, 166, 0.24)')
   leftPanel.addColorStop(1, 'rgba(15, 23, 42, 0.14)')
-  drawCutPanel(ctx, [[72, 174], [486, 148], [506, 418], [72, 452]], leftPanel, 'rgba(94, 234, 212, 0.18)')
+  drawCutPanel(ctx, leftPoints, leftPanel, 'rgba(94, 234, 212, 0.18)')
 
   const rightPanel = ctx.createLinearGradient(594, 166, 1008, 422)
   rightPanel.addColorStop(0, 'rgba(15, 23, 42, 0.14)')
   rightPanel.addColorStop(1, 'rgba(245, 158, 11, 0.22)')
-  drawCutPanel(ctx, [[594, 148], [1008, 174], [1008, 452], [574, 418]], rightPanel, 'rgba(245, 158, 11, 0.18)')
+  drawCutPanel(ctx, rightPoints, rightPanel, 'rgba(245, 158, 11, 0.18)')
+
+  ctx.save()
+  clipCutPanel(ctx, leftPoints)
+  drawTeamFlagBackdrop(ctx, poster.homeTeamText, 72, 148, 434, 304, 'left', poster.homeFlagStyle)
+  ctx.restore()
+
+  ctx.save()
+  clipCutPanel(ctx, rightPoints)
+  drawTeamFlagBackdrop(ctx, poster.awayTeamText, 574, 148, 434, 304, 'right', poster.awayFlagStyle)
+  ctx.restore()
 
   drawFitText(ctx, poster.homeTeamText, 282, 248, 356, 60, 38, {
     color: '#f8fafc',
@@ -293,31 +536,34 @@ function drawScoreboard(ctx, poster) {
   drawCutPanel(ctx, [[72, y + 8], [1008, y], [970, y + 128], [112, y + 138]], scoreBand, 'rgba(148, 163, 184, 0.18)')
   ctx.restore()
 
-  const columns = [
-    ['主推比分', poster.primaryScoreValue, 216, '#ffffff'],
-    ['备用比分', poster.secondaryScoreValue, 512, '#dbeafe'],
-    ['总进球', poster.totalGoalsValue, 812, '#5eead4'],
+  ctx.strokeStyle = 'rgba(148, 163, 184, 0.18)'
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.moveTo(540, y + 16)
+  ctx.lineTo(540, y + 122)
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.moveTo(126, y + 72)
+  ctx.lineTo(954, y + 66)
+  ctx.stroke()
+
+  const cells = [
+    ['主推比分', poster.primaryScoreValue, 306, y + 20, '#ffffff', 38],
+    ['备用比分', poster.secondaryScoreValue, 774, y + 20, '#dbeafe', 38],
+    ['总进球', poster.totalGoalsValue, 306, y + 82, '#5eead4', 34],
+    ['大小球', poster.overUnderValue, 774, y + 82, '#fbbf24', 34],
   ]
 
-  columns.forEach(([label, value, x, color], index) => {
-    if (index > 0) {
-      ctx.strokeStyle = 'rgba(148, 163, 184, 0.18)'
-      ctx.lineWidth = 2
-      ctx.beginPath()
-      ctx.moveTo(x - 146, y + 22)
-      ctx.lineTo(x - 164, y + 112)
-      ctx.stroke()
-    }
-
-    setFont(ctx, 22, 900)
+  cells.forEach(([label, value, x, cellY, color, valueSize]) => {
+    setFont(ctx, 18, 900)
     ctx.fillStyle = '#94a3b8'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'top'
-    ctx.fillText(label, x, y + 24)
+    ctx.fillText(label, x, cellY)
 
-    drawFitText(ctx, value, x, y + 66, 260, index === 2 ? 48 : 56, 30, {
+    drawFitText(ctx, value, x, cellY + 24, 350, valueSize, 24, {
       color,
-      maxLines: index === 2 ? 1 : 1,
+      maxLines: 1,
     })
   })
 }
@@ -384,10 +630,34 @@ function drawInsightBlock(ctx, poster) {
   })
 }
 
-function getPosterPresentation(payload) {
-  if (payload?.posterPresentation) return payload.posterPresentation
+function getScoreValue(value) {
+  return safeShareText(value, '').match(/\b\d{1,2}-\d{1,2}\b/)?.[0] ?? ''
+}
 
-  return buildPosterPresentation({
+function completePosterPresentation(poster) {
+  const primaryScore = getScoreValue(poster?.primaryScoreValue ?? poster?.primaryScoreText)
+  const secondaryScore = getScoreValue(poster?.secondaryScoreValue ?? poster?.secondaryScoreText)
+  const overUnderValue = safeShareText(
+    poster?.overUnderValue,
+    deriveOverUnderValue(primaryScore, secondaryScore),
+  )
+
+  return {
+    ...poster,
+    awayFlagStyle:
+      poster?.awayFlagStyle ?? resolveTeamFlagStyle(poster?.awayTeamText),
+    footerNote: safeShareText(poster?.footerNote, SHARE_FOOTER_NOTE),
+    homeFlagStyle:
+      poster?.homeFlagStyle ?? resolveTeamFlagStyle(poster?.homeTeamText),
+    overUnderText: safeShareText(poster?.overUnderText, `大小球：${overUnderValue}`),
+    overUnderValue,
+  }
+}
+
+function getPosterPresentation(payload) {
+  if (payload?.posterPresentation) return completePosterPresentation(payload.posterPresentation)
+
+  return completePosterPresentation(buildPosterPresentation({
     awayFormation: payload?.awayFormation,
     awayTeam: payload?.awayTeam,
     displayConfidence: payload?.displayConfidence,
@@ -403,7 +673,7 @@ function getPosterPresentation(payload) {
     statusTags: payload?.statusTags,
     summary: payload?.summaryText,
     totalGoalsDirection: payload?.totalGoalsDirectionText,
-  })
+  }))
 }
 
 function drawSharePoster(ctx, payload) {

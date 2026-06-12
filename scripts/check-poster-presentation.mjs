@@ -2,11 +2,14 @@ import { execSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 
 import {
+  POSTER_DISCLAIMER_TEXT,
   buildPosterPresentation,
   buildPresentationRating,
   buildScoreRecommendation,
+  deriveOverUnderValue,
   deriveTotalGoalsText,
   parseScoreText,
+  resolveTeamFlagStyle,
 } from '../src/services/posterPresentation.js'
 import {
   buildRecommendationShareText,
@@ -93,6 +96,27 @@ function assertGoalsConsistent(poster) {
   )
 }
 
+function assertOverUnderConsistent(poster) {
+  const expected = deriveOverUnderValue(poster.primaryScoreValue, poster.secondaryScoreValue)
+  assert(
+    poster.overUnderValue === expected,
+    `Over-under value must be derived from scores. Expected "${expected}", got "${poster.overUnderValue}".`,
+  )
+  assert(
+    poster.overUnderText === `大小球：${expected}`,
+    `Over-under text must use compact copy. Expected "大小球：${expected}", got "${poster.overUnderText}".`,
+  )
+  assertNoEllipsis(poster.overUnderText, 'overUnderText')
+  assert(
+    !(poster.totalGoalsValue === '0-2球' && poster.overUnderValue.includes('大')),
+    '0-2 goals range must not map to over 2.5.',
+  )
+  assert(
+    !(poster.totalGoalsValue === '3球以上' && poster.overUnderValue.includes('小')),
+    '3+ goals range must not map to under 2.5.',
+  )
+}
+
 function assertDirectionConsistent(poster) {
   const primaryOutcome = outcome(poster.primaryScoreValue)
   const secondaryOutcome = outcome(poster.secondaryScoreValue)
@@ -137,10 +161,15 @@ function assertPosterFields(poster, label) {
     'oneLineSummaryShort',
     'footerNote',
     'totalGoalsShortText',
+    'overUnderText',
+    'overUnderValue',
+    'homeFlagStyle',
+    'awayFlagStyle',
   ]) {
     assert(poster[field], `${label}: ${field} must not be empty.`)
   }
 
+  assert(poster.footerNote === POSTER_DISCLAIMER_TEXT, `${label}: footer disclaimer must use required copy.`)
   assert(chineseLength(poster.modelInsightShort) >= 35, `${label}: modelInsightShort must be at least 35 Chinese chars.`)
   assert(chineseLength(poster.modelInsightShort) <= 55, `${label}: modelInsightShort must be at most 55 Chinese chars.`)
   assert(chineseLength(poster.lineupInsightShort) >= 25, `${label}: lineupInsightShort must be at least 25 Chinese chars.`)
@@ -151,6 +180,7 @@ function assertPosterFields(poster, label) {
   assertNoForbidden(JSON.stringify(poster), label)
   assertScoresDistinct(poster)
   assertGoalsConsistent(poster)
+  assertOverUnderConsistent(poster)
   assertDirectionConsistent(poster)
 }
 
@@ -185,6 +215,9 @@ const lowPoster = buildPosterPresentation({
 assertPosterFields(lowPoster, 'lowPoster')
 assert(lowPoster.mainConclusion.includes('加拿大不败'), 'Weak draw copy must become a clearer main direction.')
 assert(!lowPoster.totalGoalsText.includes('2-3球区间'), '1-1 / 0-0 must not display 2-3 goals.')
+assert(lowPoster.overUnderText === '大小球：小 2.5', '1-1 / 0-0 must map to under 2.5.')
+assert(lowPoster.homeFlagStyle.type === 'canada' && !lowPoster.homeFlagStyle.fallback, 'Canada must use a non-fallback flag style.')
+assert(lowPoster.awayFlagStyle.type === 'bosnia' && !lowPoster.awayFlagStyle.fallback, 'Bosnia must use a non-fallback flag style.')
 
 const oldCautiousPoster = buildPosterPresentation({
   awayTeam: '荷兰',
@@ -227,6 +260,7 @@ assertPosterFields(awayConflictPoster, 'awayConflictPoster')
 
 const fallbackPoster = buildPosterPresentation()
 assertPosterFields(fallbackPoster, 'fallbackPoster')
+assert(resolveTeamFlagStyle('未知球队').fallback === true, 'Unknown teams must use safe flag fallback.')
 
 const sharePayload = buildShareMatchPayload({
   awayTeam: '波黑',
@@ -242,7 +276,9 @@ assert(shareText.includes('【AI赛前情报】'), 'Share text must use the spor
 assert(shareText.includes('主推比分：'), 'Share text must include primary score.')
 assert(shareText.includes('备用比分：'), 'Share text must include backup score.')
 assert(shareText.includes('总进球：'), 'Share text must include compact total goals judgement.')
+assert(shareText.includes('大小球：小 2.5'), 'Share text must include derived over-under judgement.')
 assert(shareText.includes('一句话：'), 'Share text must include a short one-line summary.')
+assert(shareText.includes(POSTER_DISCLAIMER_TEXT), 'Share text must include required disclaimer.')
 assertNoEllipsis(shareText, 'shareText')
 assertNoForbidden(shareText, 'shareText')
 

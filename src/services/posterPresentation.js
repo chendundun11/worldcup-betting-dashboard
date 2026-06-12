@@ -3,6 +3,31 @@ import { getDisplayConfidence } from './displayConfidence.js'
 const INVALID_TEXT_VALUES = new Set(['', 'undefined', 'null', 'nan'])
 const INVALID_TEXT_PATTERNS = [/undefined/i, /\bnull\b/i, /\bNaN\b/i]
 const SCORE_PATTERN = /^(\d{1,2})-(\d{1,2})$/
+export const POSTER_DISCLAIMER_TEXT = '仅供娱乐参考，不构成投注建议。'
+
+const FLAG_STYLE_MAP = {
+  argentina: ['argentina', '阿根廷'],
+  bosnia: ['bosnia', 'bosnia herzergovina', 'bosnia herzegovina', 'bosnia-herzegovina', '波黑', '波斯尼亚'],
+  brazil: ['brazil', '巴西'],
+  canada: ['canada', '加拿大'],
+  capeVerde: ['cape verde', 'cape verde islands', '佛得角', '佛得角群岛'],
+  croatia: ['croatia', '克罗地亚'],
+  czechia: ['czechia', 'czech republic', '捷克'],
+  england: ['england', '英格兰'],
+  france: ['france', '法国'],
+  germany: ['germany', '德国'],
+  japan: ['japan', '日本'],
+  mexico: ['mexico', '墨西哥'],
+  morocco: ['morocco', '摩洛哥'],
+  netherlands: ['netherlands', 'holland', '荷兰'],
+  portugal: ['portugal', '葡萄牙'],
+  senegal: ['senegal', '塞内加尔'],
+  southAfrica: ['south africa', '南非'],
+  southKorea: ['south korea', 'korea republic', '韩国'],
+  spain: ['spain', '西班牙'],
+  switzerland: ['switzerland', '瑞士'],
+  usa: ['usa', 'united states', 'united states of america', '美国'],
+}
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max)
@@ -21,6 +46,34 @@ function safePresentationText(value, fallback = '') {
   }
 
   return text || fallback
+}
+
+function normalizeTeamFlagKey(value) {
+  return safePresentationText(value, '')
+    .toLowerCase()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+export function resolveTeamFlagStyle(teamName) {
+  const key = normalizeTeamFlagKey(teamName)
+
+  for (const [type, aliases] of Object.entries(FLAG_STYLE_MAP)) {
+    if (aliases.some((alias) => normalizeTeamFlagKey(alias) === key)) {
+      return {
+        fallback: false,
+        fallbackColors: ['rgba(20, 184, 166, 0.24)', 'rgba(15, 23, 42, 0.14)'],
+        type,
+      }
+    }
+  }
+
+  return {
+    fallback: true,
+    fallbackColors: ['rgba(20, 184, 166, 0.24)', 'rgba(245, 158, 11, 0.16)'],
+    type: 'fallback',
+  }
 }
 
 function toScore(value) {
@@ -363,6 +416,18 @@ export function deriveTotalGoalsText(primaryScore, secondaryScore) {
   return '1-2球'
 }
 
+export function deriveOverUnderValue(primaryScore, secondaryScore) {
+  const totals = [scoreTotal(primaryScore), scoreTotal(secondaryScore)]
+
+  if (totals.every((total) => total <= 2)) return '小 2.5'
+  if (totals.every((total) => total >= 3)) return '大 2.5'
+  return '2.5 临界'
+}
+
+export function deriveOverUnderText(primaryScore, secondaryScore) {
+  return `大小球：${deriveOverUnderValue(primaryScore, secondaryScore)}`
+}
+
 export function formatGoalsDirectionForPresentation(value) {
   const text = safePresentationText(value, '')
   if (!text) return '1-2球'
@@ -408,7 +473,7 @@ function getLineupInsight(lineupStatusText, formationText) {
   return '官方首发公布前，重点观察中前场轮换、边路速度点和防线组合，临场名单会改变比赛节奏。'
 }
 
-function getLineupInsightShort(lineupStatusText, formationText) {
+function getLineupInsightShort(lineupStatusText, formationText, homeTeamText, awayTeamText) {
   const status = safePresentationText(lineupStatusText, '首发待确认')
   const formation = safePresentationText(formationText, '')
 
@@ -418,7 +483,7 @@ function getLineupInsightShort(lineupStatusText, formationText) {
       : '官方首发已明确，重点看中前场衔接、边路推进效率和换人节奏。'
   }
 
-  return '官方首发公布前，重点看中前场轮换和边路速度点，名单会影响方向强度。'
+  return `首发公布前，重点看${homeTeamText}中前场配置和${awayTeamText}边路速度点，名单变化会影响节奏。`
 }
 
 function getGoalsStyle(totalGoalsValue) {
@@ -429,15 +494,14 @@ function getGoalsStyle(totalGoalsValue) {
 
 function getModelInsight({
   mainDirectionValue,
-  totalGoalsValue,
   homeTeamText,
   supportValue,
 }) {
-  return `${homeTeamText}整体稳定性更值得信任，比赛节奏偏向${getGoalsStyle(totalGoalsValue)}。本场优先看${mainDirectionValue}，${supportValue}。`
+  return `${homeTeamText}整体稳定性和中后场衔接更好，比赛节奏更容易被压低。本场优先看${mainDirectionValue}，${supportValue}。`
 }
 
 function getOneLineSummary(primaryScore, secondaryScore, totalGoalsValue) {
-  return `本场更像${getGoalsStyle(totalGoalsValue)}，比分优先${primaryScore}，备用${secondaryScore}，临场再复核。`
+  return `${getGoalsStyle(totalGoalsValue)}思路更稳，比分优先${primaryScore}，备用${secondaryScore}，节奏不宜拉太开。`
 }
 
 export function buildShortReasonForPresentation({
@@ -500,6 +564,10 @@ export function buildPosterPresentation({
     scorePair.primaryScore,
     scorePair.secondaryScore,
   )
+  const overUnderValue = deriveOverUnderValue(
+    scorePair.primaryScore,
+    scorePair.secondaryScore,
+  )
   const rating =
     presentationRating ??
     buildPresentationRating({
@@ -515,22 +583,29 @@ export function buildPosterPresentation({
   const lineupInsight = getLineupInsight(lineupStatusText, formationText)
   const modelInsight = getModelInsight({
     mainDirectionValue: direction.mainDirectionValue,
-    totalGoalsValue,
     homeTeamText,
     supportValue: direction.supportValue,
   })
-  const lineupInsightShort = getLineupInsightShort(lineupStatusText, formationText)
+  const lineupInsightShort = getLineupInsightShort(
+    lineupStatusText,
+    formationText,
+    homeTeamText,
+    awayTeamText,
+  )
   const oneLineSummary = getOneLineSummary(
     scorePair.primaryScore,
     scorePair.secondaryScore,
     totalGoalsValue,
   )
   const totalGoalsShortText = `总进球：${totalGoalsValue}`
+  const overUnderText = `大小球：${overUnderValue}`
 
   return {
+    awayFlagStyle: resolveTeamFlagStyle(awayTeamText),
     awayTeamText,
     directionKind: direction.directionKind,
-    footerNote: '赛前方向参考，临场阵容与比赛进程需结合复核。',
+    footerNote: POSTER_DISCLAIMER_TEXT,
+    homeFlagStyle: resolveTeamFlagStyle(homeTeamText),
     homeTeamText,
     lineupInsight,
     lineupInsightShort,
@@ -541,6 +616,8 @@ export function buildPosterPresentation({
     modelInsightShort: modelInsight,
     oneLineSummary,
     oneLineSummaryShort: oneLineSummary,
+    overUnderText,
+    overUnderValue,
     posterKicker: '结合球队状态、首发预期、比赛节奏与市场变化的赛前综合判断',
     posterSubtitle: '逐场情报解读',
     posterTitle: 'AI赛前情报',

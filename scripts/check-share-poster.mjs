@@ -6,9 +6,12 @@ import {
   buildShareMatchPayload,
 } from '../src/services/shareText.js'
 import {
+  POSTER_DISCLAIMER_TEXT,
   buildPosterPresentation,
+  deriveOverUnderValue,
   deriveTotalGoalsText,
   parseScoreText,
+  resolveTeamFlagStyle,
 } from '../src/services/posterPresentation.js'
 
 const appPath = 'src/App.jsx'
@@ -86,6 +89,23 @@ function assertPosterConsistency(poster, label) {
   )
   assert(poster.totalGoalsShortText.length <= 12, `${label}: total goals copy must stay short.`)
   assertNoEllipsis(poster.totalGoalsShortText, `${label}: total goals copy`)
+  const expectedOverUnder = deriveOverUnderValue(
+    poster.primaryScoreValue,
+    poster.secondaryScoreValue,
+  )
+  assert(
+    poster.overUnderValue === expectedOverUnder,
+    `${label}: over-under value must be derived from displayed scores.`,
+  )
+  assert(
+    poster.overUnderText === `大小球：${expectedOverUnder}`,
+    `${label}: over-under text must be compact and complete.`,
+  )
+  assertNoEllipsis(poster.overUnderText, `${label}: over-under copy`)
+  assert(
+    !(poster.totalGoalsValue === '0-2球' && poster.overUnderValue.includes('大')),
+    `${label}: 0-2 goals must not map to over 2.5.`,
+  )
 
   const primaryOutcome = scoreOutcome(poster.primaryScoreValue)
   const secondaryOutcome = scoreOutcome(poster.secondaryScoreValue)
@@ -151,6 +171,11 @@ assert(
   'Poster canvas must keep match, conclusion, score, and insight sections.',
 )
 assert(
+  /drawTeamFlagBackdrop/.test(sharePosterText) &&
+    /resolveTeamFlagStyle/.test(sharePosterText),
+  'Poster canvas must draw team flag backdrops from a resolver.',
+)
+assert(
   /navigator\.clipboard\?\.writeText/.test(appText) &&
     /document\.execCommand\(['"]copy['"]\)/.test(appText),
   'Text copy must use Clipboard API with textarea fallback.',
@@ -173,6 +198,7 @@ for (const copy of [
   '主推比分',
   '备用比分',
   '总进球判断',
+  '大小球',
   '模型解读',
   '首发观察',
   '一句话',
@@ -198,9 +224,11 @@ assert(
   /primaryScoreValue/.test(sharePosterText) &&
     /secondaryScoreValue/.test(sharePosterText) &&
     /totalGoalsValue/.test(sharePosterText) &&
+    /overUnderValue/.test(sharePosterText) &&
     /drawSharePoster/.test(sharePosterText),
-  'Poster canvas must draw primary score, backup score, and derived total goals.',
+  'Poster canvas must draw primary score, backup score, derived total goals, and over-under.',
 )
+assert(shareOutputSource.includes(POSTER_DISCLAIMER_TEXT), 'Share output must include required disclaimer.')
 assert(
   /link\.download/.test(sharePosterText) &&
     /image\/png/.test(sharePosterText) &&
@@ -241,6 +269,10 @@ assert(samplePoster.primaryScoreText.includes('主推比分：'), 'Poster must e
 assert(samplePoster.secondaryScoreText.includes('备用比分：'), 'Poster must expose backup score text.')
 assert(samplePoster.totalGoalsText.includes('总进球：'), 'Poster must expose compact total goals text.')
 assert(samplePoster.totalGoalsShortText === '总进球：0-2球', '1-1 / 0-0 must use compact 0-2 goals copy.')
+assert(samplePoster.overUnderText === '大小球：小 2.5', '1-1 / 0-0 must use under 2.5 copy.')
+assert(samplePoster.footerNote === POSTER_DISCLAIMER_TEXT, 'Poster footer must use required disclaimer.')
+assert(samplePoster.homeFlagStyle.type === 'canada' && !samplePoster.homeFlagStyle.fallback, 'Canada flag style must be non-fallback.')
+assert(samplePoster.awayFlagStyle.type === 'bosnia' && !samplePoster.awayFlagStyle.fallback, 'Bosnia flag style must be non-fallback.')
 assert(samplePoster.modelInsightShort, 'Poster must expose modelInsightShort.')
 assert(samplePoster.lineupInsightShort, 'Poster must expose lineupInsightShort.')
 assert(samplePoster.oneLineSummaryShort, 'Poster must expose oneLineSummaryShort.')
@@ -276,11 +308,15 @@ assert(shareCopy.includes('主方向：'), 'Share copy must include main directi
 assert(shareCopy.includes('主推比分：'), 'Share copy must include primary score.')
 assert(shareCopy.includes('备用比分：'), 'Share copy must include backup score.')
 assert(shareCopy.includes('总进球：'), 'Share copy must include compact total goals judgement.')
+assert(shareCopy.includes('大小球：小 2.5'), 'Share copy must include over-under judgement.')
 assert(shareCopy.includes('模型解读：'), 'Share copy must include model insight.')
 assert(shareCopy.includes('首发观察：'), 'Share copy must include lineup insight.')
 assert(shareCopy.includes('一句话：'), 'Share copy must include one-line summary.')
+assert(shareCopy.includes(POSTER_DISCLAIMER_TEXT), 'Share copy must include required disclaimer.')
 assertNoEllipsis(shareCopy, 'share copy')
 assertNoForbidden(shareCopy, 'share copy')
+
+assert(resolveTeamFlagStyle('未知球队').fallback === true, 'Flag fallback must not throw for unknown teams.')
 
 for (const word of FORBIDDEN_WORDS) {
   assert(

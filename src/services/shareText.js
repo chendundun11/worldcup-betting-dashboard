@@ -1,11 +1,12 @@
 import {
   buildPosterPresentation,
   buildScoreRecommendation,
+  deriveOverUnderText,
   formatMainDirectionForPresentation,
 } from './posterPresentation.js'
 
 export const SHARE_FOOTER_NOTE =
-  '赛前方向参考，临场阵容与比赛进程需结合复核。'
+  '仅供娱乐参考，不构成投注建议。'
 
 const INVALID_TEXT_VALUES = new Set(['', 'undefined', 'null', 'nan'])
 const INVALID_TEXT_PATTERNS = [/undefined/i, /\bnull\b/i, /\bNaN\b/i]
@@ -165,6 +166,8 @@ export function buildShareMatchPayload({
     mainDirectionText: posterPresentation.mainDirectionValue,
     mainPickText: posterPresentation.mainDirectionValue,
     matchName,
+    overUnderText: posterPresentation.overUnderText,
+    overUnderValue: posterPresentation.overUnderValue,
     posterPresentation,
     presentationRating,
     primaryScoreText: posterPresentation.primaryScoreValue,
@@ -188,6 +191,11 @@ export function buildRecommendationShareText(payload) {
       : buildShareMatchPayload(payload)
 
   const poster = matchPayload.posterPresentation ?? buildPosterPresentation(matchPayload)
+  const overUnderText = safeShareText(
+    poster.overUnderText,
+    deriveOverUnderText(poster.primaryScoreValue, poster.secondaryScoreValue),
+  )
+  const footerNote = safeShareText(poster.footerNote, SHARE_FOOTER_NOTE)
 
   return [
     '【AI赛前情报】',
@@ -202,6 +210,7 @@ export function buildRecommendationShareText(payload) {
     poster.primaryScoreText,
     poster.secondaryScoreText,
     poster.totalGoalsShortText,
+    overUnderText,
     '',
     '模型解读：',
     poster.modelInsightShort,
@@ -212,8 +221,8 @@ export function buildRecommendationShareText(payload) {
     '一句话：',
     poster.oneLineSummaryShort,
     '',
-    '赛前提示：',
-    poster.footerNote,
+    '提示：',
+    footerNote,
   ].join('\n')
 }
 
