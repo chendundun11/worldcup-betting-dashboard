@@ -65,6 +65,40 @@
       "stakeUnits": 0.6,
       "note": "日本体系稳定性和疲劳优势优于美国，客胜方向有小仓价值。",
       "reviewNote": "比赛进行中，等待终场结算。"
+    },
+    {
+      "id": "history-mexico-south-africa-2026-06-12",
+      "matchKey": "Mexico__South Africa",
+      "matchLabel": "Mexico vs South Africa",
+      "homeTeam": "Mexico",
+      "awayTeam": "South Africa",
+      "status": "finished",
+      "predictionSnapshot": {
+        "mainPick": "Mexico win / Mexico 主胜",
+        "totalGoalsDirection": "over25",
+        "totalGoalsLabel": "大 2.5",
+        "scorePredictions": ["2-0"],
+        "snapshotSource": "user_confirmed_pre_match_page",
+        "source": "user_confirmed_pre_match_page",
+        "snapshotNote": "用户确认赛前页面推荐过主胜、2-0、大 2.5"
+      },
+      "finalResult": {
+        "homeTeam": "Mexico",
+        "awayTeam": "South Africa",
+        "finalScore": "2-0",
+        "homeGoals": 2,
+        "awayGoals": 0,
+        "resultSourceLabel": "FOX / ESPN final score",
+        "settledAt": "2026-06-12T12:00:00+08:00"
+      },
+      "settlement": {
+        "mainPickHit": true,
+        "totalGoalsHit": false,
+        "scoreHit": true,
+        "matchedScore": "2-0",
+        "settlementStatus": "settled",
+        "hitSummary": "用户确认赛前页面快照：主方向命中，比分命中 2-0，大小球大 2.5 未中。"
+      }
     }
   ]
 }

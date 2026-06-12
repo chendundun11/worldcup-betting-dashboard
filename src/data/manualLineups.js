@@ -1,9 +1,44 @@
+import { getNormalizedMatchKeys } from '../services/matchIdentity.js'
+
 const ALLOWED_LINEUP_STATUSES = new Set(['predicted', 'confirmed', 'unavailable'])
 
 const LINEUP_SIDE_KEYS = ['home', 'away']
 const LINEUP_ROLE_KEYS = ['goalkeeper', 'defenders', 'midfielders', 'forwards']
 
 export const manualLineups = {
+  south_korea__czechia: {
+    matchLabel: 'South Korea vs Czechia',
+    lineupStatus: 'confirmed',
+    sourceLabel: 'Reuters / Guardian confirmed XI',
+    updatedAt: '2026-06-12T00:00:00Z',
+    note: '\u5b98\u65b9\u9996\u53d1\uff0c\u6b63\u5f0f\u9996\u53d1\u4ecd\u9700\u4ee5\u8d5b\u4e8b\u4e34\u573a\u4fe1\u606f\u4e3a\u51c6',
+    home: {
+      teamName: 'South Korea',
+      formation: '3-4-3',
+      goalkeeper: ['Kim Seung-gyu'],
+      defenders: ['Lee Gi-hyuk', 'Kim Min-jae', 'Lee Han-beom'],
+      midfielders: [
+        'Seol Young-woo',
+        'Hwang In-beom',
+        'Paik Seung-ho',
+        'Lee Tae-seok',
+      ],
+      forwards: ['Lee Kang-in', 'Lee Jae-sung', 'Son Heung-min'],
+    },
+    away: {
+      teamName: 'Czechia',
+      formation: '3-4-3',
+      goalkeeper: ['Matej Kovar'],
+      defenders: ['Stepan Chaloupek', 'Robin Hranac', 'Ladislav Krejci'],
+      midfielders: [
+        'Vladimir Coufal',
+        'Tomas Soucek',
+        'Alexandr Sojka',
+        'Jaroslav Zeleny',
+      ],
+      forwards: ['Lukas Provod', 'Pavel Sulc', 'Patrik Schick'],
+    },
+  },
   mexico__south_africa: {
     matchLabel: 'Mexico vs South Africa',
     lineupStatus: 'predicted',
@@ -62,50 +97,6 @@ export const manualLineups = {
   },
 }
 
-function safeText(value) {
-  return String(value ?? '').trim()
-}
-
-function normalizeKeyPart(value) {
-  return safeText(value).replace(/\s+/g, '_')
-}
-
-function getTeamCandidate(match, side) {
-  const team = match?.[`${side}Team`]
-
-  if (typeof team === 'string') return safeText(team)
-  if (team && typeof team === 'object') {
-    return (
-      safeText(team.id) ||
-      safeText(team.name) ||
-      safeText(team.shortName) ||
-      safeText(team.displayName)
-    )
-  }
-
-  return (
-    safeText(match?.[`${side}TeamId`]) ||
-    safeText(match?.[`${side}TeamName`]) ||
-    safeText(match?.[side])
-  )
-}
-
-function getManualLineupCandidateKeys(match) {
-  const keys = []
-  const matchId = safeText(match?.id) || safeText(match?.matchId)
-
-  if (matchId) keys.push(matchId)
-
-  const homeTeam = getTeamCandidate(match, 'home')
-  const awayTeam = getTeamCandidate(match, 'away')
-
-  if (homeTeam && awayTeam) {
-    keys.push(`${normalizeKeyPart(homeTeam)}__${normalizeKeyPart(awayTeam)}`)
-  }
-
-  return keys
-}
-
 function isLineupSideValid(side) {
   return (
     side &&
@@ -124,7 +115,7 @@ export function isManualLineupEntry(value) {
 }
 
 export function getManualLineupForMatch(match) {
-  for (const key of getManualLineupCandidateKeys(match)) {
+  for (const key of getNormalizedMatchKeys(match)) {
     if (!Object.prototype.hasOwnProperty.call(manualLineups, key)) continue
 
     const lineup = manualLineups[key]

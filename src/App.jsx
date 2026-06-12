@@ -24,6 +24,11 @@ import { buildAiAnalysisPayload } from './services/aiAnalysisPayload.js'
 import { getInitialMatchSnapshot, getMatches } from './services/matchApi'
 import buildBetPlan from './services/betEngine.js'
 import {
+  findHistoryRecordForMatch,
+  formatSettlementHit,
+  settlePredictionSnapshot,
+} from './services/predictionSettlement.js'
+import {
   applyFinishedMatchAdjustments,
   applyFinishedMatchAdjustmentsBefore,
 } from './utils/teamRevaluation'
@@ -114,7 +119,10 @@ const teamNameMap = {
   Mexico: '墨西哥',
   'South Africa': '南非',
   'South Korea': '韩国',
+  'Korea Republic': '韩国',
+  'Republic of Korea': '韩国',
   Czechia: '捷克',
+  'Czech Republic': '捷克',
   Canada: '加拿大',
   'Bosnia-Herzegovina': '波黑',
   'United States': '美国',
@@ -544,19 +552,21 @@ function getLineupPlayers(players) {
 }
 
 function ManualLineupTeamCard({ sideLabel, lineup }) {
+  const displayTeamName = getDisplayTeamName(lineup.teamName)
+
   return (
     <article className="lineup-team-card manual-lineup-team-card">
       <div className="lineup-team-head">
         <span>{sideLabel}</span>
         <div>
-          <strong>{lineup.teamName}</strong>
+          <strong>{displayTeamName}</strong>
           <small>阵型：{lineup.formation || '待确认'}</small>
         </div>
       </div>
 
       <div className="lineup-role-grid manual-lineup-role-grid">
         {Object.entries(lineupRoleLabels).map(([roleKey, roleLabel]) => (
-          <p key={`${lineup.teamName}-${roleKey}`}>
+          <p key={`${displayTeamName}-${roleKey}`}>
             <span>{roleLabel}</span>
             <strong className="lineup-player-tags">
               {getLineupPlayers(lineup[roleKey]).map((player) => (
@@ -625,6 +635,115 @@ function ManualLineupBlock({ lineup, match, compact = false }) {
         <ManualLineupTeamCard sideLabel="客队" lineup={lineup.away} />
       </div>
     </>
+  )
+}
+
+function getHistorySnapshotScores(snapshot) {
+  if (Array.isArray(snapshot?.scorePredictions)) return snapshot.scorePredictions
+  if (Array.isArray(snapshot?.scores)) return snapshot.scores
+  return []
+}
+
+function getHistorySnapshotPick(snapshot) {
+  if (!snapshot) return '暂无赛前快照'
+  if (typeof snapshot.mainPick === 'string') return snapshot.mainPick
+  return snapshot.mainPick?.label ?? snapshot.mainPick?.direction ?? '暂无赛前快照'
+}
+
+function getHistoryTotalGoalsLabel(snapshot) {
+  if (!snapshot) return '暂无大小球快照'
+  if (snapshot.totalGoalsLabel) return snapshot.totalGoalsLabel
+  if (snapshot.totalGoalsDirection === 'over25') return '大 2.5'
+  if (snapshot.totalGoalsDirection === 'under25') return '小 2.5'
+  return snapshot.totalGoalsDirection ?? '暂无大小球快照'
+}
+
+function formatHistorySnapshot(snapshot) {
+  if (!snapshot) return '暂无赛前快照'
+
+  const scores = getHistorySnapshotScores(snapshot)
+    .map((score) => (typeof score === 'string' ? score : score?.score))
+    .filter(Boolean)
+  const totalGoals = getHistoryTotalGoalsLabel(snapshot)
+
+  return `${getHistorySnapshotPick(snapshot)} + ${totalGoals}${
+    scores.length ? `｜比分 ${scores.join(' / ')}` : ''
+  }`
+}
+
+function formatHistoryTotalGoalsResult(settlement, snapshot) {
+  if (settlement.totalGoalsHit === true) return '命中'
+
+  const totalGoalsLabel = getHistoryTotalGoalsLabel(snapshot)
+  if (settlement.totalGoalsHit === false) {
+    return `未中，${totalGoalsLabel} 未打出`
+  }
+
+  return formatSettlementHit(settlement.totalGoalsHit)
+}
+
+function HistoryResultCard({ match }) {
+  const record = match.historyRecord
+  const finalResult = match.historicalResult
+
+  if (!record || !finalResult) return null
+
+  const settlement =
+    match.historicalSettlement ??
+    settlePredictionSnapshot(record.predictionSnapshot, finalResult)
+  const finalScore =
+    settlement.finalScore ?? finalResult.finalScore ?? `${finalResult.homeGoals}-${finalResult.awayGoals}`
+  const homeName = getDisplayTeamName(finalResult.homeTeam ?? match.homeTeam.name)
+  const awayName = getDisplayTeamName(finalResult.awayTeam ?? match.awayTeam.name)
+  const scoreLabel =
+    settlement.scoreHit && settlement.matchedScore
+      ? `命中 ${settlement.matchedScore}`
+      : formatSettlementHit(settlement.scoreHit)
+  const missingSnapshot =
+    settlement.settlementStatus === 'missing_prediction_snapshot'
+
+  return (
+    <section className="history-result-panel" aria-label="历史记录与赛后命中">
+      <div className="section-title compact-title">
+        <span>历史记录</span>
+        <h2>赛后命中记录</h2>
+        <p>只用赛前快照做结算，不用赛果反向改推荐。</p>
+      </div>
+
+      <div className="history-result-score">
+        <span>实际赛果</span>
+        <strong>
+          {homeName} {finalScore} {awayName}
+        </strong>
+        <small>{finalResult.resultSourceLabel || '本地赛果记录'}</small>
+      </div>
+
+      <div className="history-snapshot-row">
+        <span>赛前推荐</span>
+        <strong>{formatHistorySnapshot(record.predictionSnapshot)}</strong>
+      </div>
+
+      <div className="history-hit-grid">
+        <p>
+          <span>主方向</span>
+          <strong>{formatSettlementHit(settlement.mainPickHit)}</strong>
+        </p>
+        <p>
+          <span>大小球</span>
+          <strong>{formatHistoryTotalGoalsResult(settlement, record.predictionSnapshot)}</strong>
+        </p>
+        <p>
+          <span>比分</span>
+          <strong>{scoreLabel}</strong>
+        </p>
+      </div>
+
+      {missingSnapshot ? (
+        <p className="history-result-note">
+          暂无可信赛前预测快照，本场只展示赛果，不补填命中结果。
+        </p>
+      ) : null}
+    </section>
   )
 }
 
@@ -1341,6 +1460,9 @@ function getFinishedOutcome(match) {
 
 function settleRecord(match, record) {
   if (!record || match.status !== 'finished') return null
+  if (!Object.prototype.hasOwnProperty.call(record, 'preMatchRecommendation')) {
+    return null
+  }
 
   if (record.preMatchRecommendation === 'noBet') {
     return {
@@ -2428,8 +2550,12 @@ function App() {
 
       if (!hasWdlOdds(match.odds)) {
         const noOddsAnalysis = createNoOddsAnalysis(homeTeam, awayTeam)
-        const history = historyMap.get(match.id)
+        const history = findHistoryRecordForMatch(baseRecords, match) ?? historyMap.get(match.id)
         const settlement = settleRecord(match, history)
+        const historicalResult = history?.finalResult ?? null
+        const historicalSettlement = historicalResult
+          ? settlePredictionSnapshot(history.predictionSnapshot, historicalResult)
+          : null
 
         return {
           ...match,
@@ -2439,6 +2565,9 @@ function App() {
           homeTeam,
           awayTeam,
           history,
+          historyRecord: history,
+          historicalResult,
+          historicalSettlement,
           settlement,
           beginnerNotes: null,
           hasOdds: false,
@@ -2486,8 +2615,12 @@ function App() {
         conservativeAdvice,
         risk,
       )
-      const history = historyMap.get(match.id)
+      const history = findHistoryRecordForMatch(baseRecords, match) ?? historyMap.get(match.id)
       const settlement = settleRecord(match, history)
+      const historicalResult = history?.finalResult ?? null
+      const historicalSettlement = historicalResult
+        ? settlePredictionSnapshot(history.predictionSnapshot, historicalResult)
+        : null
 
       return {
         ...match,
@@ -2496,6 +2629,9 @@ function App() {
         homeTeam,
         awayTeam,
         history,
+        historyRecord: history,
+        historicalResult,
+        historicalSettlement,
         market,
         model,
         recommendation,
@@ -3341,6 +3477,8 @@ function App() {
               ))}
             </div>
           </section>
+
+          <HistoryResultCard match={activeMatch} />
 
           <details className="detail-panel">
             <summary>
