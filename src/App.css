@@ -642,6 +642,46 @@
   gap: 12px;
 }
 
+.schedule-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.schedule-toggle-button,
+.onboarding-close-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  border: 1px solid rgba(45, 212, 191, 0.34);
+  color: #04120f;
+  background: linear-gradient(135deg, var(--mint), var(--green));
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 1000;
+}
+
+.schedule-toggle-button {
+  flex: 0 0 auto;
+  padding: 0 13px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.schedule-collapsed-note {
+  margin: 0;
+  padding: 14px;
+  border: 1px dashed rgba(45, 212, 191, 0.22);
+  border-radius: 16px;
+  color: var(--text-soft);
+  background: rgba(45, 212, 191, 0.06);
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.6;
+}
+
 .match-date-group {
   display: grid;
   gap: 10px;
@@ -1576,6 +1616,20 @@
   gap: 12px;
 }
 
+.recent-history-list {
+  display: grid;
+  gap: 12px;
+}
+
+.recent-history-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 20px;
+  background: rgba(2, 6, 14, 0.24);
+}
+
 .history-result-score,
 .history-snapshot-row,
 .history-hit-grid p {
@@ -2454,6 +2508,67 @@
   opacity: 0.72;
 }
 
+.onboarding-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(2, 6, 18, 0.72);
+  backdrop-filter: blur(14px);
+}
+
+.onboarding-dialog {
+  display: grid;
+  gap: 14px;
+  width: min(560px, 100%);
+  max-height: min(720px, calc(100vh - 36px));
+  padding: 22px;
+  overflow-y: auto;
+  border: 1px solid rgba(45, 212, 191, 0.28);
+  border-radius: 24px;
+  background:
+    linear-gradient(180deg, rgba(17, 25, 42, 0.98), rgba(7, 12, 23, 0.98)),
+    rgba(7, 12, 23, 0.96);
+  box-shadow: var(--shadow-lg);
+}
+
+.onboarding-dialog-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--mint);
+}
+
+.onboarding-dialog-head h2 {
+  margin: 0;
+  color: var(--text-strong);
+  font-family: var(--display);
+  font-size: 30px;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+.onboarding-dialog-body {
+  display: grid;
+  gap: 10px;
+}
+
+.onboarding-dialog-body p {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 14px;
+  font-weight: 850;
+  line-height: 1.75;
+}
+
+.onboarding-close-button {
+  width: 100%;
+  padding: 0 16px;
+  border-radius: 16px;
+}
+
 @media (max-width: 1180px) {
   .hero-card,
   .daily-ai-spotlight,
@@ -2733,7 +2848,6 @@
   .daily-ai-spotlight,
   .overview-grid,
   .featured-matches-panel,
-  .match-list-panel,
   .ai-flow-panel,
   .ai-insight-grid,
   .team-status-panel,
@@ -2881,6 +2995,24 @@
   .main-layout {
     display: block;
     margin-top: 0;
+  }
+
+  .match-list-panel {
+    display: block;
+    order: 2;
+    max-height: none;
+    margin-top: 10px;
+    overflow: visible;
+  }
+
+  .schedule-title-row {
+    display: grid;
+    gap: 10px;
+  }
+
+  .schedule-toggle-button {
+    width: 100%;
+    min-height: 44px;
   }
 
   .focus-column {

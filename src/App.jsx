@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Activity,
   BarChart3,
@@ -21,8 +21,24 @@ import { TEAM_PROFILES } from './data/teamProfiles'
 import teamsData from './data/teams.json'
 import { requestAiAnalysis } from './services/aiAnalysisApi.js'
 import { buildAiAnalysisPayload } from './services/aiAnalysisPayload.js'
+import {
+  getDisplayConfidence,
+  getDisplayConfidenceTier,
+} from './services/displayConfidence.js'
 import { getInitialMatchSnapshot, getMatches } from './services/matchApi'
 import buildBetPlan from './services/betEngine.js'
+import {
+  getFinishedMatchesForHistory,
+  getFocusMatches,
+  selectFocusMatch,
+} from './services/matchFocus.js'
+import {
+  ONBOARDING_NOTICE_BODY,
+  ONBOARDING_NOTICE_CLOSE_TEXT,
+  ONBOARDING_NOTICE_TITLE,
+  markOnboardingNoticeDismissed,
+  shouldShowOnboardingNotice,
+} from './services/onboardingNotice.js'
 import {
   findHistoryRecordForMatch,
   formatSettlementHit,
@@ -743,6 +759,186 @@ function HistoryResultCard({ match }) {
           暂无可信赛前预测快照，本场只展示赛果，不补填命中结果。
         </p>
       ) : null}
+    </section>
+  )
+}
+
+function getHistoryEntryDateMs(item) {
+  const value =
+    item?.finalResult?.settledAt ??
+    item?.record?.finalResult?.settledAt ??
+    item?.match?.kickoff ??
+    item?.record?.kickoff ??
+    item?.record?.updatedAt
+  const time = new Date(value).getTime()
+  return Number.isFinite(time) ? time : 0
+}
+
+function buildHistoryEntryFromRecord(record) {
+  if (!record?.finalResult) return null
+
+  const finalResult = record.finalResult
+  const settlement =
+    record.settlement?.settlementStatus === 'settled'
+      ? record.settlement
+      : settlePredictionSnapshot(record.predictionSnapshot, finalResult)
+
+  return {
+    id: record.id ?? record.matchKey ?? record.matchLabel,
+    record,
+    predictionSnapshot: record.predictionSnapshot ?? null,
+    finalResult,
+    settlement,
+  }
+}
+
+function buildHistoryEntryFromMatch(match) {
+  if (match?.status !== 'finished' || !match.score) return null
+
+  const finalResult = {
+    homeTeam: match.homeTeam.name,
+    awayTeam: match.awayTeam.name,
+    finalScore: `${match.score.home}-${match.score.away}`,
+    homeGoals: match.score.home,
+    awayGoals: match.score.away,
+    resultSourceLabel: '本地赛程赛果',
+    settledAt: match.kickoff,
+  }
+  const predictionSnapshot = match.historyRecord?.predictionSnapshot ?? null
+  const settlement = predictionSnapshot
+    ? settlePredictionSnapshot(predictionSnapshot, finalResult)
+    : {
+        mainPickHit: null,
+        totalGoalsHit: null,
+        scoreHit: null,
+        matchedScore: null,
+        finalScore: finalResult.finalScore,
+        settlementStatus: 'missing_prediction_snapshot',
+      }
+
+  return {
+    id: `match-history-${match.uiKey}`,
+    match,
+    record: match.historyRecord ?? null,
+    predictionSnapshot,
+    finalResult,
+    settlement,
+  }
+}
+
+function isSameHistoryMatch(current, next) {
+  const currentResult = current.finalResult
+  const nextResult = next.finalResult
+
+  return (
+    String(currentResult?.homeTeam ?? '').toLowerCase() ===
+      String(nextResult?.homeTeam ?? '').toLowerCase() &&
+    String(currentResult?.awayTeam ?? '').toLowerCase() ===
+      String(nextResult?.awayTeam ?? '').toLowerCase() &&
+    String(currentResult?.finalScore ?? '') === String(nextResult?.finalScore ?? '')
+  )
+}
+
+function getRecentHistoryEntries(records, finishedMatchEntries, limit = 5) {
+  const recordEntries = records.map(buildHistoryEntryFromRecord).filter(Boolean)
+  const matchEntries = finishedMatchEntries
+    .map(({ match }) => buildHistoryEntryFromMatch(match))
+    .filter(Boolean)
+  const entries = []
+
+  for (const entry of [...recordEntries, ...matchEntries]) {
+    if (!entries.some((currentEntry) => isSameHistoryMatch(currentEntry, entry))) {
+      entries.push(entry)
+    }
+  }
+
+  const sortedEntries = entries.sort(
+    (current, next) => getHistoryEntryDateMs(next) - getHistoryEntryDateMs(current),
+  )
+  const visibleEntries = sortedEntries.slice(0, limit)
+  const mexicoEntry = sortedEntries.find(
+    (entry) =>
+      String(entry.finalResult?.homeTeam).toLowerCase() === 'mexico' &&
+      String(entry.finalResult?.awayTeam).toLowerCase() === 'south africa',
+  )
+
+  if (
+    mexicoEntry &&
+    !visibleEntries.some((entry) => isSameHistoryMatch(entry, mexicoEntry))
+  ) {
+    visibleEntries.splice(Math.max(visibleEntries.length - 1, 0), 1, mexicoEntry)
+  }
+
+  return visibleEntries
+}
+
+function getHistoryScoreLabel(settlement) {
+  if (settlement.scoreHit && settlement.matchedScore) {
+    return `命中 ${settlement.matchedScore}`
+  }
+
+  return formatSettlementHit(settlement.scoreHit)
+}
+
+function RecentHistoryPanel({ entries }) {
+  if (!entries.length) return null
+
+  return (
+    <section className="history-result-panel recent-history-panel" aria-label="历史战绩">
+      <div className="section-title compact-title">
+        <span>历史战绩</span>
+        <h2>最近 5 场基础结算</h2>
+        <p>只读取本地历史记录和赛前快照，不用赛后比分反推当前推荐。</p>
+      </div>
+
+      <div className="recent-history-list">
+        {entries.map((entry) => {
+          const { finalResult, predictionSnapshot, settlement } = entry
+          const homeName = getDisplayTeamName(finalResult.homeTeam)
+          const awayName = getDisplayTeamName(finalResult.awayTeam)
+          const isMissingSnapshot =
+            settlement.settlementStatus === 'missing_prediction_snapshot'
+
+          return (
+            <article className="recent-history-card" key={entry.id}>
+              <div className="history-result-score">
+                <span>实际赛果</span>
+                <strong>
+                  {homeName} {finalResult.finalScore} {awayName}
+                </strong>
+                <small>{finalResult.resultSourceLabel || '本地历史记录'}</small>
+              </div>
+
+              {isMissingSnapshot ? (
+                <p className="history-result-note">缺少赛前快照，暂不统计命中。</p>
+              ) : (
+                <>
+                  <div className="history-snapshot-row">
+                    <span>赛前推荐</span>
+                    <strong>{formatHistorySnapshot(predictionSnapshot)}</strong>
+                  </div>
+                  <div className="history-hit-grid">
+                    <p>
+                      <span>主方向</span>
+                      <strong>{formatSettlementHit(settlement.mainPickHit)}</strong>
+                    </p>
+                    <p>
+                      <span>比分</span>
+                      <strong>{getHistoryScoreLabel(settlement)}</strong>
+                    </p>
+                    <p>
+                      <span>大小球</span>
+                      <strong>
+                        {formatHistoryTotalGoalsResult(settlement, predictionSnapshot)}
+                      </strong>
+                    </p>
+                  </div>
+                </>
+              )}
+            </article>
+          )
+        })}
+      </div>
     </section>
   )
 }
@@ -2009,7 +2205,8 @@ function getPlanBetScore(plan) {
 }
 
 function getDisplayConfidenceScore(match, plan) {
-  return getPlanBetScore(plan) ?? getAiConfidence(match)
+  const rawScore = getPlanBetScore(plan) ?? getAiConfidence(match)
+  return getDisplayConfidence(rawScore)
 }
 
 function formatConfidenceScore(score) {
@@ -2017,11 +2214,7 @@ function formatConfidenceScore(score) {
 }
 
 function getConfidenceTier(score) {
-  if (score >= 85) return { label: '高信心', tone: 'low' }
-  if (score >= 75) return { label: '中高信心', tone: 'low' }
-  if (score >= 65) return { label: '中等信心', tone: 'medium' }
-  if (score >= 55) return { label: '谨慎参考', tone: 'medium' }
-  return { label: '观望', tone: 'none' }
+  return getDisplayConfidenceTier(score)
 }
 
 function getPublicRiskLevel(match, confidenceScore) {
@@ -2507,9 +2700,11 @@ function App() {
   const [matchDataset, setMatchDataset] = useState(() => getInitialMatchSnapshot())
   const [spotlightCopyStatus, setSpotlightCopyStatus] = useState('idle')
   const [expandedDateKeys, setExpandedDateKeys] = useState({})
-  const [showInternalEngine, setShowInternalEngine] = useState(false)
+  const [showAllSchedule, setShowAllSchedule] = useState(false)
+  const [showOnboardingNotice, setShowOnboardingNotice] = useState(false)
+  const [hasUserSelectedMatch, setHasUserSelectedMatch] = useState(false)
   const [aiAnalysis, setAiAnalysis] = useState(null)
-  const canShowInternalEngine = import.meta.env.DEV
+  const focusSectionRef = useRef(null)
 
   useEffect(() => {
     let isMounted = true
@@ -2521,6 +2716,10 @@ function App() {
     return () => {
       isMounted = false
     }
+  }, [])
+
+  useEffect(() => {
+    setShowOnboardingNotice(shouldShowOnboardingNotice())
   }, [])
 
   const dashboard = useMemo(() => {
@@ -2660,21 +2859,6 @@ function App() {
       currentMatchDay ? match.kickoff.startsWith(currentMatchDay) : true,
     )
     const finishedMatches = todayMatches.filter((match) => match.status === 'finished')
-    const settledBets = matchesWithNotes.filter(
-      (match) =>
-        match.settlement &&
-        match.history?.preMatchRecommendation !== 'noBet' &&
-        match.settlement.stakeUnits > 0,
-    )
-    const hitCount = settledBets.filter((match) => match.settlement.hit).length
-    const totalStake = settledBets.reduce(
-      (sum, match) => sum + match.settlement.stakeUnits,
-      0,
-    )
-    const totalProfit = settledBets.reduce(
-      (sum, match) => sum + match.settlement.profitUnits,
-      0,
-    )
 
     return {
       matches: matchesWithNotes.sort(
@@ -2683,14 +2867,13 @@ function App() {
       metrics: {
         todayMatchCount: todayMatches.length,
         finishedMatchCount: finishedMatches.length,
-        hitRate: settledBets.length ? hitCount / settledBets.length : 0,
-        hitCount,
-        settledCount: settledBets.length,
-        roi: totalStake ? totalProfit / totalStake : 0,
-        totalProfit,
       },
       adjustmentRows,
       reviewMatches: matchesWithNotes.filter((match) => match.status === 'finished'),
+      recentHistoryEntries: getRecentHistoryEntries(
+        baseRecords,
+        getFinishedMatchesForHistory(matchesWithNotes),
+      ),
     }
   }, [matchDataset])
 
@@ -2720,17 +2903,42 @@ function App() {
     )
   }
 
+  const focusSourceMatches = useMemo(
+    () =>
+      normalizedMatches.map((match, sourceIndex) => ({
+        ...match,
+        sourceIndex,
+        manualLineup: getManualLineupForMatch(match),
+        displayConfidence:
+          confidenceScoreByMatchKey.get(match.uiKey) ??
+          getDisplayConfidenceScore(match, null),
+      })),
+    [confidenceScoreByMatchKey, normalizedMatches],
+  )
+  const focusSelection = useMemo(
+    () => selectFocusMatch(focusSourceMatches, betHistoryData.records, new Date()),
+    [focusSourceMatches],
+  )
+  const featuredMatches = useMemo(
+    () => getFocusMatches(focusSourceMatches, betHistoryData.records, new Date(), 3),
+    [focusSourceMatches],
+  )
+
   useEffect(() => {
     if (!normalizedMatches.length) return
 
     setSelectedIndex((prevIndex) => {
+      if (!hasUserSelectedMatch && Number.isInteger(focusSelection?.index)) {
+        return focusSelection.index
+      }
+
       if (prevIndex >= 0 && prevIndex < normalizedMatches.length) {
         return prevIndex
       }
 
-      return 0
+      return Number.isInteger(focusSelection?.index) ? focusSelection.index : 0
     })
-  }, [normalizedMatches.length])
+  }, [focusSelection?.index, hasUserSelectedMatch, normalizedMatches.length])
 
   const safeSelectedIndex =
     selectedIndex >= 0 && selectedIndex < normalizedMatches.length
@@ -2748,17 +2956,6 @@ function App() {
           })
         : null,
     [activeMatch],
-  )
-  const internalBetPlan = useMemo(
-    () =>
-      canShowInternalEngine && activeMatch
-        ? buildBetPlan(activeMatch, {
-            bankroll: 10000,
-            maxStakePerMatch: 500,
-            engineMode: 'internal',
-          })
-        : null,
-    [canShowInternalEngine, activeMatch],
   )
   const selectedDateKey = activeMatch
     ? getBeijingDateGroupInfo(activeMatch.kickoff).dateKey
@@ -2791,10 +2988,6 @@ function App() {
   const selectedConfidenceTier = getConfidenceTier(selectedConfidence)
   const selectedRiskLevel = getPublicRiskLevel(activeMatch, selectedConfidence)
   const activeManualLineup = getManualLineupForMatch(activeMatch)
-  const internalLightDataLayerSummary = getInternalLightDataLayerSummary(internalBetPlan)
-  const internalDataQualityLimitationSummaries = getInternalLimitationSummaries(
-    internalBetPlan?.dataQuality?.limitations ?? [],
-  )
   const marketSentiment = buildMarketSentiment(activeMatch)
   const analysisTimeline = buildAnalysisTimeline(lastAnalyzedAt)
   const homeTeamStatus = getTeamStatusProfile(activeMatch, 'home')
@@ -2819,7 +3012,6 @@ function App() {
     publicDataStatusPlan,
   )
   const compactDataStatusItems = getCompactDataStatusItems(publicDataStatusItems)
-  const featuredMatches = getFeaturedMatches(normalizedMatches)
   const spotlightMatch = activeMatch
   const spotlightPublicDisplay = spotlightMatch
     ? getPublicMatchDisplay(spotlightMatch)
@@ -2880,17 +3072,62 @@ function App() {
     }))
   }
 
+  function handleSelectMatch(index) {
+    setHasUserSelectedMatch(true)
+    setSelectedIndex(index)
+  }
+
+  function handleCloseOnboardingNotice() {
+    markOnboardingNoticeDismissed()
+    setShowOnboardingNotice(false)
+
+    window.requestAnimationFrame(() => {
+      focusSectionRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      })
+    })
+  }
+
   return (
     <main className="rookie-dashboard">
+      {showOnboardingNotice ? (
+        <div className="onboarding-overlay" role="presentation">
+          <section
+            aria-labelledby="onboarding-notice-title"
+            aria-modal="true"
+            className="onboarding-dialog"
+            role="dialog"
+          >
+            <div className="onboarding-dialog-head">
+              <ShieldAlert size={22} />
+              <h2 id="onboarding-notice-title">{ONBOARDING_NOTICE_TITLE}</h2>
+            </div>
+            <div className="onboarding-dialog-body">
+              {ONBOARDING_NOTICE_BODY.map((paragraph) => (
+                <p key={paragraph}>{paragraph}</p>
+              ))}
+            </div>
+            <button
+              className="onboarding-close-button"
+              onClick={handleCloseOnboardingNotice}
+              type="button"
+            >
+              {ONBOARDING_NOTICE_CLOSE_TEXT}
+            </button>
+          </section>
+        </div>
+      ) : null}
+
       <section className="hero-card">
         <div className="hero-copy">
           <div className="eyebrow">
             <Activity size={16} />
             PRE-MATCH GUIDE
           </div>
-          <h1>世界杯赛前分析</h1>
+          <h1>当前重点比赛看板</h1>
           <p>
-            当前比赛：{activeMatch.homeTeam.name} vs {activeMatch.awayTeam.name}
+            正在分析：{activeMatch.homeTeam.name} vs {activeMatch.awayTeam.name}
           </p>
           <p>{formatKickoff(activeMatch.kickoff)}</p>
           <p>{getMatchStageText(activeMatch)}</p>
@@ -2912,9 +3149,9 @@ function App() {
           </div>
         </div>
         <div className="mobile-match-rail" aria-label="手机端快速选择比赛">
-          <span>选择比赛</span>
+          <span>重点关注</span>
           <div className="mobile-match-scroll">
-            {normalizedMatches.map((match, index) => {
+            {featuredMatches.map(({ match, index }) => {
               const publicDisplay = getPublicMatchDisplay(match)
               const isActive = safeSelectedIndex === index
 
@@ -2922,7 +3159,7 @@ function App() {
                 <button
                   className={isActive ? 'mobile-match-chip active' : 'mobile-match-chip'}
                   key={`mobile-${match.uiKey}`}
-                  onClick={() => setSelectedIndex(index)}
+                  onClick={() => handleSelectMatch(index)}
                   type="button"
                 >
                   <strong>
@@ -3041,14 +3278,14 @@ function App() {
 
       <section className="featured-matches-panel" aria-label="更多重点场次">
         <div className="section-title featured-title">
-          <span>重点筛选</span>
-          <h2>更多重点场次</h2>
-          <p>系统优先筛选有盘口、有方向、有参考价值的比赛。</p>
+          <span>重点赛程</span>
+          <h2>重点关注 3 场</h2>
+          <p>优先展示当前、官方首发和近期即将开赛的比赛。</p>
         </div>
 
         {featuredMatches.length ? (
           <div className="featured-match-grid">
-            {featuredMatches.map(({ match, sourceIndex }) => {
+            {featuredMatches.map(({ match, index }) => {
               const matchType = getMatchType(match)
               const publicDisplay = getPublicMatchDisplay(match)
               const scoreReference = publicDisplay.scoreReference
@@ -3057,12 +3294,12 @@ function App() {
               return (
                 <button
                   className={
-                    safeSelectedIndex === sourceIndex
+                    safeSelectedIndex === index
                       ? 'featured-match-card active'
                       : 'featured-match-card'
                   }
-                  key={`${match.uiKey}-${sourceIndex}`}
-                  onClick={() => setSelectedIndex(sourceIndex)}
+                  key={`${match.uiKey}-${index}`}
+                  onClick={() => handleSelectMatch(index)}
                   type="button"
                 >
                   <div className="featured-card-head">
@@ -3106,12 +3343,22 @@ function App() {
 
       <section className="main-layout">
         <aside className="match-list-panel">
-          <div className="section-title">
-            <span>全部赛程</span>
-            <h2>分日期赛程</h2>
+          <div className="section-title schedule-title-row">
+            <div>
+              <span>全部赛程</span>
+              <h2>默认折叠</h2>
+            </div>
+            <button
+              className="schedule-toggle-button"
+              onClick={() => setShowAllSchedule((isVisible) => !isVisible)}
+              type="button"
+            >
+              {showAllSchedule ? '收起全部赛程' : '查看全部赛程'}
+            </button>
           </div>
 
-          <div className="simple-match-list">
+          {showAllSchedule ? (
+            <div className="simple-match-list">
             {groupedMatches.map((dateGroup, groupIndex) => {
               const isDefaultExpanded =
                 groupIndex === 0 && expandedDateKeys[dateGroup.dateKey] === undefined
@@ -3157,7 +3404,7 @@ function App() {
                                 : 'simple-match-card'
                             }
                             key={match.uiKey}
-                            onClick={() => setSelectedIndex(index)}
+                            onClick={() => handleSelectMatch(index)}
                             type="button"
                           >
                             <div className="match-card-top">
@@ -3196,11 +3443,20 @@ function App() {
                 </section>
               )
             })}
-          </div>
+            </div>
+          ) : (
+            <p className="schedule-collapsed-note">
+              已收起长赛程，只保留当前重点和上方 3 场重点关注。
+            </p>
+          )}
         </aside>
 
         <section className="focus-column">
-          <section className="core-card quick-conclusion-card priority-card" aria-label="主推荐卡">
+          <section
+            className="core-card quick-conclusion-card priority-card"
+            aria-label="主推荐卡"
+            ref={focusSectionRef}
+          >
             <div className="quick-card-top">
               <span>当前比赛</span>
               <h2>
@@ -3277,7 +3533,7 @@ function App() {
                   {analysisPhaseConfig[analysisPhase].message}
                 </p>
                 <small>
-                  当前为赛前初盘参考，不展示内部金额。临场仍需复核阵容与盘口变化。
+                  当前为赛前初盘参考，临场仍需复核阵容与盘口变化。
                 </small>
               </div>
               <button
@@ -3478,7 +3734,7 @@ function App() {
             </div>
           </section>
 
-          <HistoryResultCard match={activeMatch} />
+          <RecentHistoryPanel entries={dashboard.recentHistoryEntries} />
 
           <details className="detail-panel">
             <summary>
@@ -3588,130 +3844,6 @@ function App() {
             </div>
           </details>
 
-          {canShowInternalEngine ? (
-            <div className="internal-engine-toggle-row">
-              <button
-                className="internal-engine-toggle"
-                type="button"
-                onClick={() => setShowInternalEngine((isVisible) => !isVisible)}
-              >
-                {showInternalEngine ? '隐藏内部引擎' : '显示内部引擎'}
-              </button>
-            </div>
-          ) : null}
-
-          {canShowInternalEngine && showInternalEngine && internalBetPlan ? (
-            <section className="internal-engine-panel" aria-label="内部下注引擎 V1">
-              <div className="internal-engine-head">
-                <div>
-                  <span>内部工具</span>
-                  <h3>内部下注引擎 V1</h3>
-                </div>
-                <p>静态赛前规则验收，不代表真实盈利能力。</p>
-              </div>
-
-              <div className="internal-engine-summary">
-                <p>
-                  <span>综合评分</span>
-                  <strong>{internalBetPlan.betScore}</strong>
-                </p>
-                <p>
-                  <span>参考级别</span>
-                  <strong>{internalBetPlan.recommendLevel}</strong>
-                </p>
-                <p>
-                  <span>主方向</span>
-                  <strong>{internalBetPlan.mainPick?.label ?? '-'}</strong>
-                </p>
-                <p>
-                  <span>副方向</span>
-                  <strong>{internalBetPlan.secondaryPick?.label ?? '-'}</strong>
-                </p>
-              </div>
-
-              <div className="internal-engine-block">
-                <h4>内部金额</h4>
-                <p className="internal-engine-note">
-                  页面不展示内部资金字段，公开页只保留方向、比分、大小球和风险解释。
-                </p>
-              </div>
-
-              <div className="internal-engine-block">
-                <h4>热度提示</h4>
-                <p className="internal-engine-note">
-                  {formatInternalRiskText(internalBetPlan.heatWarning?.message ?? '-')}
-                </p>
-              </div>
-
-              <div className="internal-engine-block">
-                <h4>数据完整度</h4>
-                <div className="internal-quality-grid">
-                  {Object.entries(internalBetPlan.dataQuality ?? {})
-                    .filter(([, value]) => !Array.isArray(value))
-                    .map(([key, value]) => (
-                      <p key={key} className={`quality-${value}`}>
-                        <span>{getInternalDataQualityLabel(key)}</span>
-                        <strong>{getInternalDataQualityStatus(value)}</strong>
-                      </p>
-                    ))}
-                </div>
-                {internalDataQualityLimitationSummaries.length ? (
-                  <ul className="internal-rule-list">
-                    {internalDataQualityLimitationSummaries.map((summary) => (
-                      <li key={summary}>{summary}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="internal-limitations">暂无明显数据限制</p>
-                )}
-              </div>
-
-              {internalLightDataLayerSummary.length ? (
-                <div className="internal-engine-block">
-                  <h4>数据层摘要</h4>
-                  <div className="internal-quality-grid">
-                    {internalLightDataLayerSummary.map((item) => (
-                      <p key={item.label}>
-                        <span>{item.label}</span>
-                        <strong>{item.value}</strong>
-                      </p>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-
-              <div className="internal-engine-block">
-                <h4>取消条件</h4>
-                <ul className="internal-rule-list">
-                  {internalBetPlan.cancelRules.map((rule, index) => (
-                    <li key={`${rule}-${index}`}>{formatInternalRiskText(rule)}</li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className="internal-engine-block">
-                <h4>评分拆解</h4>
-                <div className="internal-breakdown-list">
-                  {Object.entries(internalBetPlan.scoreBreakdown ?? {}).map(
-                    ([key, item]) => (
-                      <article key={key}>
-                        <div>
-                          <span>{getInternalScoreBreakdownLabel(key)}</span>
-                          <strong>{item.score}</strong>
-                        </div>
-                        <p>{formatInternalRiskText(item.reason)}</p>
-                      </article>
-                    ),
-                  )}
-                </div>
-              </div>
-
-              <div className="internal-engine-block">
-                <h4>公开摘要预览</h4>
-                <p className="internal-engine-note">{internalBetPlan.publicSummary}</p>
-              </div>
-            </section>
-          ) : null}
         </section>
       </section>
 
