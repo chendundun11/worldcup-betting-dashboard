@@ -20,6 +20,7 @@ const FLAG_STYLE_MAP = {
   mexico: ['mexico', '墨西哥'],
   morocco: ['morocco', '摩洛哥'],
   netherlands: ['netherlands', 'holland', '荷兰'],
+  paraguay: ['paraguay', '巴拉圭'],
   portugal: ['portugal', '葡萄牙'],
   senegal: ['senegal', '塞内加尔'],
   southAfrica: ['south africa', '南非'],
@@ -421,7 +422,7 @@ export function deriveOverUnderValue(primaryScore, secondaryScore) {
 
   if (totals.every((total) => total <= 2)) return '小 2.5'
   if (totals.every((total) => total >= 3)) return '大 2.5'
-  return '2.5 临界'
+  return '2.5球分界'
 }
 
 export function deriveOverUnderText(primaryScore, secondaryScore) {

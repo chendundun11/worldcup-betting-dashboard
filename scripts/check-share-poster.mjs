@@ -41,6 +41,7 @@ const FORBIDDEN_WORDS = [
   'GPT',
   '实时天气',
 ]
+const OLD_OVER_UNDER_WORD = ['临', '界'].join('')
 
 function assert(condition, message) {
   if (!condition) throw new Error(message)
@@ -102,6 +103,11 @@ function assertPosterConsistency(poster, label) {
     `${label}: over-under text must be compact and complete.`,
   )
   assertNoEllipsis(poster.overUnderText, `${label}: over-under copy`)
+  assert(
+    !poster.overUnderValue.includes(OLD_OVER_UNDER_WORD) &&
+      !poster.overUnderText.includes(OLD_OVER_UNDER_WORD),
+    `${label}: over-under copy must not use the old boundary wording.`,
+  )
   assert(
     !(poster.totalGoalsValue === '0-2球' && poster.overUnderValue.includes('大')),
     `${label}: 0-2 goals must not map to over 2.5.`,
@@ -191,6 +197,13 @@ assert(
   /drawTeamFlagBackdrop/.test(sharePosterText) &&
     /resolveTeamFlagStyle/.test(sharePosterText),
   'Poster canvas must draw team flag backdrops from a resolver.',
+)
+assert(
+  /case 'paraguay'/.test(sharePosterText) &&
+    /#d52b1e/.test(sharePosterText) &&
+    /#ffffff/.test(sharePosterText) &&
+    /#0038a8/.test(sharePosterText),
+  'Poster canvas must draw a red-white-blue Paraguay flag backdrop.',
 )
 assert(
   /navigator\.clipboard\?\.writeText/.test(appText) &&
@@ -298,6 +311,25 @@ assert(!JSON.stringify(samplePoster).includes('9/100'), 'Low score must not beco
 assertNoEllipsis(JSON.stringify(samplePoster), 'poster output')
 assertNoForbidden(JSON.stringify(samplePoster), 'poster output')
 
+const mixedPoster = buildPosterPresentation({
+  awayTeam: '荷兰',
+  homeTeam: '巴拉圭',
+  kickoff: '北京时间 06/18 21:00',
+  lineupStatusText: '首发待确认',
+  mainDirection: '巴拉圭不败',
+  scorePredictions: ['1-1', '2-1'],
+  totalGoalsDirection: '2-3球区间',
+})
+assertPosterConsistency(mixedPoster, 'mixedPoster')
+assert(mixedPoster.overUnderText === '大小球：2.5球分界', 'Mixed scores must use beginner-friendly 2.5 boundary copy.')
+assert(mixedPoster.homeFlagStyle.type === 'paraguay' && !mixedPoster.homeFlagStyle.fallback, 'Paraguay must use a non-fallback flag style.')
+assert(resolveTeamFlagStyle('Paraguay').type === 'paraguay', 'English Paraguay must resolve to the Paraguay flag style.')
+assert(resolveTeamFlagStyle('巴拉圭').type === 'paraguay', 'Chinese Paraguay must resolve to the Paraguay flag style.')
+
+assert(deriveOverUnderValue('2-1', '3-1') === '大 2.5', 'High-score pairs must use over 2.5 copy.')
+assert(deriveOverUnderValue('1-1', '0-0') === '小 2.5', 'Low-score pairs must use under 2.5 copy.')
+assert(!deriveOverUnderValue('2-1', '3-1').includes(['大', '2.5'].join('')), 'Over 2.5 copy must keep a visible space.')
+
 const cautiousPoster = buildPosterPresentation({
   awayTeam: '荷兰',
   homeTeam: '英格兰',
@@ -328,6 +360,7 @@ assert(shareCopy.includes('备用比分：'), 'Share copy must include backup sc
 assert(shareCopy.includes('总进球：'), 'Share copy must include compact total goals judgement.')
 assert(shareCopy.includes('大小球：小 2.5'), 'Share copy must include over-under judgement.')
 assert(!shareCopy.includes(['小', '2.5'].join('')), 'Share copy must not collapse the space in 小 2.5.')
+assert(!shareCopy.includes(OLD_OVER_UNDER_WORD), 'Share copy must not use the old over-under boundary wording.')
 assert(shareCopy.includes('模型解读：'), 'Share copy must include model insight.')
 assert(shareCopy.includes('首发观察：'), 'Share copy must include lineup insight.')
 assert(shareCopy.includes('一句话：'), 'Share copy must include one-line summary.')
@@ -336,6 +369,19 @@ assertNoEllipsis(shareCopy, 'share copy')
 assertNoForbidden(shareCopy, 'share copy')
 
 assert(resolveTeamFlagStyle('未知球队').fallback === true, 'Flag fallback must not throw for unknown teams.')
+
+const mixedSharePayload = buildShareMatchPayload({
+  awayTeam: '荷兰',
+  homeTeam: '巴拉圭',
+  kickoff: '北京时间 06/18 21:00',
+  lineupStatus: 'predicted',
+  mainDirection: '巴拉圭不败',
+  scorePredictions: ['1-1', '2-1'],
+  totalGoalsDirection: '2-3球区间',
+})
+const mixedShareCopy = buildRecommendationShareText(mixedSharePayload)
+assert(mixedShareCopy.includes('大小球：2.5球分界'), 'Mixed share copy must use 2.5 boundary copy.')
+assert(!mixedShareCopy.includes(OLD_OVER_UNDER_WORD), 'Mixed share copy must not use the old boundary wording.')
 
 for (const word of FORBIDDEN_WORDS) {
   assert(

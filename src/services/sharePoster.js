@@ -172,7 +172,7 @@ function drawTeamFlagBackdrop(ctx, teamName, x, y, width, height, side, flagStyl
   }
 
   ctx.save()
-  ctx.globalAlpha = style.fallback ? 0.16 : 0.32
+  ctx.globalAlpha = style.fallback ? 0.16 : style.type === 'paraguay' ? 0.42 : 0.32
 
   switch (style.type) {
     case 'argentina':
@@ -282,6 +282,11 @@ function drawTeamFlagBackdrop(ctx, teamName, x, y, width, height, side, flagStyl
       stripe('#ffffff', 0, 1 / 3, 1, 1 / 3)
       stripe('#21468b', 0, 2 / 3, 1, 1 / 3)
       break
+    case 'paraguay':
+      stripe('#d52b1e', 0, 0, 1, 1 / 3)
+      stripe('#ffffff', 0, 1 / 3, 1, 1 / 3)
+      stripe('#0038a8', 0, 2 / 3, 1, 1 / 3)
+      break
     case 'portugal':
       stripe('#006600', 0, 0, 0.42, 1)
       stripe('#ff0000', 0.42, 0, 0.58, 1)
@@ -344,8 +349,20 @@ function drawTeamFlagBackdrop(ctx, teamName, x, y, width, height, side, flagStyl
 
   ctx.globalAlpha = 1
   const shade = ctx.createLinearGradient(x, y, x + width, y + height)
-  shade.addColorStop(0, side === 'left' ? 'rgba(2, 6, 23, 0.22)' : 'rgba(2, 6, 23, 0.4)')
-  shade.addColorStop(1, side === 'left' ? 'rgba(2, 6, 23, 0.4)' : 'rgba(2, 6, 23, 0.22)')
+  const shadeStart =
+    style.type === 'paraguay'
+      ? 'rgba(2, 6, 23, 0.24)'
+      : side === 'left'
+        ? 'rgba(2, 6, 23, 0.22)'
+        : 'rgba(2, 6, 23, 0.4)'
+  const shadeEnd =
+    style.type === 'paraguay'
+      ? 'rgba(2, 6, 23, 0.18)'
+      : side === 'left'
+        ? 'rgba(2, 6, 23, 0.4)'
+        : 'rgba(2, 6, 23, 0.22)'
+  shade.addColorStop(0, shadeStart)
+  shade.addColorStop(1, shadeEnd)
   ctx.fillStyle = shade
   ctx.fillRect(x, y, width, height)
   ctx.restore()
@@ -382,8 +399,8 @@ function drawFootballBackdrop(ctx) {
   ctx.restore()
 
   ctx.save()
-  ctx.strokeStyle = 'rgba(209, 250, 229, 0.13)'
-  ctx.lineWidth = 3
+  ctx.strokeStyle = 'rgba(209, 250, 229, 0.07)'
+  ctx.lineWidth = 2
   ctx.beginPath()
   ctx.rect(SAFE_X, 136, CONTENT_WIDTH, 1080)
   ctx.stroke()
@@ -399,10 +416,10 @@ function drawFootballBackdrop(ctx) {
 
   ctx.beginPath()
   ctx.arc(CENTER_X, 412, 8, 0, Math.PI * 2)
-  ctx.fillStyle = 'rgba(209, 250, 229, 0.14)'
+  ctx.fillStyle = 'rgba(209, 250, 229, 0.07)'
   ctx.fill()
 
-  ctx.strokeStyle = 'rgba(209, 250, 229, 0.1)'
+  ctx.strokeStyle = 'rgba(209, 250, 229, 0.055)'
   ctx.lineWidth = 2
   ctx.strokeRect(SAFE_X, 282, 150, 420)
   ctx.strokeRect(SAFE_RIGHT - 150, 282, 150, 420)

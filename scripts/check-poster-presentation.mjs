@@ -37,6 +37,7 @@ const FORBIDDEN_WORDS = [
   'GPT',
   '实时天气',
 ]
+const OLD_OVER_UNDER_WORD = ['临', '界'].join('')
 
 function assert(condition, message) {
   if (!condition) throw new Error(message)
@@ -107,6 +108,11 @@ function assertOverUnderConsistent(poster) {
     `Over-under text must use compact copy. Expected "大小球：${expected}", got "${poster.overUnderText}".`,
   )
   assertNoEllipsis(poster.overUnderText, 'overUnderText')
+  assert(
+    !poster.overUnderValue.includes(OLD_OVER_UNDER_WORD) &&
+      !poster.overUnderText.includes(OLD_OVER_UNDER_WORD),
+    'Over-under copy must not use the old boundary wording.',
+  )
   assert(
     !(poster.totalGoalsValue === '0-2球' && poster.overUnderValue.includes('大')),
     '0-2 goals range must not map to over 2.5.',
@@ -224,6 +230,25 @@ assert(lowPoster.overUnderText === '大小球：小 2.5', '1-1 / 0-0 must map to
 assert(lowPoster.homeFlagStyle.type === 'canada' && !lowPoster.homeFlagStyle.fallback, 'Canada must use a non-fallback flag style.')
 assert(lowPoster.awayFlagStyle.type === 'bosnia' && !lowPoster.awayFlagStyle.fallback, 'Bosnia must use a non-fallback flag style.')
 
+const mixedPoster = buildPosterPresentation({
+  awayTeam: '荷兰',
+  homeTeam: '巴拉圭',
+  kickoff: '北京时间 06/18 21:00',
+  lineupStatusText: '首发待确认',
+  mainDirection: '巴拉圭不败',
+  scorePredictions: ['1-1', '2-1'],
+  statusTags: ['当前重点'],
+  totalGoalsDirection: '2-3球区间',
+})
+assertPosterFields(mixedPoster, 'mixedPoster')
+assert(mixedPoster.overUnderText === '大小球：2.5球分界', 'Mixed scores must map to 2.5 boundary copy.')
+assert(mixedPoster.homeFlagStyle.type === 'paraguay' && !mixedPoster.homeFlagStyle.fallback, 'Paraguay must use a non-fallback flag style.')
+assert(resolveTeamFlagStyle('Paraguay').type === 'paraguay', 'English Paraguay must resolve to the Paraguay flag style.')
+assert(resolveTeamFlagStyle('巴拉圭').type === 'paraguay', 'Chinese Paraguay must resolve to the Paraguay flag style.')
+assert(deriveOverUnderValue('2-1', '3-1') === '大 2.5', 'High-score pairs must map to over 2.5.')
+assert(deriveOverUnderValue('1-1', '0-0') === '小 2.5', 'Low-score pairs must map to under 2.5.')
+assert(!deriveOverUnderValue('2-1', '3-1').includes(['大', '2.5'].join('')), 'Over 2.5 copy must keep a visible space.')
+
 const oldCautiousPoster = buildPosterPresentation({
   awayTeam: '荷兰',
   homeTeam: '英格兰',
@@ -282,17 +307,20 @@ assert(shareText.includes('主推比分：'), 'Share text must include primary s
 assert(shareText.includes('备用比分：'), 'Share text must include backup score.')
 assert(shareText.includes('总进球：'), 'Share text must include compact total goals judgement.')
 assert(shareText.includes('大小球：小 2.5'), 'Share text must include derived over-under judgement.')
+assert(!shareText.includes(OLD_OVER_UNDER_WORD), 'Share text must not use the old over-under boundary wording.')
 assert(shareText.includes('一句话：'), 'Share text must include a short one-line summary.')
 assert(shareText.includes(POSTER_DISCLAIMER_TEXT), 'Share text must include required disclaimer.')
 assertNoEllipsis(shareText, 'shareText')
 assertNoForbidden(shareText, 'shareText')
 
 const serviceText = [
+  readFileSync('src/services/posterPresentation.js', 'utf8'),
   readFileSync('src/services/sharePoster.js', 'utf8'),
   readFileSync('src/services/shareText.js', 'utf8'),
 ].join('\n')
 assert(!serviceText.includes('辅推比分'), 'Poster and share text must use backup score copy.')
 assert(!serviceText.includes('风险等级'), 'Poster and share text must not show report-style risk labels.')
+assert(!serviceText.includes(OLD_OVER_UNDER_WORD), 'Poster and share text must not use the old over-under boundary wording.')
 
 const protectedStatus = gitStatusFor([
   'src/services/betEngine.js',
