@@ -1,4 +1,9 @@
-import { SHARE_RISK_NOTE, createShareFileSlug, safeShareText } from './shareText.js'
+import {
+  SHARE_FOOTER_NOTE,
+  createShareFileSlug,
+  safeShareText,
+} from './shareText.js'
+import { buildPosterPresentation } from './posterPresentation.js'
 
 export const POSTER_WIDTH = 1080
 export const POSTER_HEIGHT = 1350
@@ -30,12 +35,6 @@ function fillRoundedRect(ctx, x, y, width, height, radius, fillStyle) {
   drawRoundedRect(ctx, x, y, width, height, radius)
   ctx.fillStyle = fillStyle
   ctx.fill()
-}
-
-function strokeRoundedRect(ctx, x, y, width, height, radius, strokeStyle) {
-  drawRoundedRect(ctx, x, y, width, height, radius)
-  ctx.strokeStyle = strokeStyle
-  ctx.stroke()
 }
 
 function splitTextByWidth(ctx, text, maxWidth) {
@@ -76,10 +75,11 @@ function drawWrappedText(
   ctx.textAlign = align
   ctx.textBaseline = 'top'
 
-  const lines = splitTextByWidth(ctx, text, maxWidth).slice(0, maxLines)
+  const allLines = splitTextByWidth(ctx, text, maxWidth)
+  const lines = allLines.slice(0, maxLines)
   if (!lines.length) return y
 
-  if (lines.length === maxLines && splitTextByWidth(ctx, text, maxWidth).length > maxLines) {
+  if (lines.length === maxLines && allLines.length > maxLines) {
     const lastIndex = lines.length - 1
     let lastLine = lines[lastIndex]
     while (lastLine && ctx.measureText(`${lastLine}...`).width > maxWidth) {
@@ -95,271 +95,341 @@ function drawWrappedText(
   return y + lines.length * lineHeight
 }
 
+function drawFitText(ctx, text, x, y, maxWidth, maxSize, minSize, options = {}) {
+  let size = maxSize
+  const weight = options.weight ?? 900
+  while (size > minSize) {
+    setFont(ctx, size, weight)
+    if (ctx.measureText(text).width <= maxWidth) break
+    size -= 2
+  }
+
+  return drawWrappedText(ctx, text, x, y, maxWidth, {
+    align: options.align ?? 'center',
+    color: options.color ?? '#f8fafc',
+    fontSize: size,
+    fontWeight: weight,
+    lineHeight: Math.round(size * 1.08),
+    maxLines: options.maxLines ?? 1,
+  })
+}
+
+function drawCutPanel(ctx, points, fillStyle, strokeStyle) {
+  ctx.beginPath()
+  points.forEach(([x, y], index) => {
+    if (index === 0) ctx.moveTo(x, y)
+    else ctx.lineTo(x, y)
+  })
+  ctx.closePath()
+  ctx.fillStyle = fillStyle
+  ctx.fill()
+  if (strokeStyle) {
+    ctx.strokeStyle = strokeStyle
+    ctx.lineWidth = 2
+    ctx.stroke()
+  }
+}
+
 function drawBackground(ctx) {
-  const background = ctx.createLinearGradient(0, 0, POSTER_WIDTH, POSTER_HEIGHT)
-  background.addColorStop(0, '#071627')
-  background.addColorStop(0.48, '#06101e')
-  background.addColorStop(1, '#020711')
-  ctx.fillStyle = background
+  const base = ctx.createLinearGradient(0, 0, POSTER_WIDTH, POSTER_HEIGHT)
+  base.addColorStop(0, '#07111f')
+  base.addColorStop(0.48, '#0a1524')
+  base.addColorStop(1, '#02050d')
+  ctx.fillStyle = base
   ctx.fillRect(0, 0, POSTER_WIDTH, POSTER_HEIGHT)
 
-  const tealGlow = ctx.createRadialGradient(160, 110, 20, 160, 110, 620)
-  tealGlow.addColorStop(0, 'rgba(45, 212, 191, 0.36)')
-  tealGlow.addColorStop(0.42, 'rgba(45, 212, 191, 0.14)')
-  tealGlow.addColorStop(1, 'rgba(45, 212, 191, 0)')
-  ctx.fillStyle = tealGlow
+  const leftLight = ctx.createRadialGradient(130, 90, 10, 130, 90, 760)
+  leftLight.addColorStop(0, 'rgba(45, 212, 191, 0.36)')
+  leftLight.addColorStop(0.45, 'rgba(45, 212, 191, 0.1)')
+  leftLight.addColorStop(1, 'rgba(45, 212, 191, 0)')
+  ctx.fillStyle = leftLight
   ctx.fillRect(0, 0, POSTER_WIDTH, POSTER_HEIGHT)
 
-  const goldGlow = ctx.createRadialGradient(920, 220, 10, 920, 220, 560)
-  goldGlow.addColorStop(0, 'rgba(245, 158, 11, 0.3)')
-  goldGlow.addColorStop(1, 'rgba(245, 158, 11, 0)')
-  ctx.fillStyle = goldGlow
+  const rightLight = ctx.createRadialGradient(950, 130, 12, 950, 130, 740)
+  rightLight.addColorStop(0, 'rgba(245, 158, 11, 0.34)')
+  rightLight.addColorStop(0.42, 'rgba(245, 158, 11, 0.1)')
+  rightLight.addColorStop(1, 'rgba(245, 158, 11, 0)')
+  ctx.fillStyle = rightLight
   ctx.fillRect(0, 0, POSTER_WIDTH, POSTER_HEIGHT)
 
   ctx.save()
-  ctx.strokeStyle = 'rgba(148, 163, 184, 0.055)'
+  ctx.globalAlpha = 0.28
+  const beam = ctx.createLinearGradient(0, 120, POSTER_WIDTH, 520)
+  beam.addColorStop(0, 'rgba(94, 234, 212, 0)')
+  beam.addColorStop(0.46, 'rgba(94, 234, 212, 0.16)')
+  beam.addColorStop(1, 'rgba(245, 158, 11, 0)')
+  drawCutPanel(ctx, [[-80, 230], [POSTER_WIDTH + 60, 60], [POSTER_WIDTH + 120, 210], [-20, 380]], beam)
+  const beamTwo = ctx.createLinearGradient(0, 420, POSTER_WIDTH, 720)
+  beamTwo.addColorStop(0, 'rgba(245, 158, 11, 0)')
+  beamTwo.addColorStop(0.55, 'rgba(245, 158, 11, 0.14)')
+  beamTwo.addColorStop(1, 'rgba(94, 234, 212, 0)')
+  drawCutPanel(ctx, [[-120, 710], [POSTER_WIDTH + 70, 420], [POSTER_WIDTH + 120, 560], [-40, 840]], beamTwo)
+  ctx.restore()
+
+  ctx.save()
+  ctx.strokeStyle = 'rgba(226, 232, 240, 0.075)'
   ctx.lineWidth = 2
-  for (let x = -POSTER_HEIGHT; x < POSTER_WIDTH; x += 92) {
+  ctx.beginPath()
+  ctx.moveTo(POSTER_WIDTH / 2, 210)
+  ctx.lineTo(POSTER_WIDTH / 2, 830)
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.arc(POSTER_WIDTH / 2, 540, 188, 0, Math.PI * 2)
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.moveTo(84, 842)
+  ctx.lineTo(996, 842)
+  ctx.stroke()
+  for (let x = 92; x < POSTER_WIDTH; x += 104) {
     ctx.beginPath()
     ctx.moveTo(x, 0)
-    ctx.lineTo(x + POSTER_HEIGHT, POSTER_HEIGHT)
+    ctx.lineTo(x + 300, POSTER_HEIGHT)
+    ctx.strokeStyle = 'rgba(226, 232, 240, 0.035)'
     ctx.stroke()
   }
   ctx.restore()
 
-  const centerBand = ctx.createLinearGradient(72, 0, POSTER_WIDTH - 72, 0)
-  centerBand.addColorStop(0, 'rgba(45, 212, 191, 0.08)')
-  centerBand.addColorStop(0.5, 'rgba(15, 23, 42, 0.2)')
-  centerBand.addColorStop(1, 'rgba(245, 158, 11, 0.08)')
-  fillRoundedRect(ctx, 44, 44, POSTER_WIDTH - 88, POSTER_HEIGHT - 88, 46, centerBand)
-  ctx.lineWidth = 2
-  strokeRoundedRect(ctx, 44, 44, POSTER_WIDTH - 88, POSTER_HEIGHT - 88, 46, 'rgba(226, 232, 240, 0.1)')
-}
-
-function drawStatusPills(ctx, tags) {
-  let x = 72
-  const y = 164
-
-  setFont(ctx, 24, 900)
-  for (const tag of tags.slice(0, 3)) {
-    const text = safeShareText(tag, '当前重点')
-    const width = Math.min(ctx.measureText(text).width + 44, 252)
-    fillRoundedRect(ctx, x, y, width, 46, 23, 'rgba(2, 6, 23, 0.58)')
-    strokeRoundedRect(ctx, x, y, width, 46, 23, 'rgba(45, 212, 191, 0.34)')
-    ctx.fillStyle = '#a7f3d0'
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    ctx.fillText(text, x + width / 2, y + 23, width - 28)
-    x += width + 14
+  ctx.save()
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.12)'
+  for (let index = 0; index < 70; index += 1) {
+    const x = (index * 149) % POSTER_WIDTH
+    const y = 70 + ((index * 211) % 1050)
+    const size = 1 + (index % 3)
+    ctx.globalAlpha = 0.12 + (index % 5) * 0.035
+    ctx.fillRect(x, y, size, size)
   }
+  ctx.restore()
 }
 
-function drawInfoTile(ctx, x, y, width, height, label, value, color = '#f8fafc') {
-  const tileGradient = ctx.createLinearGradient(x, y, x + width, y + height)
-  tileGradient.addColorStop(0, 'rgba(15, 23, 42, 0.82)')
-  tileGradient.addColorStop(1, 'rgba(2, 6, 23, 0.76)')
-  fillRoundedRect(ctx, x, y, width, height, 30, tileGradient)
-  strokeRoundedRect(ctx, x, y, width, height, 30, 'rgba(148, 163, 184, 0.15)')
-  setFont(ctx, 23, 900)
-  ctx.fillStyle = '#94a3b8'
-  ctx.textAlign = 'left'
-  ctx.textBaseline = 'top'
-  ctx.fillText(label, x + 28, y + 24)
-  drawWrappedText(ctx, value, x + 28, y + 70, width - 56, {
-    color,
-    fontSize: 44,
-    fontWeight: 900,
-    lineHeight: 48,
-    maxLines: 1,
-  })
-}
-
-function drawRatingBlock(ctx, payload) {
-  const rating = payload.presentationRating ?? {}
-  const scoreMode = safeShareText(rating.scoreMode, 'risk')
-  const y = 910
-
-  fillRoundedRect(ctx, 72, y, 936, 128, 32, 'rgba(2, 6, 23, 0.66)')
-  strokeRoundedRect(ctx, 72, y, 936, 128, 32, 'rgba(245, 158, 11, 0.22)')
-
-  if (scoreMode === 'score') {
-    setFont(ctx, 24, 900)
-    ctx.fillStyle = '#fcd34d'
-    ctx.textAlign = 'left'
-    ctx.textBaseline = 'top'
-    ctx.fillText(safeShareText(rating.scoreLabel, '方向强度'), 112, y + 24)
-
-    const scoreGradient = ctx.createLinearGradient(112, y + 58, 360, y + 106)
-    scoreGradient.addColorStop(0, '#fbbf24')
-    scoreGradient.addColorStop(1, '#fde68a')
-    setFont(ctx, 52, 900)
-    ctx.fillStyle = scoreGradient
-    ctx.fillText(safeShareText(rating.displayScoreText, '--/100'), 112, y + 60)
-
-    setFont(ctx, 24, 900)
-    ctx.fillStyle = '#94a3b8'
-    ctx.fillText('等级', 562, y + 24)
-    drawWrappedText(ctx, safeShareText(rating.strengthLabel, '稳健参考'), 562, y + 61, 360, {
-      color: '#e2e8f0',
-      fontSize: 42,
-      fontWeight: 900,
-      lineHeight: 46,
-      maxLines: 1,
-    })
-    return
-  }
-
-  setFont(ctx, 24, 900)
-  ctx.fillStyle = '#fcd34d'
-  ctx.textAlign = 'left'
-  ctx.textBaseline = 'top'
-  ctx.fillText('风险等级', 112, y + 24)
-  drawWrappedText(ctx, safeShareText(rating.riskLabel, '风险偏高'), 112, y + 61, 360, {
-    color: '#f8fafc',
-    fontSize: 42,
-    fontWeight: 900,
-    lineHeight: 46,
-    maxLines: 1,
-  })
-
-  setFont(ctx, 24, 900)
-  ctx.fillStyle = '#94a3b8'
-  ctx.fillText('策略建议', 562, y + 24)
-  drawWrappedText(ctx, safeShareText(rating.strategyLabel, '谨慎观望'), 562, y + 61, 360, {
-    color: '#5eead4',
-    fontSize: 42,
-    fontWeight: 900,
-    lineHeight: 46,
-    maxLines: 1,
-  })
-}
-
-function drawSharePoster(ctx, payload) {
-  const matchName = safeShareText(payload.matchName, '当前重点比赛')
-  const homeTeam = safeShareText(payload.homeTeam, matchName)
-  const awayTeam = safeShareText(payload.awayTeam, '')
-  const kickoffText = safeShareText(payload.kickoffText, '赛前分析')
-  const mainDirectionText = safeShareText(payload.mainDirectionText, '临场复核')
-  const primaryScoreText = safeShareText(payload.primaryScoreText, '待复核')
-  const secondaryScoreText = safeShareText(payload.secondaryScoreText, '待补充')
-  const goalsDirectionText = safeShareText(payload.goalsDirectionText, '待复核')
-  const lineupStatusText = safeShareText(payload.lineupStatusText, '首发待确认')
-  const summaryText = safeShareText(
-    payload.summaryText,
-    '系统综合盘口、水位与阵容信息后，本场主方向仍需结合临场复核。',
-  )
-
-  drawBackground(ctx)
-
-  setFont(ctx, 27, 900)
-  ctx.fillStyle = '#5eead4'
-  ctx.textAlign = 'left'
-  ctx.textBaseline = 'top'
-  ctx.fillText('MATCH FOCUS', 72, 78)
-
+function drawHeader(ctx, poster) {
   setFont(ctx, 36, 900)
-  ctx.fillStyle = '#f8fafc'
-  ctx.fillText('赛前方向卡', 72, 112)
-
-  setFont(ctx, 25, 800)
-  ctx.fillStyle = '#cbd5e1'
-  ctx.textAlign = 'right'
-  ctx.fillText(kickoffText, 1008, 92, 470)
-  drawStatusPills(ctx, payload.statusTags ?? ['当前重点'])
-
-  const matchY = 238
-  drawWrappedText(ctx, homeTeam, POSTER_WIDTH / 2, matchY, 870, {
-    align: 'center',
-    color: '#f8fafc',
-    fontSize: 64,
-    fontWeight: 900,
-    lineHeight: 70,
-    maxLines: 1,
-  })
-  setFont(ctx, 32, 900)
-  ctx.fillStyle = '#fbbf24'
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'top'
-  ctx.fillText('VS', POSTER_WIDTH / 2, matchY + 76)
-  drawWrappedText(ctx, awayTeam || matchName, POSTER_WIDTH / 2, matchY + 124, 870, {
-    align: 'center',
-    color: '#f8fafc',
-    fontSize: 64,
-    fontWeight: 900,
-    lineHeight: 70,
-    maxLines: 1,
-  })
-
-  const directionY = 456
-  const directionGradient = ctx.createLinearGradient(72, directionY, 1008, directionY + 210)
-  directionGradient.addColorStop(0, 'rgba(45, 212, 191, 0.22)')
-  directionGradient.addColorStop(0.58, 'rgba(15, 23, 42, 0.86)')
-  directionGradient.addColorStop(1, 'rgba(245, 158, 11, 0.16)')
-  fillRoundedRect(ctx, 72, directionY, 936, 220, 40, directionGradient)
-  strokeRoundedRect(ctx, 72, directionY, 936, 220, 40, 'rgba(45, 212, 191, 0.32)')
-
-  setFont(ctx, 28, 900)
-  ctx.fillStyle = '#a7f3d0'
-  ctx.textAlign = 'left'
-  ctx.textBaseline = 'top'
-  ctx.fillText('主方向', 116, directionY + 35)
-  drawWrappedText(ctx, mainDirectionText, 116, directionY + 84, 820, {
-    color: '#f8fafc',
-    fontSize: 78,
-    fontWeight: 900,
-    lineHeight: 86,
-    maxLines: 1,
-  })
-
-  const defenseText = safeShareText(payload.defenseDirectionText, '')
-  if (defenseText) {
-    setFont(ctx, 25, 900)
-    ctx.fillStyle = '#cbd5e1'
-    ctx.fillText(`防范方向：${defenseText}`, 118, directionY + 174, 760)
-  }
-
-  drawInfoTile(ctx, 72, 724, 288, 148, '主推比分', primaryScoreText, '#f8fafc')
-  drawInfoTile(ctx, 396, 724, 288, 148, '辅推比分', secondaryScoreText, '#cbd5e1')
-  drawInfoTile(ctx, 720, 724, 288, 148, '进球方向', goalsDirectionText, '#5eead4')
-
-  drawRatingBlock(ctx, payload)
-
-  fillRoundedRect(ctx, 72, 1068, 936, 84, 28, 'rgba(15, 23, 42, 0.72)')
-  strokeRoundedRect(ctx, 72, 1068, 936, 84, 28, 'rgba(148, 163, 184, 0.14)')
-  setFont(ctx, 26, 900)
-  ctx.fillStyle = '#cbd5e1'
-  ctx.textAlign = 'left'
-  ctx.textBaseline = 'middle'
-  const formationText = safeShareText(payload.formationText, '')
-  const lineupText = formationText
-    ? `首发状态：${lineupStatusText}｜阵型：${formationText}`
-    : `首发状态：${lineupStatusText}`
-  ctx.fillText(lineupText, 110, 1110, 860)
-
-  fillRoundedRect(ctx, 72, 1180, 936, 112, 30, 'rgba(45, 212, 191, 0.08)')
-  strokeRoundedRect(ctx, 72, 1180, 936, 112, 30, 'rgba(45, 212, 191, 0.18)')
-  setFont(ctx, 23, 900)
   ctx.fillStyle = '#5eead4'
   ctx.textAlign = 'left'
   ctx.textBaseline = 'top'
-  ctx.fillText('简要判断', 110, 1204)
-  drawWrappedText(ctx, summaryText, 110, 1238, 860, {
-    color: '#e2e8f0',
-    fontSize: 28,
-    fontWeight: 700,
-    lineHeight: 38,
+  ctx.fillText(poster.posterTitle, 72, 70)
+
+  setFont(ctx, 24, 800)
+  ctx.fillStyle = '#cbd5e1'
+  ctx.fillText(poster.posterSubtitle, 72, 116)
+
+  setFont(ctx, 22, 700)
+  ctx.fillStyle = 'rgba(226, 232, 240, 0.78)'
+  ctx.fillText(poster.posterKicker, 72, 154, 610)
+
+  setFont(ctx, 26, 900)
+  ctx.fillStyle = '#f8fafc'
+  ctx.textAlign = 'right'
+  ctx.fillText(poster.matchTimeText, 1008, 76, 380)
+
+  setFont(ctx, 22, 900)
+  const statusWidth = Math.min(ctx.measureText(poster.statusText).width + 44, 180)
+  fillRoundedRect(ctx, 1008 - statusWidth, 126, statusWidth, 42, 21, 'rgba(2, 6, 23, 0.62)')
+  ctx.strokeStyle = 'rgba(94, 234, 212, 0.42)'
+  ctx.lineWidth = 2
+  drawRoundedRect(ctx, 1008 - statusWidth, 126, statusWidth, 42, 21)
+  ctx.stroke()
+  ctx.fillStyle = '#a7f3d0'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(poster.statusText, 1008 - statusWidth / 2, 147, statusWidth - 26)
+}
+
+function drawMatchVisual(ctx, poster) {
+  const leftPanel = ctx.createLinearGradient(72, 250, 494, 520)
+  leftPanel.addColorStop(0, 'rgba(20, 184, 166, 0.24)')
+  leftPanel.addColorStop(1, 'rgba(15, 23, 42, 0.14)')
+  drawCutPanel(ctx, [[72, 266], [486, 224], [506, 520], [72, 572]], leftPanel, 'rgba(94, 234, 212, 0.18)')
+
+  const rightPanel = ctx.createLinearGradient(594, 250, 1008, 520)
+  rightPanel.addColorStop(0, 'rgba(15, 23, 42, 0.14)')
+  rightPanel.addColorStop(1, 'rgba(245, 158, 11, 0.22)')
+  drawCutPanel(ctx, [[594, 224], [1008, 266], [1008, 572], [574, 520]], rightPanel, 'rgba(245, 158, 11, 0.18)')
+
+  setFont(ctx, 24, 900)
+  ctx.fillStyle = '#5eead4'
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'top'
+  ctx.fillText('HOME', 94, 264)
+  ctx.fillStyle = '#fbbf24'
+  ctx.textAlign = 'right'
+  ctx.fillText('AWAY', 986, 264)
+
+  drawFitText(ctx, poster.homeTeamText, 282, 330, 360, 74, 44, {
+    color: '#f8fafc',
+    maxLines: 2,
+  })
+  drawFitText(ctx, poster.awayTeamText, 800, 330, 360, 74, 44, {
+    color: '#f8fafc',
     maxLines: 2,
   })
 
-  ctx.globalAlpha = 0.9
-  drawWrappedText(ctx, `风险提示：${SHARE_RISK_NOTE}`, 72, 1304, 936, {
-    color: '#94a3b8',
+  ctx.save()
+  ctx.shadowColor = 'rgba(251, 191, 36, 0.75)'
+  ctx.shadowBlur = 34
+  setFont(ctx, 124, 900)
+  ctx.fillStyle = '#fbbf24'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText('VS', POSTER_WIDTH / 2, 414)
+  ctx.restore()
+
+  setFont(ctx, 22, 900)
+  ctx.fillStyle = 'rgba(226, 232, 240, 0.72)'
+  ctx.textAlign = 'center'
+  ctx.fillText('MATCH COVER', POSTER_WIDTH / 2, 502)
+}
+
+function drawConclusion(ctx, poster) {
+  const banner = ctx.createLinearGradient(82, 604, 998, 706)
+  banner.addColorStop(0, 'rgba(20, 184, 166, 0.9)')
+  banner.addColorStop(0.46, 'rgba(15, 23, 42, 0.9)')
+  banner.addColorStop(1, 'rgba(245, 158, 11, 0.72)')
+  drawCutPanel(ctx, [[82, 604], [958, 578], [998, 716], [122, 742]], banner, 'rgba(226, 232, 240, 0.16)')
+
+  setFont(ctx, 26, 900)
+  ctx.fillStyle = '#cffafe'
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'top'
+  ctx.fillText('赛前结论', 126, 626)
+
+  drawWrappedText(ctx, poster.mainConclusion, 126, 662, 780, {
+    color: '#ffffff',
+    fontSize: 58,
+    fontWeight: 900,
+    lineHeight: 66,
+    maxLines: 1,
+  })
+
+  drawWrappedText(ctx, poster.supportConclusion, 126, 724, 800, {
+    color: '#e2e8f0',
+    fontSize: 26,
+    fontWeight: 800,
+    lineHeight: 32,
+    maxLines: 1,
+  })
+}
+
+function drawScoreboard(ctx, poster) {
+  const y = 790
+  ctx.save()
+  ctx.globalAlpha = 0.96
+  const scoreBand = ctx.createLinearGradient(72, y, 1008, y + 130)
+  scoreBand.addColorStop(0, 'rgba(2, 6, 23, 0.7)')
+  scoreBand.addColorStop(0.5, 'rgba(15, 23, 42, 0.84)')
+  scoreBand.addColorStop(1, 'rgba(2, 6, 23, 0.7)')
+  drawCutPanel(ctx, [[72, y + 8], [1008, y], [968, y + 146], [112, y + 156]], scoreBand, 'rgba(148, 163, 184, 0.18)')
+  ctx.restore()
+
+  const columns = [
+    ['主推比分', poster.primaryScoreValue, 216, '#ffffff'],
+    ['备用比分', poster.secondaryScoreValue, 512, '#dbeafe'],
+    ['总进球判断', poster.totalGoalsValue, 812, '#5eead4'],
+  ]
+
+  columns.forEach(([label, value, x, color], index) => {
+    if (index > 0) {
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.18)'
+      ctx.lineWidth = 2
+      ctx.beginPath()
+      ctx.moveTo(x - 146, y + 26)
+      ctx.lineTo(x - 164, y + 126)
+      ctx.stroke()
+    }
+
+    setFont(ctx, 23, 900)
+    ctx.fillStyle = '#94a3b8'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+    ctx.fillText(label, x, y + 28)
+
+    drawFitText(ctx, value, x, y + 70, 260, index === 2 ? 42 : 58, 28, {
+      color,
+      maxLines: index === 2 ? 1 : 1,
+    })
+  })
+}
+
+function drawInsightBlock(ctx, poster) {
+  const y = 984
+  const panel = ctx.createLinearGradient(72, y, 1008, y + 262)
+  panel.addColorStop(0, 'rgba(2, 6, 23, 0.7)')
+  panel.addColorStop(0.55, 'rgba(15, 23, 42, 0.62)')
+  panel.addColorStop(1, 'rgba(6, 78, 59, 0.36)')
+  drawCutPanel(ctx, [[72, y], [1008, y + 22], [1008, y + 292], [72, y + 270]], panel, 'rgba(94, 234, 212, 0.16)')
+
+  setFont(ctx, 23, 900)
+  ctx.fillStyle = '#5eead4'
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'top'
+  ctx.fillText('模型解读', 108, y + 34)
+  drawWrappedText(ctx, poster.modelInsight, 108, y + 70, 864, {
+    color: '#f8fafc',
+    fontSize: 28,
+    fontWeight: 800,
+    lineHeight: 39,
+    maxLines: 3,
+  })
+
+  setFont(ctx, 23, 900)
+  ctx.fillStyle = '#fbbf24'
+  ctx.fillText('首发观察', 108, y + 184)
+  drawWrappedText(ctx, poster.lineupInsight, 108, y + 220, 864, {
+    color: '#dbeafe',
+    fontSize: 26,
+    fontWeight: 750,
+    lineHeight: 36,
+    maxLines: 2,
+  })
+
+  drawWrappedText(ctx, poster.oneLineSummary, 108, 1266, 864, {
+    color: '#ffffff',
+    fontSize: 25,
+    fontWeight: 900,
+    lineHeight: 32,
+    maxLines: 1,
+  })
+
+  drawWrappedText(ctx, poster.footerNote || SHARE_FOOTER_NOTE, 72, 1302, 936, {
+    align: 'center',
+    color: 'rgba(203, 213, 225, 0.78)',
     fontSize: 20,
     fontWeight: 700,
     lineHeight: 26,
     maxLines: 1,
   })
-  ctx.globalAlpha = 1
+}
+
+function getPosterPresentation(payload) {
+  if (payload?.posterPresentation) return payload.posterPresentation
+
+  return buildPosterPresentation({
+    awayFormation: payload?.awayFormation,
+    awayTeam: payload?.awayTeam,
+    displayConfidence: payload?.displayConfidence,
+    homeFormation: payload?.homeFormation,
+    homeTeam: payload?.homeTeam,
+    kickoff: payload?.kickoffText,
+    lineupStatusText: payload?.lineupStatusText,
+    mainDirection: payload?.mainDirectionText,
+    mainPick: payload?.mainPickText,
+    presentationRating: payload?.presentationRating,
+    rawScore: payload?.rawScore,
+    scorePredictions: [payload?.primaryScoreText, payload?.secondaryScoreText],
+    statusTags: payload?.statusTags,
+    summary: payload?.summaryText,
+    totalGoalsDirection: payload?.totalGoalsDirectionText,
+  })
+}
+
+function drawSharePoster(ctx, payload) {
+  const poster = getPosterPresentation(payload)
+
+  drawBackground(ctx)
+  drawHeader(ctx, poster)
+  drawMatchVisual(ctx, poster)
+  drawConclusion(ctx, poster)
+  drawScoreboard(ctx, poster)
+  drawInsightBlock(ctx, poster)
 }
 
 function canvasToBlob(canvas) {

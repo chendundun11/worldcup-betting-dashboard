@@ -1,13 +1,11 @@
 import {
-  buildPresentationRating,
+  buildPosterPresentation,
   buildScoreRecommendation,
-  buildShortReasonForPresentation,
-  formatGoalsDirectionForPresentation,
   formatMainDirectionForPresentation,
 } from './posterPresentation.js'
 
-export const SHARE_RISK_NOTE =
-  '临场首发、盘口异动、红牌伤退与比赛进程可能影响赛果，仅供赛前参考。'
+export const SHARE_FOOTER_NOTE =
+  '赛前方向参考，临场阵容、比赛进程与场面变化需结合复核。'
 
 const INVALID_TEXT_VALUES = new Set(['', 'undefined', 'null', 'nan'])
 const INVALID_TEXT_PATTERNS = [/undefined/i, /\bnull\b/i, /\bNaN\b/i]
@@ -54,18 +52,10 @@ export function formatShareLineupStatus(status) {
   return '首发待确认'
 }
 
-function normalizeScoreList(scorePredictions) {
-  if (Array.isArray(scorePredictions)) return scorePredictions
-  if (scorePredictions && typeof scorePredictions === 'object') {
-    return [scorePredictions.main, scorePredictions.backup]
-  }
-  return [scorePredictions]
-}
-
 export function formatShareScores(scorePredictions) {
   const { primaryScore, secondaryScore } = formatShareScorePair(scorePredictions)
 
-  return `主推比分：${primaryScore}｜辅推比分：${secondaryScore}`
+  return `主推比分：${primaryScore}｜备用比分：${secondaryScore}`
 }
 
 export function formatShareScorePair(scorePredictions) {
@@ -110,15 +100,7 @@ function getStatusTags(tags, lineupStatus) {
 
 function getDefaultSummary(mainPickText) {
   const pick = safeShareText(mainPickText, '临场复核')
-  return `系统综合盘口、水位与阵容信息后，本场主方向更偏向${pick}，进球方向作为辅助参考。`
-}
-
-function formatRatingBlock(rating) {
-  if (rating?.scoreMode === 'score') {
-    return `${rating.scoreLabel || '方向强度'}：${rating.displayScoreText || '--/100'}\n等级：${rating.strengthLabel || '稳健参考'}`
-  }
-
-  return `风险等级：${rating?.riskLabel || '风险偏高'}\n策略：${rating?.strategyLabel || '谨慎观望'}`
+  return `系统综合盘口、水位与阵容信息后，本场主方向更偏向${pick}，总进球判断作为辅助参考。`
 }
 
 export function buildShareMatchPayload({
@@ -143,48 +125,58 @@ export function buildShareMatchPayload({
   totalGoalsDirection,
 } = {}) {
   const matchName = getMatchName(homeTeam, awayTeam)
+  const lineupStatusText = formatShareLineupStatus(lineupStatus)
   const mainDirectionText = safeShareText(
     mainDirection,
-    formatMainDirectionForPresentation(mainPick),
+    formatMainDirectionForPresentation(mainPick, {
+      awayTeamText: awayTeam,
+      homeTeamText: homeTeam,
+    }),
   )
-  const rating =
-    presentationRating ??
-    buildPresentationRating({
-      displayScore: displayConfidence,
-      isCautious,
-      rawScore,
-      riskTone,
-    })
-  const { primaryScore, secondaryScore } = formatShareScorePair(scorePredictions)
-  const goalsDirectionText = formatGoalsDirectionForPresentation(totalGoalsDirection)
+  const posterPresentation = buildPosterPresentation({
+    awayFormation,
+    awayTeam,
+    displayConfidence,
+    homeFormation,
+    homeTeam,
+    isCautious,
+    kickoff,
+    lineupStatusText,
+    mainDirection: mainDirectionText,
+    mainPick,
+    presentationRating,
+    rawScore,
+    riskTone,
+    scorePredictions,
+    statusTags,
+    summary: safeShareText(summary, getDefaultSummary(mainDirectionText)),
+    totalGoalsDirection,
+  })
   const payload = {
     awayTeam: safeShareText(awayTeam, ''),
     defenseDirectionText: safeShareText(defenseDirection, ''),
-    displayConfidenceText: rating.displayScoreText || formatShareConfidence(displayConfidence),
-    formationText: getFormationText(homeFormation, awayFormation),
-    goalsDirectionText,
+    displayConfidenceText:
+      presentationRating?.displayScoreText || formatShareConfidence(displayConfidence),
+    formationText: posterPresentation.rawPrediction?.formationText ?? getFormationText(homeFormation, awayFormation),
+    goalsDirectionText: posterPresentation.totalGoalsValue,
     homeTeam: safeShareText(homeTeam, ''),
-    kickoffText: safeShareText(kickoff, '赛前分析'),
-    lineupStatusText: formatShareLineupStatus(lineupStatus),
-    mainDirectionText,
-    mainPickText: mainDirectionText,
+    kickoffText: posterPresentation.matchTimeText,
+    lineupStatusText,
+    mainDirectionText: posterPresentation.mainDirectionValue,
+    mainPickText: posterPresentation.mainDirectionValue,
     matchName,
-    presentationRating: rating,
-    primaryScoreText: primaryScore,
-    ratingBlockText: formatRatingBlock(rating),
-    recommendLevelText: safeShareText(recommendLevel, rating.recommendLabel || '赛前参考'),
+    posterPresentation,
+    presentationRating,
+    primaryScoreText: posterPresentation.primaryScoreValue,
+    recommendLevelText: safeShareText(recommendLevel, '赛前参考'),
     scorePredictionsText: formatShareScores(scorePredictions),
-    secondaryScoreText: secondaryScore,
+    secondaryScoreText: posterPresentation.secondaryScoreValue,
     statusTags: getStatusTags(statusTags, lineupStatus),
-    totalGoalsDirectionText: goalsDirectionText,
+    totalGoalsDirectionText: posterPresentation.totalGoalsValue,
+    totalGoalsText: posterPresentation.totalGoalsValue,
   }
 
-  payload.summaryText = buildShortReasonForPresentation({
-    goalsDirection: goalsDirectionText,
-    mainDirection: mainDirectionText,
-    rating,
-    summary: safeShareText(summary, getDefaultSummary(mainDirectionText)),
-  })
+  payload.summaryText = posterPresentation.oneLineSummary
 
   return payload
 }
@@ -195,20 +187,30 @@ export function buildRecommendationShareText(payload) {
       ? payload
       : buildShareMatchPayload(payload)
 
+  const poster = matchPayload.posterPresentation ?? buildPosterPresentation(matchPayload)
+
   return [
-    '【赛前方向卡】',
+    '【AI赛前情报】',
     matchPayload.matchName,
-    `时间：${matchPayload.kickoffText}`,
-    `主方向：${matchPayload.mainDirectionText}`,
-    `主推比分：${matchPayload.primaryScoreText}`,
-    `辅推比分：${matchPayload.secondaryScoreText}`,
-    `进球方向：${matchPayload.goalsDirectionText}`,
-    matchPayload.ratingBlockText,
-    `首发状态：${matchPayload.lineupStatusText}`,
+    `时间：${poster.matchTimeText}`,
     '',
-    `简要判断：${matchPayload.summaryText}`,
+    '赛前结论：',
+    poster.mainConclusion,
+    poster.supportConclusion,
     '',
-    `提示：${SHARE_RISK_NOTE}`,
+    '比分倾向：',
+    poster.primaryScoreText,
+    poster.secondaryScoreText,
+    poster.totalGoalsText,
+    '',
+    '模型解读：',
+    poster.modelInsight,
+    '',
+    '首发观察：',
+    poster.lineupInsight,
+    '',
+    '赛前提示：',
+    poster.footerNote,
   ].join('\n')
 }
 

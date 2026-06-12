@@ -3406,7 +3406,7 @@ function App() {
       {spotlightMatch && spotlightPublicDisplay ? (
         <section className="daily-ai-spotlight" aria-label="赛前重点参考卡">
           <div className="daily-ai-copy">
-            <span>赛前方向卡</span>
+            <span>AI赛前情报</span>
             <h2>
               {spotlightMatch.homeTeam.name} vs {spotlightMatch.awayTeam.name}
             </h2>
@@ -3417,7 +3417,7 @@ function App() {
             <div className="daily-ai-primary-grid">
               <p className="daily-ai-direction">
                 <span>主方向</span>
-                <strong>{activeShareMainDirection}</strong>
+                <strong>{shareMatchPayload.posterPresentation.mainDirectionValue}</strong>
               </p>
               <p className="daily-ai-score-highlight">
                 <span>主推比分</span>
@@ -3426,18 +3426,18 @@ function App() {
             </div>
             <div className="daily-ai-facts">
               <p>
-                <span>辅推比分</span>
-                <strong>{spotlightPublicDisplay.scoreReference.backup}</strong>
+                <span>备用比分</span>
+                <strong>{shareMatchPayload.posterPresentation.secondaryScoreValue}</strong>
               </p>
               <p>
-                <span>进球方向</span>
-                <strong>{activeShareGoalsDirection}</strong>
+                <span>总进球判断</span>
+                <strong>{shareMatchPayload.posterPresentation.totalGoalsValue}</strong>
               </p>
               <p className="daily-ai-secondary-fact">
                 <span>
                   {selectedPresentationRating.scoreMode === 'score'
                     ? selectedPresentationRating.scoreLabel
-                    : '风险等级'}
+                    : '变量提示'}
                 </span>
                 <strong>
                   {selectedPresentationRating.scoreMode === 'score'
@@ -3446,7 +3446,7 @@ function App() {
                 </strong>
               </p>
               <p className="daily-ai-secondary-fact">
-                <span>策略</span>
+                <span>临场处理</span>
                 <strong>{selectedPresentationRating.strategyLabel}</strong>
               </p>
               <p className="daily-ai-secondary-fact">
@@ -3872,7 +3872,7 @@ function App() {
                   ? '已复制推荐文案'
                   : shareCopyStatus === 'failed'
                     ? '复制失败，请手动复制'
-                    : '复制赛前方向卡文案'}
+                    : '复制赛前情报文案'}
               </small>
             </button>
 
@@ -3889,7 +3889,7 @@ function App() {
               )}
               <span>生成分享海报</span>
               <small>
-                {posterStatus === 'generating' ? '正在生成 4:5 PNG' : '新版方向卡 PNG'}
+                {posterStatus === 'generating' ? '正在生成 4:5 PNG' : '体育封面 PNG'}
               </small>
             </button>
           </section>
