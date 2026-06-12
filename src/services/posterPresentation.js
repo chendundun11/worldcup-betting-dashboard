@@ -352,25 +352,25 @@ export function deriveTotalGoalsText(primaryScore, secondaryScore) {
   const totals = [scoreTotal(primaryScore), scoreTotal(secondaryScore)].sort((a, b) => a - b)
   const [lowTotal, highTotal] = totals
 
-  if (lowTotal === 0 && highTotal === 0) return '低比分胶着 / 0-1球区间'
-  if (highTotal <= 1) return '小比分方向 / 1球附近'
-  if (lowTotal === 0 && highTotal <= 2) return '低比分拉锯 / 0-2球区间'
-  if (lowTotal <= 1 && highTotal === 2) return '2球附近 / 1-2球区间'
-  if (lowTotal === 2 && highTotal === 2) return '2球附近 / 1-2球区间'
-  if (lowTotal === 2 && highTotal === 3) return '2-3球区间'
-  if (lowTotal >= 3) return '进球数偏高 / 3球以上'
-  if (highTotal >= 3) return '2-3球区间'
-  return '2球附近 / 1-2球区间'
+  if (lowTotal === 0 && highTotal === 0) return '0-1球'
+  if (highTotal <= 1) return '1球附近'
+  if (lowTotal === 0 && highTotal <= 2) return '0-2球'
+  if (lowTotal <= 1 && highTotal === 2) return '1-2球'
+  if (lowTotal === 2 && highTotal === 2) return '2球附近'
+  if (lowTotal === 2 && highTotal === 3) return '2-3球'
+  if (lowTotal >= 3) return '3球以上'
+  if (highTotal >= 3) return '2-3球'
+  return '1-2球'
 }
 
 export function formatGoalsDirectionForPresentation(value) {
   const text = safePresentationText(value, '')
-  if (!text) return '2球附近 / 1-2球区间'
-  if (/0-1|低比分|小比分/.test(text)) return '低比分胶着 / 0-1球区间'
-  if (text.includes('2.5球以上') || text.includes('大2.5')) return '进球数偏高 / 3球以上'
-  if (text.includes('2.5球以下') || text.includes('小2.5')) return '小比分方向 / 1球附近'
-  if (text.includes('2-3')) return '2-3球区间'
-  return text.replace('大小球方向', '总进球判断')
+  if (!text) return '1-2球'
+  if (/0-1|低比分/.test(text)) return '0-1球'
+  if (/小比分|2\.5球以下|小2\.5/.test(text)) return '1-2球'
+  if (text.includes('2.5球以上') || text.includes('大2.5')) return '3球以上'
+  if (text.includes('2-3')) return '2-3球'
+  return text
 }
 
 export function formatMainDirectionForPresentation(value, teams = {}) {
@@ -408,19 +408,36 @@ function getLineupInsight(lineupStatusText, formationText) {
   return '官方首发公布前，重点观察中前场轮换、边路速度点和防线组合，临场名单会改变比赛节奏。'
 }
 
-function getModelInsight({
-  awayTeamText,
-  mainDirectionValue,
-  primaryScore,
-  secondaryScore,
-  totalGoalsValue,
-  homeTeamText,
-}) {
-  return `${homeTeamText}与${awayTeamText}的对抗更像节奏拉锯，${mainDirectionValue}是本场优先判断线。主推${primaryScore}对应${totalGoalsValue}，备用${secondaryScore}用于覆盖临场节奏变化。`
+function getLineupInsightShort(lineupStatusText, formationText) {
+  const status = safePresentationText(lineupStatusText, '首发待确认')
+  const formation = safePresentationText(formationText, '')
+
+  if (status.includes('官方')) {
+    return formation
+      ? `官方首发已明确，阵型${formation}会影响中场站位和边路推进。`
+      : '官方首发已明确，重点看中前场衔接、边路推进效率和换人节奏。'
+  }
+
+  return '官方首发公布前，重点看中前场轮换和边路速度点，名单会影响方向强度。'
 }
 
-function getOneLineSummary(mainDirectionValue, primaryScore, secondaryScore) {
-  return `本场看点在于${mainDirectionValue}能否压住比赛节奏，比分优先${primaryScore}，备用${secondaryScore}。`
+function getGoalsStyle(totalGoalsValue) {
+  if (/0-1|0-2|1球|1-2|2球/.test(totalGoalsValue)) return '低比分拉锯'
+  if (totalGoalsValue.includes('3球以上')) return '进球数偏高'
+  return '中等进球拉锯'
+}
+
+function getModelInsight({
+  mainDirectionValue,
+  totalGoalsValue,
+  homeTeamText,
+  supportValue,
+}) {
+  return `${homeTeamText}整体稳定性更值得信任，比赛节奏偏向${getGoalsStyle(totalGoalsValue)}。本场优先看${mainDirectionValue}，${supportValue}。`
+}
+
+function getOneLineSummary(primaryScore, secondaryScore, totalGoalsValue) {
+  return `本场更像${getGoalsStyle(totalGoalsValue)}，比分优先${primaryScore}，备用${secondaryScore}，临场再复核。`
 }
 
 export function buildShortReasonForPresentation({
@@ -497,32 +514,35 @@ export function buildPosterPresentation({
       : ''
   const lineupInsight = getLineupInsight(lineupStatusText, formationText)
   const modelInsight = getModelInsight({
-    awayTeamText,
     mainDirectionValue: direction.mainDirectionValue,
-    primaryScore: scorePair.primaryScore,
-    secondaryScore: scorePair.secondaryScore,
     totalGoalsValue,
     homeTeamText,
+    supportValue: direction.supportValue,
   })
+  const lineupInsightShort = getLineupInsightShort(lineupStatusText, formationText)
   const oneLineSummary = getOneLineSummary(
-    direction.mainDirectionValue,
     scorePair.primaryScore,
     scorePair.secondaryScore,
+    totalGoalsValue,
   )
+  const totalGoalsShortText = `总进球：${totalGoalsValue}`
 
   return {
     awayTeamText,
     directionKind: direction.directionKind,
-    footerNote: '赛前方向参考，临场阵容、比赛进程与场面变化需结合复核。',
+    footerNote: '赛前方向参考，临场阵容与比赛进程需结合复核。',
     homeTeamText,
     lineupInsight,
+    lineupInsightShort,
     mainConclusion: `主方向：${direction.mainDirectionValue}`,
     mainDirectionValue: direction.mainDirectionValue,
     matchTimeText,
     modelInsight,
+    modelInsightShort: modelInsight,
     oneLineSummary,
+    oneLineSummaryShort: oneLineSummary,
     posterKicker: '结合球队状态、首发预期、比赛节奏与市场变化的赛前综合判断',
-    posterSubtitle: '多维模型逐场解读',
+    posterSubtitle: '逐场情报解读',
     posterTitle: 'AI赛前情报',
     primaryScoreText: `主推比分：${scorePair.primaryScore}`,
     primaryScoreValue: scorePair.primaryScore,
@@ -537,7 +557,8 @@ export function buildPosterPresentation({
     statusText: getStatusText(statusTags),
     supportConclusion: `补充判断：${direction.supportValue}`,
     supportConclusionValue: direction.supportValue,
-    totalGoalsText: `总进球判断：${totalGoalsValue}`,
+    totalGoalsShortText,
+    totalGoalsText: totalGoalsShortText,
     totalGoalsValue,
   }
 }

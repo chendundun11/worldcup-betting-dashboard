@@ -55,6 +55,10 @@ function assertNoForbidden(text, label) {
   }
 }
 
+function assertNoEllipsis(text, label) {
+  assert(!/[.。]{3}|…/.test(String(text)), `${label} must not include ellipsis truncation.`)
+}
+
 function outcome(score) {
   return parseScoreText(score)?.outcome
 }
@@ -76,6 +80,12 @@ function assertGoalsConsistent(poster) {
     poster.totalGoalsValue === expected,
     `Total goals text must be derived from scores. Expected "${expected}", got "${poster.totalGoalsValue}".`,
   )
+  assert(
+    poster.totalGoalsShortText === `总进球：${expected}`,
+    `Total goals short text must use compact copy. Expected "总进球：${expected}", got "${poster.totalGoalsShortText}".`,
+  )
+  assert(poster.totalGoalsShortText.length <= 12, 'Total goals short text must stay compact.')
+  assertNoEllipsis(poster.totalGoalsShortText, 'totalGoalsShortText')
   const totals = [total(poster.primaryScoreValue), total(poster.secondaryScoreValue)]
   assert(
     !(totals.every((value) => value <= 1) && poster.totalGoalsValue.includes('2-3')),
@@ -121,14 +131,23 @@ function assertPosterFields(poster, label) {
     'totalGoalsText',
     'modelInsight',
     'lineupInsight',
+    'lineupInsightShort',
+    'modelInsightShort',
     'oneLineSummary',
+    'oneLineSummaryShort',
     'footerNote',
+    'totalGoalsShortText',
   ]) {
     assert(poster[field], `${label}: ${field} must not be empty.`)
   }
 
-  assert(chineseLength(poster.modelInsight) >= 35, `${label}: modelInsight must be substantial.`)
-  assert(chineseLength(poster.lineupInsight) >= 25, `${label}: lineupInsight must be substantial.`)
+  assert(chineseLength(poster.modelInsightShort) >= 35, `${label}: modelInsightShort must be at least 35 Chinese chars.`)
+  assert(chineseLength(poster.modelInsightShort) <= 55, `${label}: modelInsightShort must be at most 55 Chinese chars.`)
+  assert(chineseLength(poster.lineupInsightShort) >= 25, `${label}: lineupInsightShort must be at least 25 Chinese chars.`)
+  assert(chineseLength(poster.lineupInsightShort) <= 45, `${label}: lineupInsightShort must be at most 45 Chinese chars.`)
+  assert(chineseLength(poster.oneLineSummaryShort) >= 20, `${label}: oneLineSummaryShort must be at least 20 Chinese chars.`)
+  assert(chineseLength(poster.oneLineSummaryShort) <= 35, `${label}: oneLineSummaryShort must be at most 35 Chinese chars.`)
+  assertNoEllipsis(JSON.stringify(poster), label)
   assertNoForbidden(JSON.stringify(poster), label)
   assertScoresDistinct(poster)
   assertGoalsConsistent(poster)
@@ -222,7 +241,9 @@ const shareText = buildRecommendationShareText(sharePayload)
 assert(shareText.includes('【AI赛前情报】'), 'Share text must use the sports-cover title.')
 assert(shareText.includes('主推比分：'), 'Share text must include primary score.')
 assert(shareText.includes('备用比分：'), 'Share text must include backup score.')
-assert(shareText.includes('总进球判断：'), 'Share text must include total goals judgement.')
+assert(shareText.includes('总进球：'), 'Share text must include compact total goals judgement.')
+assert(shareText.includes('一句话：'), 'Share text must include a short one-line summary.')
+assertNoEllipsis(shareText, 'shareText')
 assertNoForbidden(shareText, 'shareText')
 
 const serviceText = [

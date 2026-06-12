@@ -60,6 +60,10 @@ function assertNoForbidden(text, label) {
   }
 }
 
+function assertNoEllipsis(text, label) {
+  assert(!/[.。]{3}|…/.test(String(text)), `${label} must not include ellipsis truncation.`)
+}
+
 function scoreOutcome(score) {
   return parseScoreText(score)?.outcome
 }
@@ -76,6 +80,12 @@ function assertPosterConsistency(poster, label) {
       deriveTotalGoalsText(poster.primaryScoreValue, poster.secondaryScoreValue),
     `${label}: total goals text must be derived from displayed scores.`,
   )
+  assert(
+    poster.totalGoalsShortText === `总进球：${poster.totalGoalsValue}`,
+    `${label}: compact total goals text must be available.`,
+  )
+  assert(poster.totalGoalsShortText.length <= 12, `${label}: total goals copy must stay short.`)
+  assertNoEllipsis(poster.totalGoalsShortText, `${label}: total goals copy`)
 
   const primaryOutcome = scoreOutcome(poster.primaryScoreValue)
   const secondaryOutcome = scoreOutcome(poster.secondaryScoreValue)
@@ -126,9 +136,12 @@ assert(
 assert(
   /createLinearGradient/.test(sharePosterText) &&
     /createRadialGradient/.test(sharePosterText) &&
-    /MATCH COVER/.test(sharePosterText) &&
     /VS/.test(sharePosterText),
   'Poster canvas must render a sports-cover background and central VS visual.',
+)
+assert(
+  !/MATCH COVER|HOME|AWAY/.test(sharePosterText),
+  'Poster canvas must remove or strongly avoid nonessential English decorations.',
 )
 assert(
   /drawMatchVisual/.test(sharePosterText) &&
@@ -155,13 +168,14 @@ assert(
 )
 for (const copy of [
   'AI赛前情报',
-  '多维模型逐场解读',
+  '逐场情报解读',
   '赛前结论',
   '主推比分',
   '备用比分',
   '总进球判断',
   '模型解读',
   '首发观察',
+  '一句话',
 ]) {
   assert(shareFeatureText.includes(copy), `Share feature must include "${copy}".`)
 }
@@ -221,12 +235,17 @@ const samplePoster = buildPosterPresentation({
 })
 assertPosterConsistency(samplePoster, 'samplePoster')
 assert(samplePoster.posterTitle === 'AI赛前情报', 'Poster title must use sports-cover copy.')
-assert(samplePoster.posterSubtitle === '多维模型逐场解读', 'Poster subtitle must use sports-cover copy.')
+assert(samplePoster.posterSubtitle === '逐场情报解读', 'Poster subtitle must use compact sports-cover copy.')
 assert(samplePoster.mainConclusion.includes('主方向：'), 'Poster must expose a clear main direction.')
 assert(samplePoster.primaryScoreText.includes('主推比分：'), 'Poster must expose primary score text.')
 assert(samplePoster.secondaryScoreText.includes('备用比分：'), 'Poster must expose backup score text.')
-assert(samplePoster.totalGoalsText.includes('总进球判断：'), 'Poster must expose total goals text.')
+assert(samplePoster.totalGoalsText.includes('总进球：'), 'Poster must expose compact total goals text.')
+assert(samplePoster.totalGoalsShortText === '总进球：0-2球', '1-1 / 0-0 must use compact 0-2 goals copy.')
+assert(samplePoster.modelInsightShort, 'Poster must expose modelInsightShort.')
+assert(samplePoster.lineupInsightShort, 'Poster must expose lineupInsightShort.')
+assert(samplePoster.oneLineSummaryShort, 'Poster must expose oneLineSummaryShort.')
 assert(!JSON.stringify(samplePoster).includes('9/100'), 'Low score must not become headline copy.')
+assertNoEllipsis(JSON.stringify(samplePoster), 'poster output')
 assertNoForbidden(JSON.stringify(samplePoster), 'poster output')
 
 const cautiousPoster = buildPosterPresentation({
@@ -256,9 +275,11 @@ assert(shareCopy.includes('【AI赛前情报】'), 'Share copy must use the spor
 assert(shareCopy.includes('主方向：'), 'Share copy must include main direction.')
 assert(shareCopy.includes('主推比分：'), 'Share copy must include primary score.')
 assert(shareCopy.includes('备用比分：'), 'Share copy must include backup score.')
-assert(shareCopy.includes('总进球判断：'), 'Share copy must include total goals judgement.')
+assert(shareCopy.includes('总进球：'), 'Share copy must include compact total goals judgement.')
 assert(shareCopy.includes('模型解读：'), 'Share copy must include model insight.')
 assert(shareCopy.includes('首发观察：'), 'Share copy must include lineup insight.')
+assert(shareCopy.includes('一句话：'), 'Share copy must include one-line summary.')
+assertNoEllipsis(shareCopy, 'share copy')
 assertNoForbidden(shareCopy, 'share copy')
 
 for (const word of FORBIDDEN_WORDS) {

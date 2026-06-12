@@ -5,7 +5,7 @@ import {
 } from './posterPresentation.js'
 
 export const SHARE_FOOTER_NOTE =
-  '赛前方向参考，临场阵容、比赛进程与场面变化需结合复核。'
+  '赛前方向参考，临场阵容与比赛进程需结合复核。'
 
 const INVALID_TEXT_VALUES = new Set(['', 'undefined', 'null', 'nan'])
 const INVALID_TEXT_PATTERNS = [/undefined/i, /\bnull\b/i, /\bNaN\b/i]
@@ -173,7 +173,7 @@ export function buildShareMatchPayload({
     secondaryScoreText: posterPresentation.secondaryScoreValue,
     statusTags: getStatusTags(statusTags, lineupStatus),
     totalGoalsDirectionText: posterPresentation.totalGoalsValue,
-    totalGoalsText: posterPresentation.totalGoalsValue,
+    totalGoalsText: posterPresentation.totalGoalsShortText,
   }
 
   payload.summaryText = posterPresentation.oneLineSummary
@@ -201,13 +201,16 @@ export function buildRecommendationShareText(payload) {
     '比分倾向：',
     poster.primaryScoreText,
     poster.secondaryScoreText,
-    poster.totalGoalsText,
+    poster.totalGoalsShortText,
     '',
     '模型解读：',
-    poster.modelInsight,
+    poster.modelInsightShort,
     '',
     '首发观察：',
-    poster.lineupInsight,
+    poster.lineupInsightShort,
+    '',
+    '一句话：',
+    poster.oneLineSummaryShort,
     '',
     '赛前提示：',
     poster.footerNote,

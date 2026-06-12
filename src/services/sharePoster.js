@@ -79,15 +79,6 @@ function drawWrappedText(
   const lines = allLines.slice(0, maxLines)
   if (!lines.length) return y
 
-  if (lines.length === maxLines && allLines.length > maxLines) {
-    const lastIndex = lines.length - 1
-    let lastLine = lines[lastIndex]
-    while (lastLine && ctx.measureText(`${lastLine}...`).width > maxWidth) {
-      lastLine = lastLine.slice(0, -1)
-    }
-    lines[lastIndex] = `${lastLine}...`
-  }
-
   lines.forEach((line, index) => {
     ctx.fillText(line, x, y + index * lineHeight)
   })
@@ -170,15 +161,15 @@ function drawBackground(ctx) {
   ctx.strokeStyle = 'rgba(226, 232, 240, 0.075)'
   ctx.lineWidth = 2
   ctx.beginPath()
-  ctx.moveTo(POSTER_WIDTH / 2, 210)
-  ctx.lineTo(POSTER_WIDTH / 2, 830)
+  ctx.moveTo(POSTER_WIDTH / 2, 140)
+  ctx.lineTo(POSTER_WIDTH / 2, 585)
   ctx.stroke()
   ctx.beginPath()
-  ctx.arc(POSTER_WIDTH / 2, 540, 188, 0, Math.PI * 2)
+  ctx.arc(POSTER_WIDTH / 2, 346, 148, 0, Math.PI * 2)
   ctx.stroke()
   ctx.beginPath()
-  ctx.moveTo(84, 842)
-  ctx.lineTo(996, 842)
+  ctx.moveTo(84, 592)
+  ctx.lineTo(996, 592)
   ctx.stroke()
   for (let x = 92; x < POSTER_WIDTH; x += 104) {
     ctx.beginPath()
@@ -202,128 +193,110 @@ function drawBackground(ctx) {
 }
 
 function drawHeader(ctx, poster) {
-  setFont(ctx, 36, 900)
+  setFont(ctx, 34, 900)
   ctx.fillStyle = '#5eead4'
   ctx.textAlign = 'left'
   ctx.textBaseline = 'top'
-  ctx.fillText(poster.posterTitle, 72, 70)
+  ctx.fillText(poster.posterTitle, 72, 48)
 
-  setFont(ctx, 24, 800)
+  setFont(ctx, 22, 800)
   ctx.fillStyle = '#cbd5e1'
-  ctx.fillText(poster.posterSubtitle, 72, 116)
+  ctx.fillText(poster.posterSubtitle, 72, 90)
 
-  setFont(ctx, 22, 700)
-  ctx.fillStyle = 'rgba(226, 232, 240, 0.78)'
-  ctx.fillText(poster.posterKicker, 72, 154, 610)
-
-  setFont(ctx, 26, 900)
+  setFont(ctx, 24, 900)
   ctx.fillStyle = '#f8fafc'
   ctx.textAlign = 'right'
-  ctx.fillText(poster.matchTimeText, 1008, 76, 380)
+  ctx.fillText(poster.matchTimeText, 1008, 50, 380)
 
-  setFont(ctx, 22, 900)
-  const statusWidth = Math.min(ctx.measureText(poster.statusText).width + 44, 180)
-  fillRoundedRect(ctx, 1008 - statusWidth, 126, statusWidth, 42, 21, 'rgba(2, 6, 23, 0.62)')
+  setFont(ctx, 20, 900)
+  const statusWidth = Math.min(ctx.measureText(poster.statusText).width + 36, 168)
+  fillRoundedRect(ctx, 1008 - statusWidth, 88, statusWidth, 38, 19, 'rgba(2, 6, 23, 0.62)')
   ctx.strokeStyle = 'rgba(94, 234, 212, 0.42)'
   ctx.lineWidth = 2
-  drawRoundedRect(ctx, 1008 - statusWidth, 126, statusWidth, 42, 21)
+  drawRoundedRect(ctx, 1008 - statusWidth, 88, statusWidth, 38, 19)
   ctx.stroke()
   ctx.fillStyle = '#a7f3d0'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillText(poster.statusText, 1008 - statusWidth / 2, 147, statusWidth - 26)
+  ctx.fillText(poster.statusText, 1008 - statusWidth / 2, 107, statusWidth - 24)
 }
 
 function drawMatchVisual(ctx, poster) {
-  const leftPanel = ctx.createLinearGradient(72, 250, 494, 520)
+  const leftPanel = ctx.createLinearGradient(72, 166, 494, 422)
   leftPanel.addColorStop(0, 'rgba(20, 184, 166, 0.24)')
   leftPanel.addColorStop(1, 'rgba(15, 23, 42, 0.14)')
-  drawCutPanel(ctx, [[72, 266], [486, 224], [506, 520], [72, 572]], leftPanel, 'rgba(94, 234, 212, 0.18)')
+  drawCutPanel(ctx, [[72, 174], [486, 148], [506, 418], [72, 452]], leftPanel, 'rgba(94, 234, 212, 0.18)')
 
-  const rightPanel = ctx.createLinearGradient(594, 250, 1008, 520)
+  const rightPanel = ctx.createLinearGradient(594, 166, 1008, 422)
   rightPanel.addColorStop(0, 'rgba(15, 23, 42, 0.14)')
   rightPanel.addColorStop(1, 'rgba(245, 158, 11, 0.22)')
-  drawCutPanel(ctx, [[594, 224], [1008, 266], [1008, 572], [574, 520]], rightPanel, 'rgba(245, 158, 11, 0.18)')
+  drawCutPanel(ctx, [[594, 148], [1008, 174], [1008, 452], [574, 418]], rightPanel, 'rgba(245, 158, 11, 0.18)')
 
-  setFont(ctx, 24, 900)
-  ctx.fillStyle = '#5eead4'
-  ctx.textAlign = 'left'
-  ctx.textBaseline = 'top'
-  ctx.fillText('HOME', 94, 264)
-  ctx.fillStyle = '#fbbf24'
-  ctx.textAlign = 'right'
-  ctx.fillText('AWAY', 986, 264)
-
-  drawFitText(ctx, poster.homeTeamText, 282, 330, 360, 74, 44, {
+  drawFitText(ctx, poster.homeTeamText, 282, 248, 356, 60, 38, {
     color: '#f8fafc',
     maxLines: 2,
   })
-  drawFitText(ctx, poster.awayTeamText, 800, 330, 360, 74, 44, {
+  drawFitText(ctx, poster.awayTeamText, 800, 248, 356, 60, 38, {
     color: '#f8fafc',
     maxLines: 2,
   })
 
   ctx.save()
   ctx.shadowColor = 'rgba(251, 191, 36, 0.75)'
-  ctx.shadowBlur = 34
-  setFont(ctx, 124, 900)
+  ctx.shadowBlur = 28
+  setFont(ctx, 102, 900)
   ctx.fillStyle = '#fbbf24'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillText('VS', POSTER_WIDTH / 2, 414)
+  ctx.fillText('VS', POSTER_WIDTH / 2, 318)
   ctx.restore()
-
-  setFont(ctx, 22, 900)
-  ctx.fillStyle = 'rgba(226, 232, 240, 0.72)'
-  ctx.textAlign = 'center'
-  ctx.fillText('MATCH COVER', POSTER_WIDTH / 2, 502)
 }
 
 function drawConclusion(ctx, poster) {
-  const banner = ctx.createLinearGradient(82, 604, 998, 706)
+  const banner = ctx.createLinearGradient(82, 486, 998, 606)
   banner.addColorStop(0, 'rgba(20, 184, 166, 0.9)')
   banner.addColorStop(0.46, 'rgba(15, 23, 42, 0.9)')
   banner.addColorStop(1, 'rgba(245, 158, 11, 0.72)')
-  drawCutPanel(ctx, [[82, 604], [958, 578], [998, 716], [122, 742]], banner, 'rgba(226, 232, 240, 0.16)')
+  drawCutPanel(ctx, [[82, 486], [958, 468], [998, 606], [122, 624]], banner, 'rgba(226, 232, 240, 0.16)')
 
-  setFont(ctx, 26, 900)
+  setFont(ctx, 24, 900)
   ctx.fillStyle = '#cffafe'
   ctx.textAlign = 'left'
   ctx.textBaseline = 'top'
-  ctx.fillText('赛前结论', 126, 626)
+  ctx.fillText('赛前结论', 126, 506)
 
-  drawWrappedText(ctx, poster.mainConclusion, 126, 662, 780, {
+  drawWrappedText(ctx, poster.mainConclusion, 126, 540, 790, {
     color: '#ffffff',
-    fontSize: 58,
+    fontSize: 50,
     fontWeight: 900,
-    lineHeight: 66,
+    lineHeight: 58,
     maxLines: 1,
   })
 
-  drawWrappedText(ctx, poster.supportConclusion, 126, 724, 800, {
+  drawWrappedText(ctx, poster.supportConclusion, 126, 596, 800, {
     color: '#e2e8f0',
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: 800,
-    lineHeight: 32,
+    lineHeight: 30,
     maxLines: 1,
   })
 }
 
 function drawScoreboard(ctx, poster) {
-  const y = 790
+  const y = 658
   ctx.save()
   ctx.globalAlpha = 0.96
   const scoreBand = ctx.createLinearGradient(72, y, 1008, y + 130)
   scoreBand.addColorStop(0, 'rgba(2, 6, 23, 0.7)')
   scoreBand.addColorStop(0.5, 'rgba(15, 23, 42, 0.84)')
   scoreBand.addColorStop(1, 'rgba(2, 6, 23, 0.7)')
-  drawCutPanel(ctx, [[72, y + 8], [1008, y], [968, y + 146], [112, y + 156]], scoreBand, 'rgba(148, 163, 184, 0.18)')
+  drawCutPanel(ctx, [[72, y + 8], [1008, y], [970, y + 128], [112, y + 138]], scoreBand, 'rgba(148, 163, 184, 0.18)')
   ctx.restore()
 
   const columns = [
     ['主推比分', poster.primaryScoreValue, 216, '#ffffff'],
     ['备用比分', poster.secondaryScoreValue, 512, '#dbeafe'],
-    ['总进球判断', poster.totalGoalsValue, 812, '#5eead4'],
+    ['总进球', poster.totalGoalsValue, 812, '#5eead4'],
   ]
 
   columns.forEach(([label, value, x, color], index) => {
@@ -331,18 +304,18 @@ function drawScoreboard(ctx, poster) {
       ctx.strokeStyle = 'rgba(148, 163, 184, 0.18)'
       ctx.lineWidth = 2
       ctx.beginPath()
-      ctx.moveTo(x - 146, y + 26)
-      ctx.lineTo(x - 164, y + 126)
+      ctx.moveTo(x - 146, y + 22)
+      ctx.lineTo(x - 164, y + 112)
       ctx.stroke()
     }
 
-    setFont(ctx, 23, 900)
+    setFont(ctx, 22, 900)
     ctx.fillStyle = '#94a3b8'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'top'
-    ctx.fillText(label, x, y + 28)
+    ctx.fillText(label, x, y + 24)
 
-    drawFitText(ctx, value, x, y + 70, 260, index === 2 ? 42 : 58, 28, {
+    drawFitText(ctx, value, x, y + 66, 260, index === 2 ? 48 : 56, 30, {
       color,
       maxLines: index === 2 ? 1 : 1,
     })
@@ -350,46 +323,58 @@ function drawScoreboard(ctx, poster) {
 }
 
 function drawInsightBlock(ctx, poster) {
-  const y = 984
-  const panel = ctx.createLinearGradient(72, y, 1008, y + 262)
+  const y = 830
+  const panel = ctx.createLinearGradient(72, y, 1008, y + 380)
   panel.addColorStop(0, 'rgba(2, 6, 23, 0.7)')
   panel.addColorStop(0.55, 'rgba(15, 23, 42, 0.62)')
   panel.addColorStop(1, 'rgba(6, 78, 59, 0.36)')
-  drawCutPanel(ctx, [[72, y], [1008, y + 22], [1008, y + 292], [72, y + 270]], panel, 'rgba(94, 234, 212, 0.16)')
+  drawCutPanel(ctx, [[72, y], [1008, y + 18], [1008, y + 408], [72, y + 388]], panel, 'rgba(94, 234, 212, 0.16)')
 
-  setFont(ctx, 23, 900)
+  setFont(ctx, 22, 900)
   ctx.fillStyle = '#5eead4'
   ctx.textAlign = 'left'
   ctx.textBaseline = 'top'
   ctx.fillText('模型解读', 108, y + 34)
-  drawWrappedText(ctx, poster.modelInsight, 108, y + 70, 864, {
+  drawWrappedText(ctx, poster.modelInsightShort || poster.modelInsight, 108, y + 68, 864, {
     color: '#f8fafc',
-    fontSize: 28,
+    fontSize: 27,
     fontWeight: 800,
-    lineHeight: 39,
+    lineHeight: 40,
     maxLines: 3,
   })
 
-  setFont(ctx, 23, 900)
+  ctx.strokeStyle = 'rgba(148, 163, 184, 0.18)'
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.moveTo(108, y + 190)
+  ctx.lineTo(972, y + 190)
+  ctx.stroke()
+
+  setFont(ctx, 22, 900)
   ctx.fillStyle = '#fbbf24'
-  ctx.fillText('首发观察', 108, y + 184)
-  drawWrappedText(ctx, poster.lineupInsight, 108, y + 220, 864, {
+  ctx.fillText('首发观察', 108, y + 214)
+  drawWrappedText(ctx, poster.lineupInsightShort || poster.lineupInsight, 108, y + 248, 864, {
     color: '#dbeafe',
     fontSize: 26,
     fontWeight: 750,
-    lineHeight: 36,
+    lineHeight: 38,
     maxLines: 2,
   })
 
-  drawWrappedText(ctx, poster.oneLineSummary, 108, 1266, 864, {
+  const summaryY = y + 344
+  const summaryFill = ctx.createLinearGradient(108, summaryY, 972, summaryY + 56)
+  summaryFill.addColorStop(0, 'rgba(20, 184, 166, 0.2)')
+  summaryFill.addColorStop(1, 'rgba(245, 158, 11, 0.16)')
+  fillRoundedRect(ctx, 108, summaryY, 864, 58, 18, summaryFill)
+  drawWrappedText(ctx, poster.oneLineSummaryShort || poster.oneLineSummary, 130, summaryY + 15, 820, {
     color: '#ffffff',
-    fontSize: 25,
+    fontSize: 23,
     fontWeight: 900,
-    lineHeight: 32,
+    lineHeight: 28,
     maxLines: 1,
   })
 
-  drawWrappedText(ctx, poster.footerNote || SHARE_FOOTER_NOTE, 72, 1302, 936, {
+  drawWrappedText(ctx, poster.footerNote || SHARE_FOOTER_NOTE, POSTER_WIDTH / 2, 1278, 936, {
     align: 'center',
     color: 'rgba(203, 213, 225, 0.78)',
     fontSize: 20,
