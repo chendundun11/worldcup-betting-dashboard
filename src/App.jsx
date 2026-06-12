@@ -880,19 +880,39 @@ function getHistoryScoreLabel(settlement) {
   return formatSettlementHit(settlement.scoreHit)
 }
 
+function getCompactHistoryEntries(entries, limit = 3) {
+  const visibleEntries = entries.slice(0, limit)
+  const mexicoEntry = entries.find(
+    (entry) =>
+      String(entry.finalResult?.homeTeam).toLowerCase() === 'mexico' &&
+      String(entry.finalResult?.awayTeam).toLowerCase() === 'south africa',
+  )
+
+  if (
+    mexicoEntry &&
+    !visibleEntries.some((entry) => isSameHistoryMatch(entry, mexicoEntry))
+  ) {
+    visibleEntries.splice(Math.max(visibleEntries.length - 1, 0), 1, mexicoEntry)
+  }
+
+  return visibleEntries
+}
+
 function RecentHistoryPanel({ entries }) {
   if (!entries.length) return null
+
+  const visibleEntries = getCompactHistoryEntries(entries)
 
   return (
     <section className="history-result-panel recent-history-panel" aria-label="历史战绩">
       <div className="section-title compact-title">
         <span>历史战绩</span>
-        <h2>最近 5 场基础结算</h2>
-        <p>只读取本地历史记录和赛前快照，不用赛后比分反推当前推荐。</p>
+        <h2>最近 {visibleEntries.length} 场基础结算</h2>
+        <p>只读取本地历史记录和赛前快照。</p>
       </div>
 
       <div className="recent-history-list">
-        {entries.map((entry) => {
+        {visibleEntries.map((entry) => {
           const { finalResult, predictionSnapshot, settlement } = entry
           const homeName = getDisplayTeamName(finalResult.homeTeam)
           const awayName = getDisplayTeamName(finalResult.awayTeam)
@@ -2703,6 +2723,7 @@ function App() {
   const [showAllSchedule, setShowAllSchedule] = useState(false)
   const [showOnboardingNotice, setShowOnboardingNotice] = useState(false)
   const [hasUserSelectedMatch, setHasUserSelectedMatch] = useState(false)
+  const [showLineupDetails, setShowLineupDetails] = useState(false)
   const [aiAnalysis, setAiAnalysis] = useState(null)
   const focusSectionRef = useRef(null)
 
@@ -2988,6 +3009,42 @@ function App() {
   const selectedConfidenceTier = getConfidenceTier(selectedConfidence)
   const selectedRiskLevel = getPublicRiskLevel(activeMatch, selectedConfidence)
   const activeManualLineup = getManualLineupForMatch(activeMatch)
+  const activeLineupStatusLabel =
+    activeManualLineup?.lineupStatus === 'confirmed'
+      ? '官方首发'
+      : '预计首发｜临场待确认'
+  const activeFocusStageTags = [
+    '当前重点',
+    activeMatch.status === 'scheduled'
+      ? '即将开始'
+      : statusConfig[activeMatch.status]?.label || '赛前阶段',
+    activeManualLineup?.lineupStatus === 'confirmed' ? '官方首发已出' : '临场复核',
+  ]
+  const lineupSummaryItems = activeManualLineup
+    ? [
+        {
+          side: '主队',
+          teamName: getDisplayTeamName(activeManualLineup.home.teamName),
+          status: `${activeManualLineup.home.formation || '阵型待确认'}｜${activeLineupStatusLabel}`,
+        },
+        {
+          side: '客队',
+          teamName: getDisplayTeamName(activeManualLineup.away.teamName),
+          status: `${activeManualLineup.away.formation || '阵型待确认'}｜${activeLineupStatusLabel}`,
+        },
+      ]
+    : [
+        {
+          side: '主队',
+          teamName: activeMatch.homeTeam.name,
+          status: '阵型待确认｜临场待确认',
+        },
+        {
+          side: '客队',
+          teamName: activeMatch.awayTeam.name,
+          status: '阵型待确认｜临场待确认',
+        },
+      ]
   const marketSentiment = buildMarketSentiment(activeMatch)
   const analysisTimeline = buildAnalysisTimeline(lastAnalyzedAt)
   const homeTeamStatus = getTeamStatusProfile(activeMatch, 'home')
@@ -3075,6 +3132,7 @@ function App() {
   function handleSelectMatch(index) {
     setHasUserSelectedMatch(true)
     setSelectedIndex(index)
+    setShowLineupDetails(false)
   }
 
   function handleCloseOnboardingNotice() {
@@ -3123,14 +3181,11 @@ function App() {
         <div className="hero-copy">
           <div className="eyebrow">
             <Activity size={16} />
-            PRE-MATCH GUIDE
+            AI 赛前分析
           </div>
-          <h1>当前重点比赛看板</h1>
-          <p>
-            正在分析：{activeMatch.homeTeam.name} vs {activeMatch.awayTeam.name}
-          </p>
-          <p>{formatKickoff(activeMatch.kickoff)}</p>
-          <p>{getMatchStageText(activeMatch)}</p>
+          <h1>当前重点</h1>
+          <p>数据源状态 / 临场需复核</p>
+          <p>{activeMatch.homeTeam.name} vs {activeMatch.awayTeam.name}</p>
           <p className="hero-plain-note">
             基于盘口、球队状态与风险规则生成，临场阵容和盘口变化需要复核。
           </p>
@@ -3465,9 +3520,14 @@ function App() {
               <p className="quick-kickoff-time">
                 {formatKickoff(activeMatch.kickoff)}
               </p>
-          </div>
+              <div className="focus-stage-tags" aria-label="当前阶段标签">
+                {activeFocusStageTags.map((tag) => (
+                  <em key={tag}>{tag}</em>
+                ))}
+              </div>
+            </div>
 
-          <div className="quick-recommendation">
+            <div className="quick-recommendation">
               <span>本场倾向</span>
               <strong className={isSkipPrimary(activeMatch) ? 'skip-primary' : ''}>
                 {getPrimaryDisplay(activeMatch)}
@@ -3475,15 +3535,15 @@ function App() {
               <p>{buildPrimaryReason(activeMatch)}</p>
             </div>
 
-            <div className="confidence-summary-grid" aria-label="信心指数与风险等级">
-              <p>
+            <div className="confidence-summary-grid" aria-label="信心指数与推荐等级">
+              <p className="confidence-main-stat">
                 <span>信心指数</span>
                 <strong>{formatConfidenceScore(selectedConfidence)}</strong>
-                <small>{selectedConfidenceTier.label}</small>
+                <small>临场需复核</small>
               </p>
               <p>
-                <span>风险等级</span>
-                <strong>{selectedRiskLevel.label}</strong>
+                <span>推荐等级</span>
+                <strong>{selectedConfidenceTier.label}</strong>
                 <small>临场阵容和盘口需复核</small>
               </p>
             </div>
@@ -3546,6 +3606,68 @@ function App() {
                 {isAnalyzing ? '整理中' : '刷新本场赛前参考'}
               </button>
             </div>
+          </section>
+
+          <section className="core-picks-panel" aria-label="核心推荐">
+            <article className="core-pick-card core-pick-card-primary">
+              <span>本场倾向</span>
+              <strong className={isSkipPrimary(activeMatch) ? 'skip-primary' : ''}>
+                {getPrimaryDisplay(activeMatch)}
+              </strong>
+            </article>
+            <article className="core-pick-card">
+              <span>比分参考</span>
+              <strong>
+                {activePublicDisplay.scoreReference.main} /{' '}
+                {activePublicDisplay.scoreReference.backup}
+              </strong>
+            </article>
+            <article className="core-pick-card">
+              <span>大小球方向</span>
+              <strong>{activePublicDisplay.totalGoalsDirection}</strong>
+              <small>{getTotalGoalsStrength(activeMatch)}</small>
+            </article>
+          </section>
+
+          <section className="compact-risk-line-panel" aria-label="一句话风险提示">
+            临场首发、盘口异动、红牌与天气因素可能影响赛果，低信心建议轻仓或观望。
+          </section>
+
+          <section className="mobile-focus-list-panel" aria-label="重点关注 3 场">
+            <div className="section-title compact-title">
+              <span>重点关注</span>
+              <h2>3 场</h2>
+            </div>
+            {featuredMatches.length ? (
+              <div className="mobile-focus-list">
+                {featuredMatches.map(({ match, index }) => {
+                  const matchType = getMatchType(match)
+                  const confidenceScore = getConfidenceForMatch(match)
+
+                  return (
+                    <button
+                      className={
+                        safeSelectedIndex === index
+                          ? 'mobile-focus-item active'
+                          : 'mobile-focus-item'
+                      }
+                      key={`focus-${match.uiKey}`}
+                      onClick={() => handleSelectMatch(index)}
+                      type="button"
+                    >
+                      <span>{matchType.label}</span>
+                      <strong>
+                        {match.homeTeam.shortName} vs {match.awayTeam.shortName}
+                      </strong>
+                      <small>{formatKickoff(match.kickoff)}</small>
+                      <b>{formatConfidenceScore(confidenceScore)}</b>
+                    </button>
+                  )
+                })}
+              </div>
+            ) : (
+              <p className="featured-empty">暂无重点场次。</p>
+            )}
           </section>
 
           <section className="ai-flow-panel" aria-label="规则引擎赛前整理步骤">
@@ -3718,11 +3840,39 @@ function App() {
           </section>
 
           <section className="mobile-lineup-data-panel" aria-label="阵容与数据状态">
-            <ManualLineupBlock
-              compact
-              lineup={activeManualLineup}
-              match={activeMatch}
-            />
+            <div className="section-title compact-title lineup-summary-head">
+              <div>
+                <span>首发阵容</span>
+                <h2>{activeLineupStatusLabel}</h2>
+                <p>详细名单默认收起，临场以官方信息复核。</p>
+              </div>
+              <button
+                aria-expanded={showLineupDetails}
+                className="section-toggle-button"
+                onClick={() => setShowLineupDetails((isVisible) => !isVisible)}
+                type="button"
+              >
+                {showLineupDetails ? '收起首发阵容' : '查看首发阵容'}
+              </button>
+            </div>
+
+            <div className="lineup-summary-strip">
+              {lineupSummaryItems.map((item) => (
+                <p key={`${item.side}-${item.teamName}`}>
+                  <span>{item.side}</span>
+                  <strong>{item.teamName}</strong>
+                  <small>{item.status}</small>
+                </p>
+              ))}
+            </div>
+
+            {showLineupDetails ? (
+              <ManualLineupBlock
+                compact
+                lineup={activeManualLineup}
+                match={activeMatch}
+              />
+            ) : null}
 
             <div className="mobile-data-pills" aria-label="简短数据状态">
               {compactDataStatusItems.map((item) => (

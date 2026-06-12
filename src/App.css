@@ -19,6 +19,8 @@
 .team-status-panel,
 .lineup-placeholder-panel,
 .mobile-lineup-data-panel,
+.compact-risk-line-panel,
+.mobile-focus-list-panel,
 .public-data-status-panel,
 .pregame-checklist-panel,
 .history-result-panel,
@@ -219,7 +221,8 @@
 
 .mobile-match-rail,
 .mobile-copy-button,
-.mobile-lineup-data-panel {
+.mobile-lineup-data-panel,
+.mobile-focus-list-panel {
   display: none;
 }
 
@@ -960,49 +963,61 @@
   order: 1;
 }
 
-.v1-priority-panel {
+.core-picks-panel {
   order: 2;
 }
 
-.lineup-placeholder-panel {
+.compact-risk-line-panel {
   order: 3;
 }
 
-.public-data-status-panel {
+.mobile-focus-list-panel {
   order: 4;
 }
 
-.pregame-checklist-panel {
+.v1-priority-panel {
   order: 5;
 }
 
-.history-result-panel {
+.lineup-placeholder-panel {
   order: 6;
 }
 
-.team-status-panel {
+.public-data-status-panel {
   order: 7;
 }
 
-.squad-insight-panel {
+.pregame-checklist-panel {
   order: 8;
 }
 
-.detail-panel {
+.history-result-panel {
   order: 9;
 }
 
-.ai-flow-panel {
+.team-status-panel {
   order: 10;
 }
 
-.ai-insight-grid {
+.squad-insight-panel {
   order: 11;
+}
+
+.detail-panel {
+  order: 12;
+}
+
+.ai-flow-panel {
+  order: 13;
+}
+
+.ai-insight-grid {
+  order: 14;
 }
 
 .internal-engine-toggle-row,
 .internal-engine-panel {
-  order: 12;
+  order: 15;
 }
 
 .core-card,
@@ -1012,6 +1027,8 @@
 .team-status-panel,
 .lineup-placeholder-panel,
 .mobile-lineup-data-panel,
+.compact-risk-line-panel,
+.mobile-focus-list-panel,
 .public-data-status-panel,
 .pregame-checklist-panel,
 .history-result-panel,
@@ -1176,6 +1193,195 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.focus-stage-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.focus-stage-tags em {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 5px 9px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 999px;
+  color: var(--text-soft);
+  background: rgba(2, 6, 14, 0.3);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 1000;
+}
+
+.core-picks-panel {
+  display: grid;
+  grid-template-columns: 1.15fr 0.9fr 0.95fr;
+  gap: 10px;
+}
+
+.core-pick-card {
+  display: grid;
+  min-width: 0;
+  min-height: 118px;
+  align-content: space-between;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, rgba(17, 25, 42, 0.88), rgba(7, 12, 23, 0.9)),
+    rgba(7, 12, 23, 0.78);
+  box-shadow: var(--shadow-md);
+}
+
+.core-pick-card-primary {
+  border-color: rgba(45, 212, 191, 0.24);
+  background:
+    linear-gradient(135deg, rgba(45, 212, 191, 0.13), rgba(96, 165, 250, 0.07)),
+    rgba(7, 12, 23, 0.88);
+}
+
+.core-pick-card span {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 1000;
+  letter-spacing: 0.12em;
+}
+
+.core-pick-card strong {
+  min-width: 0;
+  color: var(--text-strong);
+  font-family: var(--display);
+  font-size: clamp(28px, 3.4vw, 48px);
+  line-height: 1.04;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+
+.core-pick-card-primary strong {
+  color: var(--green);
+}
+
+.core-pick-card small {
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.compact-risk-line-panel {
+  padding: 13px 16px;
+  border: 1px solid rgba(45, 212, 191, 0.18);
+  border-radius: 18px;
+  color: var(--text-soft);
+  background:
+    linear-gradient(90deg, rgba(45, 212, 191, 0.08), rgba(96, 165, 250, 0.05)),
+    rgba(2, 6, 14, 0.28);
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.6;
+}
+
+.section-toggle-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid rgba(45, 212, 191, 0.3);
+  border-radius: 999px;
+  color: var(--mint);
+  background: rgba(45, 212, 191, 0.08);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 1000;
+}
+
+.section-toggle-button:hover {
+  border-color: rgba(45, 212, 191, 0.54);
+  background: rgba(45, 212, 191, 0.12);
+}
+
+.mobile-focus-list-panel {
+  padding: 14px;
+  border-radius: 18px;
+}
+
+.mobile-focus-list-panel .section-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.mobile-focus-list-panel .section-title h2 {
+  margin: 0;
+  font-size: 22px;
+  letter-spacing: 0;
+}
+
+.mobile-focus-list {
+  display: flex;
+  gap: 8px;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 1px 1px 4px;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+}
+
+.mobile-focus-list::-webkit-scrollbar {
+  display: none;
+}
+
+.mobile-focus-item {
+  display: grid;
+  flex: 0 0 168px;
+  min-width: 0;
+  min-height: 90px;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 15px;
+  color: var(--text-soft);
+  background: rgba(2, 6, 14, 0.28);
+  cursor: pointer;
+  scroll-snap-align: start;
+  text-align: left;
+}
+
+.mobile-focus-item.active {
+  border-color: rgba(45, 212, 191, 0.58);
+  background:
+    linear-gradient(180deg, rgba(45, 212, 191, 0.13), rgba(2, 6, 14, 0.28)),
+    rgba(2, 6, 14, 0.3);
+}
+
+.mobile-focus-item span,
+.mobile-focus-item small {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.mobile-focus-item strong {
+  min-width: 0;
+  color: var(--text-strong);
+  font-size: 13px;
+  font-weight: 1000;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.mobile-focus-item b {
+  color: var(--mint);
+  font-family: var(--number);
+  font-size: 15px;
 }
 
 .skip-primary {
@@ -1603,6 +1809,52 @@
   color: var(--text-strong);
   background: rgba(148, 163, 184, 0.12);
   overflow-wrap: anywhere;
+}
+
+.lineup-summary-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.lineup-summary-strip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.lineup-summary-strip p {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 14px;
+  background: rgba(2, 6, 14, 0.26);
+}
+
+.lineup-summary-strip span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.lineup-summary-strip strong {
+  color: var(--text-strong);
+  font-size: 15px;
+  font-weight: 1000;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.lineup-summary-strip small {
+  color: var(--gold);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.35;
 }
 
 .public-status-grid p {
@@ -2634,6 +2886,9 @@
   .featured-matches-panel,
   .daily-ai-spotlight,
   .quick-conclusion-card,
+  .core-picks-panel,
+  .compact-risk-line-panel,
+  .mobile-focus-list-panel,
   .core-card,
   .ai-flow-panel,
   .market-sentiment-card,
@@ -2655,6 +2910,9 @@
   .featured-matches-panel,
   .daily-ai-spotlight,
   .quick-conclusion-card,
+  .core-picks-panel,
+  .compact-risk-line-panel,
+  .mobile-focus-list-panel,
   .core-card,
   .ai-flow-panel,
   .market-sentiment-card,
@@ -2852,6 +3110,7 @@
   .ai-insight-grid,
   .team-status-panel,
   .squad-insight-panel,
+  .play-reference-panel,
   .lineup-placeholder-panel,
   .public-data-status-panel,
   .detail-panel,
@@ -2864,6 +3123,9 @@
 
   .hero-card,
   .quick-conclusion-card,
+  .core-picks-panel,
+  .compact-risk-line-panel,
+  .mobile-focus-list-panel,
   .play-reference-panel,
   .pregame-checklist-panel,
   .history-result-panel,
@@ -2881,16 +3143,22 @@
     padding: 14px;
   }
 
-  .hero-copy .eyebrow,
   .hero-plain-note,
   .hero-pick {
     display: none;
   }
 
+  .hero-copy .eyebrow {
+    padding: 6px 9px;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+  }
+
   .hero-copy h1 {
-    margin: 0 0 8px;
-    font-size: 24px;
+    margin: 10px 0 6px;
+    font-size: 21px;
     line-height: 1.08;
+    letter-spacing: 0;
   }
 
   .hero-copy p {
@@ -2900,16 +3168,15 @@
   }
 
   .hero-copy p:first-of-type {
-    color: var(--text-strong);
-    font-family: var(--display);
-    font-size: clamp(25px, 7vw, 34px);
-    font-weight: 1000;
-    line-height: 1.04;
-    letter-spacing: -0.04em;
+    color: var(--text-soft);
+    font-size: 12px;
+    font-weight: 900;
+    line-height: 1.45;
+    letter-spacing: 0;
   }
 
   .mobile-match-rail {
-    display: grid;
+    display: none;
     gap: 8px;
     min-width: 0;
   }
@@ -3021,6 +3288,9 @@
   }
 
   .quick-conclusion-card,
+  .core-picks-panel,
+  .compact-risk-line-panel,
+  .mobile-focus-list-panel,
   .play-reference-panel,
   .pregame-checklist-panel,
   .history-result-panel,
@@ -3028,14 +3298,22 @@
     padding: 14px;
   }
 
-  .quick-card-top,
   .quick-judgement-block,
   .analysis-action-row {
     display: none;
   }
 
+  .quick-card-top {
+    display: grid;
+    gap: 7px;
+  }
+
   .quick-recommendation {
     gap: 6px;
+  }
+
+  .quick-conclusion-card .quick-recommendation {
+    display: none;
   }
 
   .quick-recommendation span,
@@ -3080,8 +3358,7 @@
   }
 
   .public-risk-tags {
-    margin-top: 12px;
-    gap: 6px;
+    display: none;
   }
 
   .public-risk-tags .risk-tag {
@@ -3090,24 +3367,84 @@
   }
 
   .mobile-copy-button {
-    display: inline-flex;
-    width: 100%;
-    align-items: center;
-    justify-content: center;
-    gap: 7px;
-    min-height: 40px;
-    margin-top: 12px;
-    border: 1px solid rgba(45, 212, 191, 0.32);
-    border-radius: 999px;
-    color: var(--mint);
-    background: rgba(45, 212, 191, 0.08);
-    font-size: 13px;
-    font-weight: 1000;
+    display: none;
   }
 
   .mobile-copy-button.copied {
     color: var(--green);
     background: rgba(74, 222, 128, 0.12);
+  }
+
+  .quick-card-top h2 {
+    margin-top: 0;
+    font-size: clamp(28px, 8.5vw, 36px);
+    line-height: 1.05;
+    letter-spacing: 0;
+  }
+
+  .quick-kickoff-time {
+    margin: 0;
+    font-size: 13px;
+  }
+
+  .focus-stage-tags {
+    gap: 6px;
+    margin-top: 2px;
+  }
+
+  .focus-stage-tags em {
+    min-height: 25px;
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+
+  .confidence-main-stat {
+    min-height: 104px;
+  }
+
+  .core-picks-panel {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding: 0;
+    border-radius: 0;
+  }
+
+  .core-pick-card {
+    min-height: 104px;
+    padding: 12px;
+    border-radius: 16px;
+  }
+
+  .core-pick-card-primary {
+    grid-column: 1 / -1;
+    min-height: 112px;
+  }
+
+  .core-pick-card span {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+  }
+
+  .core-pick-card strong {
+    font-size: clamp(23px, 7vw, 31px);
+    line-height: 1.08;
+  }
+
+  .core-pick-card-primary strong {
+    font-size: clamp(32px, 10vw, 42px);
+  }
+
+  .compact-risk-line-panel {
+    padding: 11px 12px;
+    border-radius: 15px;
+    font-size: 12px;
+    line-height: 1.55;
+  }
+
+  .mobile-focus-list-panel {
+    display: block;
+    padding: 13px;
+    overflow: hidden;
   }
 
   .play-reference-panel {
@@ -3180,12 +3517,32 @@
     display: none;
   }
 
-  .pregame-checklist-panel {
+  .quick-conclusion-card {
+    order: 1;
+  }
+
+  .core-picks-panel {
+    order: 2;
+  }
+
+  .compact-risk-line-panel {
     order: 3;
   }
 
-  .history-result-panel {
+  .mobile-focus-list-panel {
+    order: 4;
+  }
+
+  .mobile-lineup-data-panel {
     order: 5;
+  }
+
+  .history-result-panel {
+    order: 6;
+  }
+
+  .pregame-checklist-panel {
+    order: 7;
   }
 
   .compact-risk-checklist {
@@ -3220,7 +3577,7 @@
 
   .mobile-lineup-data-panel {
     display: block;
-    order: 4;
+    order: 5;
     overflow: hidden;
     border-color: rgba(148, 163, 184, 0.14);
     background:
@@ -3230,6 +3587,20 @@
 
   .mobile-lineup-data-panel .section-title {
     margin-bottom: 10px;
+  }
+
+  .mobile-lineup-data-panel .lineup-summary-head {
+    display: grid;
+    gap: 9px;
+  }
+
+  .lineup-summary-head .section-toggle-button {
+    width: 100%;
+  }
+
+  .lineup-summary-strip {
+    grid-template-columns: 1fr;
+    gap: 7px;
   }
 
   .mobile-lineup-data-panel .section-title p {
@@ -3329,27 +3700,63 @@
     font-size: 12px;
     font-weight: 1000;
     line-height: 1.25;
+    overflow-wrap: anywhere;
   }
 
   .history-result-panel {
     padding: 14px;
+    gap: 10px;
+  }
+
+  .recent-history-card {
+    gap: 8px;
+    padding: 10px;
+    border-radius: 15px;
   }
 
   .history-result-score {
-    padding: 12px;
+    padding: 10px;
+  }
+
+  .history-result-score,
+  .history-snapshot-row,
+  .history-hit-grid p {
+    border-radius: 13px;
   }
 
   .history-result-score strong {
-    font-size: clamp(24px, 7vw, 34px);
+    font-size: clamp(20px, 5.8vw, 27px);
+    line-height: 1.08;
+    overflow-wrap: anywhere;
+  }
+
+  .history-snapshot-row {
+    padding: 10px;
+  }
+
+  .history-snapshot-row strong {
+    font-size: 12px;
+    overflow-wrap: anywhere;
   }
 
   .history-hit-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 6px;
   }
 
   .history-hit-grid p {
-    padding: 10px;
+    padding: 8px;
+  }
+
+  .history-hit-grid span {
+    font-size: 10px;
+    letter-spacing: 0.04em;
+  }
+
+  .history-hit-grid strong {
+    font-size: 12px;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
   }
 }
 
