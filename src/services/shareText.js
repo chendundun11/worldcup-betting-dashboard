@@ -1,3 +1,11 @@
+import {
+  buildPresentationRating,
+  buildScoreRecommendation,
+  buildShortReasonForPresentation,
+  formatGoalsDirectionForPresentation,
+  formatMainDirectionForPresentation,
+} from './posterPresentation.js'
+
 export const SHARE_RISK_NOTE =
   '临场首发、盘口异动、红牌伤退与比赛进程可能影响赛果，仅供赛前参考。'
 
@@ -55,11 +63,18 @@ function normalizeScoreList(scorePredictions) {
 }
 
 export function formatShareScores(scorePredictions) {
-  const scores = normalizeScoreList(scorePredictions)
-    .map((score) => safeShareText(score, ''))
-    .filter(Boolean)
+  const { primaryScore, secondaryScore } = formatShareScorePair(scorePredictions)
 
-  return Array.from(new Set(scores)).slice(0, 2).join(' / ') || '比分待复核'
+  return `主推比分：${primaryScore}｜辅推比分：${secondaryScore}`
+}
+
+export function formatShareScorePair(scorePredictions) {
+  const scorePair = buildScoreRecommendation(scorePredictions)
+
+  return {
+    primaryScore: safeShareText(scorePair.primaryScore, '待复核'),
+    secondaryScore: safeShareText(scorePair.secondaryScore, '待补充'),
+  }
 }
 
 function getMatchName(homeTeam, awayTeam) {
@@ -95,42 +110,81 @@ function getStatusTags(tags, lineupStatus) {
 
 function getDefaultSummary(mainPickText) {
   const pick = safeShareText(mainPickText, '临场复核')
-  return `系统综合盘口水位、阵容状态、球队节奏与历史表现，本场倾向为${pick}，建议结合临场复核。`
+  return `系统综合盘口、水位与阵容信息后，本场主方向更偏向${pick}，进球方向作为辅助参考。`
+}
+
+function formatRatingBlock(rating) {
+  if (rating?.scoreMode === 'score') {
+    return `${rating.scoreLabel || '方向强度'}：${rating.displayScoreText || '--/100'}\n等级：${rating.strengthLabel || '稳健参考'}`
+  }
+
+  return `风险等级：${rating?.riskLabel || '风险偏高'}\n策略：${rating?.strategyLabel || '谨慎观望'}`
 }
 
 export function buildShareMatchPayload({
   awayFormation,
   awayTeam,
   displayConfidence,
+  defenseDirection,
   homeFormation,
   homeTeam,
+  isCautious,
   kickoff,
   lineupStatus,
+  mainDirection,
   mainPick,
+  presentationRating,
   recommendLevel,
+  rawScore,
+  riskTone,
   scorePredictions,
   statusTags,
   summary,
   totalGoalsDirection,
 } = {}) {
   const matchName = getMatchName(homeTeam, awayTeam)
-  const mainPickText = safeShareText(mainPick, '临场复核')
+  const mainDirectionText = safeShareText(
+    mainDirection,
+    formatMainDirectionForPresentation(mainPick),
+  )
+  const rating =
+    presentationRating ??
+    buildPresentationRating({
+      displayScore: displayConfidence,
+      isCautious,
+      rawScore,
+      riskTone,
+    })
+  const { primaryScore, secondaryScore } = formatShareScorePair(scorePredictions)
+  const goalsDirectionText = formatGoalsDirectionForPresentation(totalGoalsDirection)
   const payload = {
     awayTeam: safeShareText(awayTeam, ''),
-    displayConfidenceText: formatShareConfidence(displayConfidence),
+    defenseDirectionText: safeShareText(defenseDirection, ''),
+    displayConfidenceText: rating.displayScoreText || formatShareConfidence(displayConfidence),
     formationText: getFormationText(homeFormation, awayFormation),
+    goalsDirectionText,
     homeTeam: safeShareText(homeTeam, ''),
     kickoffText: safeShareText(kickoff, '赛前分析'),
     lineupStatusText: formatShareLineupStatus(lineupStatus),
-    mainPickText,
+    mainDirectionText,
+    mainPickText: mainDirectionText,
     matchName,
-    recommendLevelText: safeShareText(recommendLevel, '赛前参考'),
+    presentationRating: rating,
+    primaryScoreText: primaryScore,
+    ratingBlockText: formatRatingBlock(rating),
+    recommendLevelText: safeShareText(recommendLevel, rating.recommendLabel || '赛前参考'),
     scorePredictionsText: formatShareScores(scorePredictions),
+    secondaryScoreText: secondaryScore,
     statusTags: getStatusTags(statusTags, lineupStatus),
-    totalGoalsDirectionText: safeShareText(totalGoalsDirection, '大小球待复核'),
+    totalGoalsDirectionText: goalsDirectionText,
   }
 
-  payload.summaryText = safeShareText(summary, getDefaultSummary(mainPickText))
+  payload.summaryText = buildShortReasonForPresentation({
+    goalsDirection: goalsDirectionText,
+    mainDirection: mainDirectionText,
+    rating,
+    summary: safeShareText(summary, getDefaultSummary(mainDirectionText)),
+  })
 
   return payload
 }
@@ -142,16 +196,17 @@ export function buildRecommendationShareText(payload) {
       : buildShareMatchPayload(payload)
 
   return [
-    '【AI赛前分析】',
+    '【赛前方向卡】',
     matchPayload.matchName,
     `时间：${matchPayload.kickoffText}`,
-    `本场倾向：${matchPayload.mainPickText}`,
-    `信心指数：${matchPayload.displayConfidenceText}｜${matchPayload.recommendLevelText}`,
-    `比分参考：${matchPayload.scorePredictionsText}`,
-    `大小球方向：${matchPayload.totalGoalsDirectionText}`,
+    `主方向：${matchPayload.mainDirectionText}`,
+    `主推比分：${matchPayload.primaryScoreText}`,
+    `辅推比分：${matchPayload.secondaryScoreText}`,
+    `进球方向：${matchPayload.goalsDirectionText}`,
+    matchPayload.ratingBlockText,
     `首发状态：${matchPayload.lineupStatusText}`,
     '',
-    `简要分析：${matchPayload.summaryText}`,
+    `简要判断：${matchPayload.summaryText}`,
     '',
     `提示：${SHARE_RISK_NOTE}`,
   ].join('\n')

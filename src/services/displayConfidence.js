@@ -33,6 +33,6 @@ export function getDisplayConfidenceTier(displayConfidence) {
 
   if (score >= 80) return { label: '重点关注', tone: 'low' }
   if (score >= 70) return { label: '稳健参考', tone: 'low' }
-  if (score >= 60) return { label: '轻仓娱乐', tone: 'medium' }
+  if (score >= 60) return { label: '轻仓参考', tone: 'medium' }
   return { label: '谨慎观望', tone: 'none' }
 }

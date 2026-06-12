@@ -5,6 +5,7 @@ const appPath = 'src/App.jsx'
 const cssPath = 'src/App.css'
 const shareTextPath = 'src/services/shareText.js'
 const sharePosterPath = 'src/services/sharePoster.js'
+const posterPresentationPath = 'src/services/posterPresentation.js'
 
 function assert(condition, message) {
   if (!condition) throw new Error(message)
@@ -25,8 +26,15 @@ const appText = readText(appPath)
 const cssText = readText(cssPath)
 const shareText = readText(shareTextPath)
 const sharePosterText = readText(sharePosterPath)
-const shareFeatureText = [appText, cssText, shareText, sharePosterText].join('\n')
-const shareServiceText = [shareText, sharePosterText].join('\n')
+const posterPresentationText = readText(posterPresentationPath)
+const shareFeatureText = [
+  appText,
+  cssText,
+  shareText,
+  sharePosterText,
+  posterPresentationText,
+].join('\n')
+const shareServiceText = [shareText, sharePosterText, posterPresentationText].join('\n')
 
 for (const copy of ['一键复制文案', '生成分享海报', '下载海报', '复制图片']) {
   assert(shareFeatureText.includes(copy), `Share UI must include "${copy}".`)
@@ -55,9 +63,40 @@ assert(
 assert(
   /safeShareText/.test(shareText) &&
     /formatShareConfidence/.test(shareText) &&
-    /formatShareScores/.test(shareText) &&
+    /formatShareScorePair/.test(shareText) &&
     /formatShareLineupStatus/.test(shareText),
   'Share text must normalize missing fields before display or copy.',
+)
+assert(
+  shareFeatureText.includes('主推比分') &&
+    shareFeatureText.includes('辅推比分') &&
+    shareFeatureText.includes('进球方向'),
+  'Share feature must expose primary score, secondary score, and goals direction copy.',
+)
+assert(
+  !/比分参考：\$\{[^}]+scorePredictionsText[^}]*\}/.test(shareText) &&
+    !/比分参考：.*\s\/\s/.test(shareText),
+  'Share text must not keep the old slash-joined score reference as its main structure.',
+)
+assert(
+  /buildPresentationRating/.test(posterPresentationText) &&
+    /scoreMode:\s*['"]risk['"]/.test(posterPresentationText) &&
+    /scoreMode:\s*['"]score['"]/.test(posterPresentationText) &&
+    /riskLabel/.test(posterPresentationText) &&
+    /strategyLabel/.test(posterPresentationText),
+  'Share feature must include presentation rating with score and risk display modes.',
+)
+assert(
+  /primaryScoreText/.test(sharePosterText) &&
+    /secondaryScoreText/.test(sharePosterText) &&
+    /goalsDirectionText/.test(sharePosterText) &&
+    /drawSharePoster/.test(sharePosterText),
+  'Poster canvas must draw primary score, secondary score, and goals direction.',
+)
+assert(
+  /safeShareText/.test(sharePosterText) &&
+    /safePresentationText/.test(posterPresentationText),
+  'Share poster and presentation fields must be guarded against invalid display text.',
 )
 
 for (const forbiddenField of ['stake', 'bankroll', 'totalStake']) {
@@ -104,7 +143,6 @@ assert(
 const protectedStatus = gitStatusFor([
   'src/services/betEngine.js',
   'src/services/matchFocus.js',
-  'src/services/displayConfidence.js',
   'src/services/onboardingNotice.js',
   'src/services/predictionSettlement.js',
   'src/services/matchIdentity.js',

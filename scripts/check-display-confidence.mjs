@@ -37,7 +37,7 @@ assert(
 assert(
   getDisplayConfidenceTier(82).label === '重点关注' &&
     getDisplayConfidenceTier(74).label === '稳健参考' &&
-    getDisplayConfidenceTier(66).label === '轻仓娱乐' &&
+    getDisplayConfidenceTier(66).label === '轻仓参考' &&
     getDisplayConfidenceTier(58).label === '谨慎观望',
   'displayConfidence tiers must match the V2 labels.',
 )

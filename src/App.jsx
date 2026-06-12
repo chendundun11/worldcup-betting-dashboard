@@ -38,6 +38,10 @@ import {
   getDisplayConfidence,
   getDisplayConfidenceTier,
 } from './services/displayConfidence.js'
+import {
+  buildPresentationRating,
+  formatGoalsDirectionForPresentation,
+} from './services/posterPresentation.js'
 import { getInitialMatchSnapshot, getMatches } from './services/matchApi'
 import buildBetPlan from './services/betEngine.js'
 import {
@@ -2211,6 +2215,28 @@ function getPrimaryDisplay(match) {
   return getBeginnerPrimaryDisplay(match)
 }
 
+function getShareMainDirection(match) {
+  if (isSkipPrimary(match)) return '谨慎观望'
+
+  const matchType = getMatchType(match)
+  const direction = matchType.favoriteDirection || match.recommendation.direction
+  const favoriteOdd = getLocalOddsSnapshot(match)?.favoriteOdd
+
+  if (matchType.id === 'balanced' || direction === 'draw') return '平局需防'
+  if (direction === 'home') {
+    return matchType.id === 'strongFavorite' && favoriteOdd <= 1.75
+      ? `${match.homeTeam.name}胜`
+      : `${match.homeTeam.name}不败`
+  }
+  if (direction === 'away') {
+    return matchType.id === 'strongFavorite' && favoriteOdd <= 1.75
+      ? `${match.awayTeam.name}胜`
+      : `${match.awayTeam.name}不败`
+  }
+
+  return '谨慎观望'
+}
+
 function getCompactDirectionDisplay(match) {
   return getBeginnerPrimaryDisplay(match).replace('等待盘口确认', '等待盘口')
 }
@@ -2505,7 +2531,7 @@ function buildRiskReminders(match, marketSentiment, publicDisplay, plan) {
       text:
         !hasWdlOdds(match.odds)
           ? NO_ODDS_REASON
-          : `当前比分 ${publicDisplay.scoreReference.main} / ${publicDisplay.scoreReference.backup} 和大小球方向都需要临场复核。`,
+          : `当前主推比分 ${publicDisplay.scoreReference.main}、辅推比分 ${publicDisplay.scoreReference.backup} 和进球方向都需要临场复核。`,
     },
   ]
 }
@@ -2608,8 +2634,8 @@ function buildBeginnerNotes(match) {
 
     return [
       `胜平负方向：${getWdlDirection(match)}。`,
-      `大小球方向：${publicDisplay.totalGoalsDirection}。`,
-      `主比分：${publicDisplay.scoreReference.main}；备选比分：${publicDisplay.scoreReference.backup}。`,
+      `进球方向：${formatGoalsDirectionForPresentation(publicDisplay.totalGoalsDirection)}。`,
+      `主推比分：${publicDisplay.scoreReference.main}；辅推比分：${publicDisplay.scoreReference.backup}。`,
       NO_ODDS_REASON,
     ]
   }
@@ -2669,19 +2695,23 @@ function formatDataSource(meta) {
 }
 
 function buildSpotlightCopyText(match, publicDisplay, confidenceScore) {
-  const { scoreReference, totalGoalsDirection } = publicDisplay
-  const primaryDisplay = getPrimaryDisplay(match)
+  const payload = buildShareMatchPayload({
+    awayTeam: match.awayTeam.name,
+    displayConfidence: confidenceScore,
+    homeTeam: match.homeTeam.name,
+    kickoff: formatKickoff(match.kickoff),
+    isCautious: isSkipPrimary(match),
+    mainDirection: getShareMainDirection(match),
+    mainPick: getPrimaryDisplay(match),
+    rawScore: confidenceScore,
+    riskTone: match.risk?.tone,
+    scorePredictions: publicDisplay.scoreReference,
+    statusTags: ['当前重点', statusConfig[match.status]?.label || '赛前阶段'],
+    summary: buildJudgementLine(match),
+    totalGoalsDirection: publicDisplay.totalGoalsDirection,
+  })
 
-  return [
-    '赛前重点参考',
-    `${match.homeTeam.name} vs ${match.awayTeam.name}`,
-    `本场倾向：${primaryDisplay}`,
-    `信心指数：${formatConfidenceScore(confidenceScore)}`,
-    `比分参考：${scoreReference.main} / ${scoreReference.backup}`,
-    `大小球：${totalGoalsDirection}`,
-    '阶段：赛前初盘，赛前24小时建议复核',
-    '仅供赛前初盘参考，临场阵容、盘口变化和市场热度需复核。',
-  ].join('\n')
+  return buildRecommendationShareText(payload)
 }
 
 async function copyTextToClipboard(text) {
@@ -3035,6 +3065,13 @@ function App() {
 
   const isAnalyzing = analysisPhase !== 'done'
   const selectedConfidence = getConfidenceForMatch(activeMatch)
+  const selectedRawScore = getPlanBetScore(publicDataStatusPlan) ?? getAiConfidence(activeMatch)
+  const selectedPresentationRating = buildPresentationRating({
+    displayScore: selectedConfidence,
+    isCautious: isSkipPrimary(activeMatch),
+    rawScore: selectedRawScore,
+    riskTone: activeMatch.risk?.tone,
+  })
   const selectedConfidenceTier = getConfidenceTier(selectedConfidence)
   const selectedRiskLevel = getPublicRiskLevel(activeMatch, selectedConfidence)
   const activeManualLineup = getManualLineupForMatch(activeMatch)
@@ -3082,6 +3119,12 @@ function App() {
   const awaySquadInsight = getSquadInsight(activeMatch, 'away')
   const activeMatchType = getMatchType(activeMatch)
   const activePublicDisplay = getPublicMatchDisplay(activeMatch)
+  const activeShareMainDirection = getShareMainDirection(activeMatch)
+  const activePrimaryScore = activePublicDisplay.scoreReference.main
+  const activeSecondaryScore = activePublicDisplay.scoreReference.backup
+  const activeShareGoalsDirection = formatGoalsDirectionForPresentation(
+    activePublicDisplay.totalGoalsDirection,
+  )
   const publicRiskReminders = buildRiskReminders(
     activeMatch,
     marketSentiment,
@@ -3116,14 +3159,19 @@ function App() {
     displayConfidence: selectedConfidence,
     homeFormation: activeManualLineup?.home?.formation,
     homeTeam: activeMatch.homeTeam.name,
+    isCautious: isSkipPrimary(activeMatch),
     kickoff: formatKickoff(activeMatch.kickoff),
     lineupStatus: activeManualLineup?.lineupStatus,
+    mainDirection: activeShareMainDirection,
     mainPick: getPrimaryDisplay(activeMatch),
+    presentationRating: selectedPresentationRating,
+    rawScore: selectedRawScore,
     recommendLevel: selectedConfidenceTier.label,
+    riskTone: activeMatch.risk?.tone,
     scorePredictions: activePublicDisplay.scoreReference,
     statusTags: activeFocusStageTags,
     summary: buildJudgementLine(activeMatch),
-    totalGoalsDirection: activePublicDisplay.totalGoalsDirection,
+    totalGoalsDirection: activeShareGoalsDirection,
   })
   const recommendationShareText = buildRecommendationShareText(shareMatchPayload)
   const analyzedMatchCount = normalizedMatches.length
@@ -3314,15 +3362,18 @@ function App() {
         </div>
         <div className="hero-pick hero-match-summary">
           <span>先看结论</span>
-          <strong>{getPrimaryDisplay(activeMatch)}</strong>
+          <strong>{activeShareMainDirection}</strong>
           <p>
-            比分 {activePublicDisplay.scoreReference.main} /{' '}
-            {activePublicDisplay.scoreReference.backup} ·{' '}
-            {activePublicDisplay.totalGoalsDirection}
+            主推比分 {activePrimaryScore} · 辅推比分 {activeSecondaryScore} ·{' '}
+            {activeShareGoalsDirection}
           </p>
           <div className="hero-system-tags" aria-label="系统状态摘要">
-            <b>信心指数 {formatConfidenceScore(selectedConfidence)}</b>
-            <b>风险等级 {selectedRiskLevel.label}</b>
+            <b>
+              {selectedPresentationRating.scoreMode === 'score'
+                ? `${selectedPresentationRating.scoreLabel} ${selectedPresentationRating.displayScoreText}`
+                : `风险等级 ${selectedPresentationRating.riskLabel}`}
+            </b>
+            <b>策略 {selectedPresentationRating.strategyLabel}</b>
           </div>
         </div>
         <div className="mobile-match-rail" aria-label="手机端快速选择比赛">
@@ -3355,7 +3406,7 @@ function App() {
       {spotlightMatch && spotlightPublicDisplay ? (
         <section className="daily-ai-spotlight" aria-label="赛前重点参考卡">
           <div className="daily-ai-copy">
-            <span>赛前重点参考</span>
+            <span>赛前方向卡</span>
             <h2>
               {spotlightMatch.homeTeam.name} vs {spotlightMatch.awayTeam.name}
             </h2>
@@ -3365,38 +3416,38 @@ function App() {
           <div className="daily-ai-summary" aria-label="重点推荐摘要">
             <div className="daily-ai-primary-grid">
               <p className="daily-ai-direction">
-                <span>本场倾向</span>
-                <strong>{getPrimaryDisplay(spotlightMatch)}</strong>
+                <span>主方向</span>
+                <strong>{activeShareMainDirection}</strong>
               </p>
               <p className="daily-ai-score-highlight">
-                <span>比分参考</span>
-                <strong>
-                  {spotlightPublicDisplay.scoreReference.main} /{' '}
-                  {spotlightPublicDisplay.scoreReference.backup}
-                </strong>
+                <span>主推比分</span>
+                <strong>{spotlightPublicDisplay.scoreReference.main}</strong>
               </p>
             </div>
             <div className="daily-ai-facts">
               <p>
-                <span>信心指数</span>
-                <strong>{formatConfidenceScore(getConfidenceForMatch(spotlightMatch))}</strong>
+                <span>辅推比分</span>
+                <strong>{spotlightPublicDisplay.scoreReference.backup}</strong>
               </p>
               <p>
-                <span>大小球方向</span>
-                <strong>{spotlightPublicDisplay.totalGoalsDirection}</strong>
+                <span>进球方向</span>
+                <strong>{activeShareGoalsDirection}</strong>
               </p>
               <p className="daily-ai-secondary-fact">
-                <span>风险等级</span>
+                <span>
+                  {selectedPresentationRating.scoreMode === 'score'
+                    ? selectedPresentationRating.scoreLabel
+                    : '风险等级'}
+                </span>
                 <strong>
-                  {getPublicRiskLevel(
-                    spotlightMatch,
-                    getConfidenceForMatch(spotlightMatch),
-                  ).label}
+                  {selectedPresentationRating.scoreMode === 'score'
+                    ? selectedPresentationRating.displayScoreText
+                    : selectedPresentationRating.riskLabel}
                 </strong>
               </p>
               <p className="daily-ai-secondary-fact">
-                <span>分析阶段</span>
-                <strong>赛前初盘</strong>
+                <span>策略</span>
+                <strong>{selectedPresentationRating.strategyLabel}</strong>
               </p>
               <p className="daily-ai-secondary-fact">
                 <span>复核提醒</span>
@@ -3467,6 +3518,15 @@ function App() {
               const publicDisplay = getPublicMatchDisplay(match)
               const scoreReference = publicDisplay.scoreReference
               const confidenceScore = getConfidenceForMatch(match)
+              const presentationRating = buildPresentationRating({
+                displayScore: confidenceScore,
+                isCautious: isSkipPrimary(match),
+                rawScore: confidenceScore,
+                riskTone: match.risk?.tone,
+              })
+              const goalsDirection = formatGoalsDirectionForPresentation(
+                publicDisplay.totalGoalsDirection,
+              )
 
               return (
                 <button
@@ -3489,24 +3549,32 @@ function App() {
 
                   <div className="featured-card-main">
                     <p className="featured-card-direction">
-                      <span>本场倾向</span>
-                      <strong>{getPrimaryDisplay(match)}</strong>
+                      <span>主方向</span>
+                      <strong>{getShareMainDirection(match)}</strong>
                     </p>
                     <p>
-                      <span>信心指数</span>
-                      <strong>{formatConfidenceScore(confidenceScore)}</strong>
+                      <span>
+                        {presentationRating.scoreMode === 'score'
+                          ? presentationRating.scoreLabel
+                          : '风险等级'}
+                      </span>
+                      <strong>
+                        {presentationRating.scoreMode === 'score'
+                          ? presentationRating.displayScoreText
+                          : presentationRating.riskLabel}
+                      </strong>
                     </p>
                     <p>
-                      <span>比分</span>
-                      <strong>{scoreReference.main} / {scoreReference.backup}</strong>
+                      <span>主推比分</span>
+                      <strong>{scoreReference.main}</strong>
                     </p>
                     <p className="featured-card-muted">
-                      <span>进球倾向</span>
-                      <strong>{publicDisplay.totalGoalsDirection}</strong>
+                      <span>辅推比分</span>
+                      <strong>{scoreReference.backup}</strong>
                     </p>
                     <p className="featured-card-muted">
-                      <span>风险等级</span>
-                      <strong>{getPublicRiskLevel(match, confidenceScore).label}</strong>
+                      <span>进球方向</span>
+                      <strong>{goalsDirection}</strong>
                     </p>
                   </div>
                 </button>
@@ -3572,6 +3640,15 @@ function App() {
                         const publicDisplay = getPublicMatchDisplay(match)
                         const scoreReference = publicDisplay.scoreReference
                         const confidenceScore = getConfidenceForMatch(match)
+                        const presentationRating = buildPresentationRating({
+                          displayScore: confidenceScore,
+                          isCautious: isSkipPrimary(match),
+                          rawScore: confidenceScore,
+                          riskTone: match.risk?.tone,
+                        })
+                        const goalsDirection = formatGoalsDirectionForPresentation(
+                          publicDisplay.totalGoalsDirection,
+                        )
 
                         return (
                           <button
@@ -3594,16 +3671,23 @@ function App() {
                             </div>
                             <span className="match-card-time">{formatKickoff(match.kickoff)}</span>
                             <div className="match-card-signal">
-                              <strong>{getCompactDirectionDisplay(match)}</strong>
-                              <span>{formatConfidenceScore(confidenceScore)}</span>
-                              <em>{getPublicRiskLevel(match, confidenceScore).label}</em>
+                              <strong>{getShareMainDirection(match)}</strong>
+                              <span>
+                                {presentationRating.scoreMode === 'score'
+                                  ? presentationRating.displayScoreText
+                                  : presentationRating.strategyLabel}
+                              </span>
+                              <em>{presentationRating.riskLabel}</em>
                             </div>
                             <div className="match-card-detail">
                               <span>
-                                比分：<strong>{scoreReference.main} / {scoreReference.backup}</strong>
+                                主推：<strong>{scoreReference.main}</strong>
                               </span>
                               <span>
-                                大小球：<strong>{publicDisplay.totalGoalsDirection}</strong>
+                                辅推：<strong>{scoreReference.backup}</strong>
+                              </span>
+                              <span>
+                                进球：<strong>{goalsDirection}</strong>
                               </span>
                             </div>
                             <div className="match-card-tags">
@@ -3650,32 +3734,44 @@ function App() {
             </div>
 
             <div className="quick-recommendation">
-              <span>本场倾向</span>
+              <span>主方向</span>
               <strong className={isSkipPrimary(activeMatch) ? 'skip-primary' : ''}>
-                {getPrimaryDisplay(activeMatch)}
+                {activeShareMainDirection}
               </strong>
               <p>{buildPrimaryReason(activeMatch)}</p>
             </div>
 
-            <div className="confidence-summary-grid" aria-label="信心指数与推荐等级">
+            <div className="confidence-summary-grid" aria-label="公开强度与风险策略">
               <p className="confidence-main-stat">
-                <span>信心指数</span>
-                <strong>{formatConfidenceScore(selectedConfidence)}</strong>
-                <small>临场需复核</small>
+                <span>
+                  {selectedPresentationRating.scoreMode === 'score'
+                    ? selectedPresentationRating.scoreLabel
+                    : '风险等级'}
+                </span>
+                <strong>
+                  {selectedPresentationRating.scoreMode === 'score'
+                    ? selectedPresentationRating.displayScoreText
+                    : selectedPresentationRating.riskLabel}
+                </strong>
+                <small>
+                  {selectedPresentationRating.scoreMode === 'score'
+                    ? selectedPresentationRating.strengthLabel
+                    : '临场复核优先'}
+                </small>
               </p>
               <p>
-                <span>推荐等级</span>
-                <strong>{selectedConfidenceTier.label}</strong>
+                <span>策略建议</span>
+                <strong>{selectedPresentationRating.strategyLabel}</strong>
                 <small>临场阵容和盘口需复核</small>
               </p>
             </div>
 
             <div className="public-risk-tags" aria-label="核心结论标签">
               <em className={`risk-tag ${selectedConfidenceTier.tone}`}>
-                {selectedConfidenceTier.label}
+                {selectedPresentationRating.recommendLabel}
               </em>
               <em className={`risk-tag ${selectedRiskLevel.tone}`}>
-                风险等级：{selectedRiskLevel.label}
+                {selectedPresentationRating.riskLabel}
               </em>
               <em className="risk-tag medium">临场复核</em>
               {isSkipPrimary(activeMatch) ? (
@@ -3732,21 +3828,22 @@ function App() {
 
           <section className="core-picks-panel" aria-label="核心推荐">
             <article className="core-pick-card core-pick-card-primary">
-              <span>本场倾向</span>
+              <span>主方向</span>
               <strong className={isSkipPrimary(activeMatch) ? 'skip-primary' : ''}>
-                {getPrimaryDisplay(activeMatch)}
+                {activeShareMainDirection}
               </strong>
             </article>
             <article className="core-pick-card">
-              <span>比分参考</span>
-              <strong>
-                {activePublicDisplay.scoreReference.main} /{' '}
-                {activePublicDisplay.scoreReference.backup}
-              </strong>
+              <span>主推比分</span>
+              <strong>{activePrimaryScore}</strong>
             </article>
             <article className="core-pick-card">
-              <span>大小球方向</span>
-              <strong>{activePublicDisplay.totalGoalsDirection}</strong>
+              <span>辅推比分</span>
+              <strong>{activeSecondaryScore}</strong>
+            </article>
+            <article className="core-pick-card">
+              <span>进球方向</span>
+              <strong>{activeShareGoalsDirection}</strong>
               <small>{getTotalGoalsStrength(activeMatch)}</small>
             </article>
           </section>
@@ -3775,7 +3872,7 @@ function App() {
                   ? '已复制推荐文案'
                   : shareCopyStatus === 'failed'
                     ? '复制失败，请手动复制'
-                    : '复制当前比赛文字推荐'}
+                    : '复制赛前方向卡文案'}
               </small>
             </button>
 
@@ -3792,7 +3889,7 @@ function App() {
               )}
               <span>生成分享海报</span>
               <small>
-                {posterStatus === 'generating' ? '正在生成 4:5 PNG' : '预览、下载或复制图片'}
+                {posterStatus === 'generating' ? '正在生成 4:5 PNG' : '新版方向卡 PNG'}
               </small>
             </button>
           </section>
@@ -3817,6 +3914,12 @@ function App() {
                 {featuredMatches.map(({ match, index }) => {
                   const matchType = getMatchType(match)
                   const confidenceScore = getConfidenceForMatch(match)
+                  const presentationRating = buildPresentationRating({
+                    displayScore: confidenceScore,
+                    isCautious: isSkipPrimary(match),
+                    rawScore: confidenceScore,
+                    riskTone: match.risk?.tone,
+                  })
 
                   return (
                     <button
@@ -3834,7 +3937,11 @@ function App() {
                         {match.homeTeam.shortName} vs {match.awayTeam.shortName}
                       </strong>
                       <small>{formatKickoff(match.kickoff)}</small>
-                      <b>{formatConfidenceScore(confidenceScore)}</b>
+                      <b>
+                        {presentationRating.scoreMode === 'score'
+                          ? presentationRating.displayScoreText
+                          : presentationRating.strategyLabel}
+                      </b>
                     </button>
                   )
                 })}
@@ -3925,23 +4032,23 @@ function App() {
             </div>
           </section>
 
-          <section className="play-reference-panel v1-priority-panel" aria-label="比分参考与大小球">
+          <section className="play-reference-panel v1-priority-panel" aria-label="主推比分与进球方向">
             <div className="section-title compact-title">
-              <span>比分参考</span>
-              <h2>比分 + 大小球</h2>
+              <span>主推 / 辅推</span>
+              <h2>比分 + 进球方向</h2>
             </div>
 
             <div className="play-grid v1-play-grid">
               <article className="play-card score-card priority-score-card">
                 <Target size={20} />
-                <span>比分参考</span>
+                <span>比分方向</span>
                 <div className="score-reference-list">
                   <p>
-                    <span>主比分</span>
+                    <span>主推比分</span>
                     <strong>{activePublicDisplay.scoreReference.main}</strong>
                   </p>
                   <p>
-                    <span>备选比分</span>
+                    <span>辅推比分</span>
                     <strong>{activePublicDisplay.scoreReference.backup}</strong>
                   </p>
                   {shouldShowUpsetScore(activeMatch) && (
@@ -3956,8 +4063,8 @@ function App() {
 
               <article className="play-card total-goals-card">
                 <Gauge size={20} />
-                <span>大小球判断</span>
-                <strong>{activePublicDisplay.totalGoalsDirection}</strong>
+                <span>进球方向</span>
+                <strong>{activeShareGoalsDirection}</strong>
                 <p>{buildTotalGoalsReason(activeMatch)}</p>
                 <em className={`risk-tag ${activeMatchType.tone}`}>
                   {getTotalGoalsStrength(activeMatch)}
@@ -4233,7 +4340,10 @@ function App() {
               <div>
                 <span>分享海报预览</span>
                 <h2>{shareMatchPayload.matchName}</h2>
-                <p>{posterPreview ? `${posterPreview.width} x ${posterPreview.height} PNG` : '1080 x 1350 PNG'}</p>
+                <p>
+                  主方向：{shareMatchPayload.mainDirectionText} ·{' '}
+                  {posterPreview ? `${posterPreview.width} x ${posterPreview.height} PNG` : '1080 x 1350 PNG'}
+                </p>
               </div>
               <button
                 aria-label="关闭分享海报"
