@@ -61,7 +61,7 @@ import {
   formatSettlementHit,
   settlePredictionSnapshot,
 } from './services/predictionSettlement.js'
-import InternalV3Panel from './components/InternalV3Panel.jsx'
+import InternalCommandCenterV4 from './components/InternalCommandCenterV4.jsx'
 import {
   applyFinishedMatchAdjustments,
   applyFinishedMatchAdjustmentsBefore,
@@ -2757,6 +2757,13 @@ async function copyTextToClipboard(text) {
   }
 }
 
+function isInternalV4RouteActive() {
+  if (typeof window === 'undefined') return false
+
+  const params = new URLSearchParams(window.location.search)
+  return window.location.hash === '#internal-v4' || params.get('internal') === 'v4'
+}
+
 function App() {
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [analysisPhase, setAnalysisPhase] = useState('done')
@@ -2775,6 +2782,9 @@ function App() {
   const [posterStatus, setPosterStatus] = useState('idle')
   const [posterCopyStatus, setPosterCopyStatus] = useState('idle')
   const [aiAnalysis, setAiAnalysis] = useState(null)
+  const [isInternalV4Route, setIsInternalV4Route] = useState(() =>
+    isInternalV4RouteActive(),
+  )
   const focusSectionRef = useRef(null)
   const shareNoticeTimerRef = useRef(null)
 
@@ -2801,6 +2811,20 @@ function App() {
 
   useEffect(() => {
     setShowOnboardingNotice(shouldShowOnboardingNotice())
+  }, [])
+
+  useEffect(() => {
+    const syncInternalRoute = () => {
+      setIsInternalV4Route(isInternalV4RouteActive())
+    }
+
+    window.addEventListener('hashchange', syncInternalRoute)
+    window.addEventListener('popstate', syncInternalRoute)
+
+    return () => {
+      window.removeEventListener('hashchange', syncInternalRoute)
+      window.removeEventListener('popstate', syncInternalRoute)
+    }
   }, [])
 
   const dashboard = useMemo(() => {
@@ -3041,6 +3065,15 @@ function App() {
   const selectedDateKey = activeMatch
     ? getBeijingDateGroupInfo(activeMatch.kickoff).dateKey
     : ''
+
+  if (isInternalV4Route) {
+    return (
+      <InternalCommandCenterV4
+        activeMatch={activeMatch}
+        matches={normalizedMatches}
+      />
+    )
+  }
 
   if (!activeMatch) {
     return (
@@ -4323,10 +4356,6 @@ function App() {
           ))}
         </div>
       </section>
-
-      {import.meta.env.DEV ? (
-        <InternalV3Panel activeMatch={activeMatch} matches={normalizedMatches} />
-      ) : null}
 
       {isPosterModalOpen ? (
         <div
