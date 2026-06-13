@@ -1,10 +1,10 @@
 import {
-  DEFAULT_INTERNAL_ODDS_V4,
   GRADE_BASE_RATES_V4,
   STAKE_ITEM_KEYS_V4,
   STAKE_ITEM_LABELS_V4,
 } from './internalTypesV4.js'
 import { roundTo, toFiniteNumber } from './internalSelectorsV4.js'
+import { applyOddsToStakeItemsV5 } from './internalOddsProviderV5.js'
 
 function getCurrentBankroll(ledger) {
   const current = toFiniteNumber(ledger?.currentBankroll, NaN)
@@ -110,18 +110,6 @@ function getTotalStake(analysis, ledger) {
     exposureFactor,
     consistencyFactor,
     cappedByFivePercent: totalStake === fivePercentCap && withFloor > fivePercentCap,
-  }
-}
-
-function getOdds(options = {}) {
-  return {
-    mainDirection: toFiniteNumber(options.mainDirectionOdds, DEFAULT_INTERNAL_ODDS_V4.mainDirection),
-    primaryScore: toFiniteNumber(options.primaryScoreOdds, DEFAULT_INTERNAL_ODDS_V4.primaryScore),
-    secondaryScore: toFiniteNumber(
-      options.secondaryScoreOdds,
-      DEFAULT_INTERNAL_ODDS_V4.secondaryScore,
-    ),
-    overUnder: toFiniteNumber(options.overUnderOdds, DEFAULT_INTERNAL_ODDS_V4.overUnder),
   }
 }
 
@@ -253,24 +241,29 @@ function buildFormulaExplanation(analysis, formula, totalStake) {
 
 export function buildInternalStakePlan(v4Analysis, ledger, options = {}) {
   const formula = getTotalStake(v4Analysis, ledger)
-  const odds = getOdds(options)
   const { amounts, split } = allocateAmounts(formula.totalStake, v4Analysis)
   const totalStake = STAKE_ITEM_KEYS_V4.reduce((sum, key) => sum + amounts[key], 0)
   const formulaExplanation = buildFormulaExplanation(v4Analysis, formula, totalStake)
-  const items = STAKE_ITEM_KEYS_V4.map((key) => {
+  const baseItems = STAKE_ITEM_KEYS_V4.map((key) => {
     const stake = amounts[key]
-    const itemOdds = odds[key]
+    const isBoundaryOverUnder = key === 'overUnder' && getItemPick(v4Analysis, key) === '2.5球分界'
     return {
       key,
       label: STAKE_ITEM_LABELS_V4[key],
       pick: getItemPick(v4Analysis, key),
       stake,
-      odds: itemOdds,
-      potentialProfit: roundTo(stake > 0 ? stake * (itemOdds - 1) : 0, 2),
+      odds: 1,
+      potentialProfit: 0,
       reason: getItemReason(v4Analysis, key, stake, formula),
       confidenceUsed: Math.round(getConfidenceUsed(v4Analysis, key)),
+      status: isBoundaryOverUnder ? 'observation' : 'pending',
     }
   })
+  const items = applyOddsToStakeItemsV5(
+    options.match ?? v4Analysis?.match ?? {},
+    baseItems,
+    options.oddsOverrides ?? {},
+  )
 
   return {
     version: v4Analysis?.version ?? 'internal-v5',

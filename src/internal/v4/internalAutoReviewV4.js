@@ -7,8 +7,12 @@ import {
 } from './internalLedgerV4.js'
 import {
   getRecordIdV4,
-  getTrustedActualScoreV4,
 } from './internalSelectorsV4.js'
+import {
+  getInternalScoreProviderV5,
+  isUsableScoreProviderResultV5,
+  scoreProviderResultToActualScoreV5,
+} from './internalScoreProviderV5.js'
 
 function isSettled(record) {
   return record?.status === 'settled_auto' || record?.status === 'settled_manual'
@@ -18,11 +22,16 @@ export function autoReviewFinishedMatches(matches = [], ledger, options = {}) {
   let workingLedger = ledger
   const now = options.now ?? new Date()
   const results = []
+  const shouldCreatePlans = options.createPlans !== false
+  const planScope = options.planScope ?? 'future_24h'
   const counts = {
+    scanned: matches.length,
     planned: 0,
     updated: 0,
     autoSettled: 0,
     settled: 0,
+    foundScores: 0,
+    skipped: 0,
     blockedFuture: 0,
     blockedUntrustedScore: 0,
     pending: 0,
@@ -34,14 +43,26 @@ export function autoReviewFinishedMatches(matches = [], ledger, options = {}) {
     const recordId = getRecordIdV4(match)
     const existing = workingLedger?.records?.find((record) => record.id === recordId)
 
-    if (!isSettled(existing)) {
-      const scopedLedger = getLedgerSummaryForMatches(workingLedger, matches)
+    const scoreProviderResult = getInternalScoreProviderV5(match, { now })
+
+    if (!isSettled(existing) && shouldCreatePlans) {
+      const scopedLedger = getLedgerSummaryForMatches(workingLedger, matches, {
+        emptyMatchesMeansEmpty: true,
+        planScope,
+        useGlobalBankroll: true,
+      })
       const analysis = buildInternalV4Analysis(match, {
         bankroll: scopedLedger.currentBankroll,
       })
-      const stakePlan = buildInternalStakePlan(analysis, scopedLedger, options.stakeOptions)
+      const stakePlan = buildInternalStakePlan(analysis, scopedLedger, {
+        ...(options.stakeOptions ?? {}),
+        match,
+        oddsOverrides: options.oddsOverrides ?? options.stakeOptions?.oddsOverrides ?? {},
+      })
       const upsertResult = upsertPlannedRecord(workingLedger, match, analysis, stakePlan, {
         now,
+        planScope,
+        scoreProviderSnapshot: scoreProviderResult,
       })
       workingLedger = upsertResult.ledger
       if (upsertResult.action === 'planned') counts.planned += 1
@@ -51,25 +72,28 @@ export function autoReviewFinishedMatches(matches = [], ledger, options = {}) {
     const currentRecord = workingLedger?.records?.find((record) => record.id === recordId)
     if (isSettled(currentRecord)) {
       results.push({ recordId, action: 'already-settled' })
+      counts.skipped += 1
       continue
     }
 
-    const gate = getTrustedActualScoreV4(match, now)
-    if (!gate.trusted) {
-      if (gate.reason === 'future-kickoff') counts.blockedFuture += 1
-      if (gate.reason === 'missing-trusted-final-score') counts.blockedUntrustedScore += 1
+    if (!isUsableScoreProviderResultV5(scoreProviderResult, match, now)) {
+      if (scoreProviderResult.reason?.includes('尚未开赛')) counts.blockedFuture += 1
+      else counts.blockedUntrustedScore += 1
+      counts.skipped += 1
       results.push({
         recordId,
         action: 'blocked',
-        reason: gate.reason,
-        scoreSource: gate.source,
+        reason: scoreProviderResult.reason,
+        scoreProvider: scoreProviderResult,
+        scoreSource: scoreProviderResult.source,
       })
       continue
     }
 
-    const settlement = settleRecord(workingLedger, recordId, gate.score, {
+    counts.foundScores += 1
+    const settlement = settleRecord(workingLedger, recordId, scoreProviderResultToActualScoreV5(scoreProviderResult), {
       settlementSource: 'auto',
-      actualScoreSource: gate.source,
+      actualScoreSource: scoreProviderResult.source,
     })
     workingLedger = settlement.ledger
 
@@ -86,13 +110,14 @@ export function autoReviewFinishedMatches(matches = [], ledger, options = {}) {
       duplicate: settlement.duplicate,
       profit: settlement.settlement?.profit ?? 0,
       settlementSource: 'auto',
-      actualScoreSource: gate.source,
+      actualScoreSource: scoreProviderResult.source,
+      scoreProvider: scoreProviderResult,
     })
   }
 
   const currentRecordIds = new Set(matches.map((match) => getRecordIdV4(match)))
   const finalRecords = (workingLedger?.records ?? []).filter((record) =>
-    currentRecordIds.has(record.id),
+    currentRecordIds.has(record.id) && record.planScope === planScope,
   )
   counts.pending = finalRecords.filter(
     (record) =>

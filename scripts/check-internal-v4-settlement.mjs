@@ -176,11 +176,22 @@ assert.equal(trustedScan.settled, 1)
 assert.equal(trustedScan.ledger.settledCount, 1)
 assert.equal(trustedScan.ledger.records[0].status, RECORD_STATUS_V4.settledAuto)
 assert.equal(trustedScan.ledger.records[0].settlementSource, 'auto')
-assert.equal(trustedScan.ledger.records[0].actualScoreSource, 'result')
+assert.equal(trustedScan.ledger.records[0].actualScoreSource, 'project_actual')
 
 const duplicateAutoScan = autoReviewFinishedMatches([trustedFinished], trustedScan.ledger, { now })
 assert.equal(duplicateAutoScan.settled, 0)
 assert.equal(duplicateAutoScan.ledger.settledCount, 1)
 assert.equal(duplicateAutoScan.ledger.currentBankroll, trustedScan.ledger.currentBankroll)
+
+const resettled = settleRecord(first.ledger, 'v5-settle-sample', { home: 1, away: 0 }, {
+  allowResettle: true,
+  settlementSource: 'manual',
+  actualScoreSource: 'manual',
+})
+assert.equal(resettled.action, 'resettled-manual')
+assert.equal(resettled.ledger.records.length, 1)
+assert.equal(resettled.record.resettledAt, resettled.record.settledAt)
+assert.equal(resettled.ledger.currentBankroll, 10025.5)
+assert.equal(resettled.ledger.settledProfit, 25.5)
 
 console.log('check-internal-v4-settlement: ok')

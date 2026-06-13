@@ -85,10 +85,10 @@ export const STAKE_ITEM_KEYS_V4 = [
 ]
 
 export const STAKE_ITEM_LABELS_V4 = {
-  mainDirection: '主方向投入',
-  primaryScore: '主推比分投入',
-  secondaryScore: '备用比分投入',
-  overUnder: '大小球投入',
+  mainDirection: '主方向',
+  primaryScore: '主推波胆',
+  secondaryScore: '备用波胆',
+  overUnder: '大小球',
 }
 
 export const DEFAULT_INTERNAL_ODDS_V4 = {

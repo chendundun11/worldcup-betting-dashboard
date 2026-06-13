@@ -8,7 +8,11 @@ const cssSource = readFileSync('src/components/InternalCommandCenterV4.css', 'ut
 const engineSource = readFileSync('src/internal/v4/internalEngineV4.js', 'utf8')
 const typeSource = readFileSync('src/internal/v4/internalTypesV4.js', 'utf8')
 const ledgerSource = readFileSync('src/internal/v4/internalLedgerV4.js', 'utf8')
-const combinedInternalSource = `${componentSource}\n${cssSource}\n${engineSource}\n${typeSource}\n${ledgerSource}`
+const planScopeSource = readFileSync('src/internal/v4/internalPlanScopeV5.js', 'utf8')
+const scoreProviderSource = readFileSync('src/internal/v4/internalScoreProviderV5.js', 'utf8')
+const oddsProviderSource = readFileSync('src/internal/v4/internalOddsProviderV5.js', 'utf8')
+const oddsOverrideSource = readFileSync('src/internal/v4/internalOddsOverrideV5.js', 'utf8')
+const combinedInternalSource = `${componentSource}\n${cssSource}\n${engineSource}\n${typeSource}\n${ledgerSource}\n${planScopeSource}\n${scoreProviderSource}\n${oddsProviderSource}\n${oddsOverrideSource}`
 
 assert.match(appSource, /InternalCommandCenterV4/)
 assert.match(appSource, /function isInternalV4RouteActive\(\)/)
@@ -25,31 +29,43 @@ for (const text of [
   '当前资金',
   '可用资金',
   '已结算总盈亏',
-  '未结算暴露',
-  '全部计划投入',
-  '已结算比赛',
-  '待结算比赛',
-  '待赛比赛',
+  '当前计划范围未结算暴露',
+  '当前计划范围计划投入',
+  '当前计划范围比赛数',
+  '当前计划范围待结算',
+  '当前计划范围已结算',
   '最大回撤',
+  '计划范围',
+  '未来24小时',
+  '北京时间今天',
+  '全赛程预览',
   '当前比赛 V5 内部判断',
   '四大信心指数',
   '12 维评分',
   '数据中性',
   '规则解释链条',
   '模拟资金分配',
-  '主方向投入',
-  '主推比分投入',
-  '备用比分投入',
-  '大小球投入',
+  '主方向',
+  '主推波胆',
+  '备用波胆',
+  '大小球',
+  '赔率来源',
+  '潜在盈利',
+  '编辑赔率',
+  '保存赔率',
+  '恢复默认',
+  '未找到可信比分，等待手动录入',
   '金额公式',
   '公式说明',
   '一致性检查',
   '复盘输入',
-  '手动结算本场',
+  '结算本场',
+  '重新结算本场',
   '结算来源',
   '最近复盘记录',
   'ledger JSON',
   'worldcup_internal_v5_ledger',
+  'worldcup_internal_v5_odds_overrides',
   'reset',
 ]) {
   assert.ok(combinedInternalSource.includes(text), `internal UI must include: ${text}`)
@@ -76,6 +92,12 @@ const changedFiles = execFileSync('git', ['diff', '--name-only'], {
 })
   .split(/\r?\n/)
   .filter(Boolean)
+const untrackedFiles = execFileSync('git', ['ls-files', '--others', '--exclude-standard'], {
+  encoding: 'utf8',
+})
+  .split(/\r?\n/)
+  .filter(Boolean)
+const checkedFiles = Array.from(new Set([...changedFiles, ...untrackedFiles]))
 
 const allowedExact = new Set([
   'src/App.jsx',
@@ -95,7 +117,7 @@ function isAllowedChangedFile(file) {
   )
 }
 
-for (const file of changedFiles) {
+for (const file of checkedFiles) {
   assert.equal(isAllowedChangedFile(file), true, `unexpected changed file: ${file}`)
   assert.equal(file.startsWith('src/data/'), false, `data file changed: ${file}`)
   assert.equal(file.startsWith('api/'), false, `api file changed: ${file}`)

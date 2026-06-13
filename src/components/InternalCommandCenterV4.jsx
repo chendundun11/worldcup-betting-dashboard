@@ -23,9 +23,30 @@ import {
   resetInternalLedgerV4,
   saveInternalLedgerV4,
   settleRecord,
+  updateRecordStakePlan,
   upsertPlannedRecord,
 } from '../internal/v4/internalLedgerV4.js'
-import { buildInternalV4Report } from '../internal/v4/internalReportV4.js'
+import {
+  PLAN_SCOPE_OPTIONS_V5,
+  getPlanScopeLabelV5,
+  isFormalPlanScopeV5,
+  isPreviewPlanScopeV5,
+  readPlanScopeV5,
+  savePlanScopeV5,
+  selectMatchesByPlanScopeV5,
+} from '../internal/v4/internalPlanScopeV5.js'
+import {
+  INTERNAL_V5_ODDS_OVERRIDE_KEY,
+  loadOddsOverridesV5,
+  removeOddsOverrideV5,
+  saveOddsOverridesV5,
+  setOddsOverrideV5,
+} from '../internal/v4/internalOddsOverrideV5.js'
+import { refreshStakePlanOddsV5 } from '../internal/v4/internalOddsProviderV5.js'
+import {
+  getInternalScoreProviderV5,
+  getScoreSourceLabelV5,
+} from '../internal/v4/internalScoreProviderV5.js'
 import { buildInternalStakePlan } from '../internal/v4/internalStakeV4.js'
 import {
   INTERNAL_V4_DISCLAIMER,
@@ -36,10 +57,10 @@ import {
 } from '../internal/v4/internalTypesV4.js'
 import {
   formatKickoffV4,
+  getMatchIdV4,
   getMatchNameV4,
   getRecordIdV4,
   getScoreTextV4,
-  getTrustedActualScoreV4,
 } from '../internal/v4/internalSelectorsV4.js'
 import './InternalCommandCenterV4.css'
 
@@ -83,16 +104,48 @@ function formatOverUnderDisplay(value) {
   return value ?? '-'
 }
 
+function formatPotentialProfit(value) {
+  const number = Number(value)
+  if (!Number.isFinite(number)) return '+0'
+  return `+${Math.round(number * 100) / 100}`
+}
+
 function isSettledStatus(status) {
   return status === 'settled_auto' || status === 'settled_manual'
 }
 
-function buildRow(match, record, ledger) {
+function getStakeItemStatusLabel(item, record) {
+  const settledItem = (record?.itemResults ?? []).find((result) => result.key === item.key)
+  if (settledItem?.result === 'win') return '赢'
+  if (settledItem?.result === 'loss') return '输'
+  if (settledItem?.result === 'skipped') return '跳过'
+  if (item.key === 'overUnder' && item.pick === '2.5球分界') return '观察小额'
+  if (item.stake <= 0) return '跳过'
+  return isSettledStatus(record?.status) ? '已结算' : '待结算'
+}
+
+function getRowStatusLabel(row) {
+  if (row.record?.status === 'settled_manual') return '已结算-手动'
+  if (row.record?.status === 'settled_auto') return '已结算-自动'
+  if (row.record?.status === 'upcoming') return '未开赛'
+  if (row.scoreProvider?.status === 'not_found' && row.status === 'pending_settlement') {
+    return '无可信比分'
+  }
+  return getStatusLabel(row.status)
+}
+
+function buildRow(match, record, ledger, oddsOverrides = {}) {
   const analysis =
     record?.analysisSnapshot ??
     buildInternalV4Analysis(match, { bankroll: ledger?.currentBankroll })
-  const stakePlan = record?.stakePlanSnapshot ?? buildInternalStakePlan(analysis, ledger)
-  const trustedScore = getTrustedActualScoreV4(match)
+  const rawStakePlan =
+    record?.stakePlanSnapshot ??
+    buildInternalStakePlan(analysis, ledger, {
+      match,
+      oddsOverrides,
+    })
+  const stakePlan = refreshStakePlanOddsV5(rawStakePlan, match, oddsOverrides)
+  const scoreProvider = getInternalScoreProviderV5(match)
 
   return {
     match,
@@ -101,7 +154,7 @@ function buildRow(match, record, ledger) {
     matchName: getMatchNameV4(match),
     analysis,
     stakePlan,
-    trustedScore,
+    scoreProvider,
     status: record?.status ?? 'unplanned',
   }
 }
@@ -131,6 +184,8 @@ function Metric({ label, tone = 'neutral', value }) {
 
 function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
   const [ledger, setLedger] = useState(() => getInternalLedgerV4())
+  const [planScope, setPlanScope] = useState(() => readPlanScopeV5())
+  const [oddsOverrides, setOddsOverrides] = useState(() => loadOddsOverridesV5())
   const [filter, setFilter] = useState('all')
   const [selectedRecordId, setSelectedRecordId] = useState(
     () => (activeMatch ? getRecordIdV4(activeMatch) : null),
@@ -140,29 +195,92 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
   const [homeScore, setHomeScore] = useState('')
   const [awayScore, setAwayScore] = useState('')
   const [jsonBuffer, setJsonBuffer] = useState('')
+  const [editingOddsKey, setEditingOddsKey] = useState(null)
+  const [oddsDrafts, setOddsDrafts] = useState({})
 
   useEffect(() => {
     if (!matches.length) return
     const baseLedger = getInternalLedgerV4()
-    const result = autoReviewFinishedMatches(matches, baseLedger)
+    const scopedMatches = selectMatchesByPlanScopeV5(matches, planScope, {
+      ledger: baseLedger,
+    })
+
+    if (!isFormalPlanScopeV5(planScope)) {
+      setLedger(baseLedger)
+      setScanResult({
+        scanned: scopedMatches.length,
+        planned: 0,
+        updated: 0,
+        settled: 0,
+        foundScores: 0,
+        skipped: scopedMatches.length,
+        pending: 0,
+        upcoming: 0,
+        blockedFuture: 0,
+        blockedUntrustedScore: 0,
+        results: [],
+        previewOnly: isPreviewPlanScopeV5(planScope),
+      })
+      setSelectedRecordId((current) =>
+        scopedMatches.some((match) => getRecordIdV4(match) === current)
+          ? current
+          : scopedMatches[0]
+            ? getRecordIdV4(scopedMatches[0])
+            : null,
+      )
+      setNotice(`${getPlanScopeLabelV5(planScope)}：预览模式不计入资金暴露。`)
+      return
+    }
+
+    const result = autoReviewFinishedMatches(scopedMatches, baseLedger, {
+      planScope,
+      oddsOverrides,
+    })
     const savedLedger = saveInternalLedgerV4(result.ledger)
     setLedger(savedLedger)
     setScanResult(result)
-    setSelectedRecordId((current) => current ?? getRecordIdV4(matches[0]))
-    setNotice(
-      `自动扫描完成：计划 ${result.planned + result.updated}，自动结算 ${result.settled}，待结算 ${result.pending}，待赛 ${result.upcoming}。`,
+    setSelectedRecordId((current) =>
+      scopedMatches.some((match) => getRecordIdV4(match) === current)
+        ? current
+        : scopedMatches[0]
+          ? getRecordIdV4(scopedMatches[0])
+          : null,
     )
-  }, [matches])
+    setNotice(
+      `${getPlanScopeLabelV5(planScope)}自动扫描完成：扫描 ${result.scanned}，计划 ${result.planned + result.updated}，找到真实比分 ${result.foundScores}，自动结算 ${result.settled}，跳过 ${result.skipped}。`,
+    )
+  }, [matches, oddsOverrides, planScope])
 
-  const summary = useMemo(() => getLedgerSummaryForMatches(ledger, matches), [ledger, matches])
+  const scopedMatches = useMemo(
+    () =>
+      selectMatchesByPlanScopeV5(matches, planScope, {
+        ledger,
+      }),
+    [ledger, matches, planScope],
+  )
+  const summaryPlanScope = isFormalPlanScopeV5(planScope) ? planScope : null
+  const summary = useMemo(
+    () =>
+      getLedgerSummaryForMatches(ledger, scopedMatches, {
+        emptyMatchesMeansEmpty: true,
+        ignoreRecords: isPreviewPlanScopeV5(planScope),
+        includePendingExposure: isFormalPlanScopeV5(planScope),
+        planScope: summaryPlanScope,
+        useGlobalBankroll: true,
+        useGlobalLastRecords: true,
+      }),
+    [ledger, planScope, scopedMatches, summaryPlanScope],
+  )
   const recordsById = useMemo(
     () => new Map((ledger.records ?? []).map((record) => [record.id, record])),
     [ledger.records],
   )
   const rows = useMemo(
     () =>
-      matches.map((match) => buildRow(match, recordsById.get(getRecordIdV4(match)), summary)),
-    [summary, matches, recordsById],
+      scopedMatches.map((match) =>
+        buildRow(match, recordsById.get(getRecordIdV4(match)), summary, oddsOverrides),
+      ),
+    [summary, scopedMatches, recordsById, oddsOverrides],
   )
   const filteredRows = useMemo(
     () => rows.filter((row) => filterRow(row, filter)),
@@ -174,11 +292,6 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
   const selectedAnalysis = selectedRow?.analysis ?? null
   const selectedStakePlan = selectedRow?.stakePlan ?? null
   const triggeredRules = selectedAnalysis?.rules?.triggered ?? []
-  const report = useMemo(
-    () => buildInternalV4Report(ledger, scanResult, matches),
-    [ledger, scanResult, matches],
-  )
-
   function persistLedger(nextLedger, nextNotice) {
     const saved = saveInternalLedgerV4(nextLedger)
     setLedger(saved)
@@ -186,26 +299,45 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
     return saved
   }
 
-  function handleAutoScan() {
-    const result = autoReviewFinishedMatches(matches, ledger)
-    const saved = persistLedger(
-      result.ledger,
-      `自动扫描完成：计划 ${result.planned + result.updated}，自动结算 ${result.settled}，待结算 ${result.pending}，待赛 ${result.upcoming}。`,
-    )
-    setScanResult({ ...result, ledger: saved })
+  function activatePlanScope(nextPlanScope) {
+    const savedScope = savePlanScopeV5(nextPlanScope)
+    setPlanScope(savedScope)
+    setFilter('all')
+    setHomeScore('')
+    setAwayScore('')
+    setEditingOddsKey(null)
+    return savedScope
   }
 
-  function handleRefreshPlans() {
+  function refreshPlansForScope(nextPlanScope) {
+    const savedScope = activatePlanScope(nextPlanScope)
+    if (!isFormalPlanScopeV5(savedScope)) {
+      setNotice(`${getPlanScopeLabelV5(savedScope)}：仅预览，不生成正式计划，不计入资金暴露。`)
+      return
+    }
+
     let workingLedger = ledger
+    const planMatches = selectMatchesByPlanScopeV5(matches, savedScope, {
+      ledger: workingLedger,
+    })
     const counts = { planned: 0, updated: 0, kept: 0 }
 
-    for (const match of matches) {
-      const scopedLedger = getLedgerSummaryForMatches(workingLedger, matches)
+    for (const match of planMatches) {
+      const scopedLedger = getLedgerSummaryForMatches(workingLedger, planMatches, {
+        emptyMatchesMeansEmpty: true,
+        planScope: savedScope,
+        useGlobalBankroll: true,
+      })
       const analysis = buildInternalV4Analysis(match, {
         bankroll: scopedLedger.currentBankroll,
       })
-      const stakePlan = buildInternalStakePlan(analysis, scopedLedger)
-      const result = upsertPlannedRecord(workingLedger, match, analysis, stakePlan)
+      const stakePlan = buildInternalStakePlan(analysis, scopedLedger, {
+        match,
+        oddsOverrides,
+      })
+      const result = upsertPlannedRecord(workingLedger, match, analysis, stakePlan, {
+        planScope: savedScope,
+      })
       workingLedger = result.ledger
       if (result.action === 'planned') counts.planned += 1
       if (result.action === 'updated') counts.updated += 1
@@ -214,19 +346,44 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
 
     persistLedger(
       workingLedger,
-      `V5 计划已刷新：新增 ${counts.planned}，更新 ${counts.updated}，保留已结算 ${counts.kept}。`,
+      `${getPlanScopeLabelV5(savedScope)}计划已刷新：范围比赛 ${planMatches.length}，新增 ${counts.planned}，更新 ${counts.updated}，保留已结算 ${counts.kept}。`,
     )
+  }
+
+  function handleAutoScan() {
+    const result = autoReviewFinishedMatches(scopedMatches, ledger, {
+      createPlans: isFormalPlanScopeV5(planScope),
+      oddsOverrides,
+      planScope,
+    })
+    const saved = persistLedger(
+      result.ledger,
+      `扫描赛果并复盘：扫描 ${result.scanned}，找到真实比分 ${result.foundScores}，自动结算 ${result.settled}，跳过 ${result.skipped}。`,
+    )
+    setScanResult({ ...result, ledger: saved })
+  }
+
+  function handleRefreshPlans() {
+    refreshPlansForScope(planScope)
   }
 
   function ensureSelectedRecord() {
     if (!selectedRow) return { ledger, recordId: null }
-    if (selectedRow.record) return { ledger, recordId: selectedRow.recordId }
+    if (selectedRow.record) {
+      const nextLedger = updateRecordStakePlan(ledger, selectedRow.recordId, selectedStakePlan)
+      return { ledger: nextLedger, recordId: selectedRow.recordId }
+    }
 
     const analysis = buildInternalV4Analysis(selectedRow.match, {
       bankroll: summary.currentBankroll,
     })
-    const stakePlan = buildInternalStakePlan(analysis, summary)
-    const result = upsertPlannedRecord(ledger, selectedRow.match, analysis, stakePlan)
+    const stakePlan = buildInternalStakePlan(analysis, summary, {
+      match: selectedRow.match,
+      oddsOverrides,
+    })
+    const result = upsertPlannedRecord(ledger, selectedRow.match, analysis, stakePlan, {
+      planScope,
+    })
     return { ledger: result.ledger, recordId: selectedRow.recordId }
   }
 
@@ -242,6 +399,7 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
 
     const prepared = ensureSelectedRecord()
     const result = settleRecord(prepared.ledger, prepared.recordId, { home, away }, {
+      allowResettle: isSettledStatus(selectedRecord?.status),
       settlementSource: 'manual',
       actualScoreSource: 'manual',
     })
@@ -249,8 +407,44 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
       result.ledger,
       result.duplicate
         ? '本场已经结算过，ledger 未重复写入。'
-        : `手动结算完成：盈亏 ${formatAmount(result.settlement?.profit ?? 0)}，当前资金 ${result.ledger.currentBankroll}。`,
+        : `${result.resettled ? '重新结算完成' : '手动结算完成'}：盈亏 ${formatAmount(result.settlement?.profit ?? 0)}，当前资金 ${result.ledger.currentBankroll}。`,
     )
+  }
+
+  function persistOddsOverrides(nextOverrides, nextNotice) {
+    const saved = saveOddsOverridesV5(nextOverrides)
+    setOddsOverrides(saved)
+    if (nextNotice) setNotice(nextNotice)
+    return saved
+  }
+
+  function handleEditOdds(item) {
+    setEditingOddsKey(item.key)
+    setOddsDrafts((current) => ({
+      ...current,
+      [item.key]: String(item.odds),
+    }))
+  }
+
+  function handleSaveOdds(item) {
+    if (!selectedRow) return
+    const nextOdds = Number(oddsDrafts[item.key])
+    if (!Number.isFinite(nextOdds) || nextOdds <= 1) {
+      setNotice('赔率必须大于 1。')
+      return
+    }
+    const matchKey = getMatchIdV4(selectedRow.match)
+    const nextOverrides = setOddsOverrideV5(oddsOverrides, matchKey, item.key, nextOdds)
+    persistOddsOverrides(nextOverrides, `${item.label}赔率已保存为手动覆盖：${nextOdds}。`)
+    setEditingOddsKey(null)
+  }
+
+  function handleRestoreOdds(item) {
+    if (!selectedRow) return
+    const matchKey = getMatchIdV4(selectedRow.match)
+    const nextOverrides = removeOddsOverrideV5(oddsOverrides, matchKey, item.key)
+    persistOddsOverrides(nextOverrides, `${item.label}赔率已恢复为来源层默认。`)
+    setEditingOddsKey(null)
   }
 
   function handleClearPending() {
@@ -319,14 +513,29 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
           <p>{INTERNAL_V4_DISCLAIMER}</p>
         </div>
 
+        <div className="internal-v4-scope-bar" aria-label="计划范围">
+          <span>计划范围</span>
+          {PLAN_SCOPE_OPTIONS_V5.map((item) => (
+            <button
+              className={planScope === item.key ? 'active' : ''}
+              key={item.key}
+              onClick={() => refreshPlansForScope(item.key)}
+              type="button"
+            >
+              {item.label}
+            </button>
+          ))}
+          <small>{getPlanScopeLabelV5(planScope)} · {scopedMatches.length} 场</small>
+        </div>
+
         <div className="internal-v4-actions" aria-label="V5 内部操作">
           <button onClick={handleAutoScan} type="button">
             <Activity size={16} />
-            自动扫描
+            扫描赛果并复盘
           </button>
           <button onClick={handleRefreshPlans} type="button">
             <RefreshCw size={16} />
-            生成/刷新全部 V5 计划
+            刷新当前范围计划
           </button>
           <button onClick={handleExport} type="button">
             <Download size={16} />
@@ -356,11 +565,11 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
         <Metric label="当前资金" value={summary.currentBankroll} />
         <Metric label="可用资金" tone={getTone(summary.availableBankroll)} value={summary.availableBankroll} />
         <Metric label="已结算总盈亏" tone={getTone(summary.settledProfit)} value={formatAmount(summary.settledProfit)} />
-        <Metric label="未结算暴露" value={summary.pendingExposure} />
-        <Metric label="全部计划投入" value={summary.totalPlannedStake} />
-        <Metric label="已结算比赛" value={summary.settledCount} />
-        <Metric label="待结算比赛" value={summary.pendingCount} />
-        <Metric label="待赛比赛" value={summary.upcomingCount} />
+        <Metric label="当前计划范围未结算暴露" value={summary.pendingExposure} />
+        <Metric label="当前计划范围计划投入" value={summary.totalPlannedStake} />
+        <Metric label="当前计划范围比赛数" value={summary.totalMatches} />
+        <Metric label="当前计划范围待结算" value={summary.pendingCount} />
+        <Metric label="当前计划范围已结算" value={summary.settledCount} />
         <Metric label="最大回撤" value={summary.maxDrawdown} />
       </section>
 
@@ -397,17 +606,19 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
           {scanResult ? (
             <div className="internal-v4-scan">
               <strong>自动复盘扫描结果</strong>
-              <span>计划 {scanResult.planned + scanResult.updated}</span>
+              <span>扫描比赛 {scanResult.scanned ?? 0}</span>
+              <span>找到真实比分 {scanResult.foundScores ?? 0}</span>
+              <span>生成/更新计划 {(scanResult.planned ?? 0) + (scanResult.updated ?? 0)}</span>
               <span>自动结算 {scanResult.settled}</span>
               <span>待结算 {scanResult.pending}</span>
               <span>待赛 {scanResult.upcoming}</span>
-              <span>未来阻断 {scanResult.blockedFuture}</span>
-              <span>比分来源阻断 {scanResult.blockedUntrustedScore}</span>
+              <span>跳过 {scanResult.skipped ?? 0}</span>
+              <span>无可信比分 {scanResult.blockedUntrustedScore}</span>
             </div>
           ) : null}
 
           <div className="internal-v4-match-list">
-            {filteredRows.map((row) => (
+            {filteredRows.length ? filteredRows.map((row) => (
               <button
                 className={row.recordId === selectedRow?.recordId ? 'active' : ''}
                 key={row.recordId}
@@ -421,13 +632,18 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
                 <span>{formatKickoffV4(row.match?.kickoff)}</span>
                 <strong>{row.matchName}</strong>
                 <small>
-                  {getStatusLabel(row.status)} · {row.analysis.decision.grade}档 · 投入 {row.stakePlan.totalStake}
+                  {getRowStatusLabel(row)} · {row.analysis.decision.grade}档 · 投入 {row.stakePlan.totalStake}
                 </small>
                 <small>
                   {row.analysis.decision.mainPick} · {row.analysis.decision.directionStrength}
+                  {isPreviewPlanScopeV5(planScope) ? ' · 预览不计暴露' : ''}
                 </small>
               </button>
-            ))}
+            )) : (
+              <p className="internal-v4-empty-line">
+                当前计划范围没有比赛。可切换到全赛程预览查看 V5 判断。
+              </p>
+            )}
           </div>
         </aside>
 
@@ -439,7 +655,8 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
               <p>
                 {selectedAnalysis?.classification?.gameType ?? '-'} ·{' '}
                 {selectedAnalysis?.decision?.grade ?? '-'}档 ·{' '}
-                {getStatusLabel(selectedRecord?.status ?? selectedRow?.status)}
+                {selectedRow ? getRowStatusLabel(selectedRow) : '-'}
+                {isPreviewPlanScopeV5(planScope) ? ' · 预览，不计入资金暴露' : ''}
               </p>
             </div>
             <strong className={`internal-v4-record-state ${selectedRecord?.status ?? 'unplanned'}`}>
@@ -541,7 +758,7 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
           <section className="internal-v4-section" aria-label="模拟资金分配">
             <div className="internal-v4-section-title">
               <WalletCards size={18} />
-              <h3>模拟资金分配</h3>
+              <h3>模拟资金分配 · 四项投注明细</h3>
               <span>本场总投入 {selectedStakePlan?.totalStake ?? 0}</span>
             </div>
             <div className="internal-v4-stake-grid">
@@ -549,14 +766,77 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
                 <article className="internal-v4-stake-item" key={item.key}>
                   <span>{item.label}</span>
                   <strong>{item.stake}</strong>
-                  <p>{item.pick}</p>
-                  <small>
-                    赔率 {item.odds} · 潜在盈利 {item.potentialProfit} · 信心 {item.confidenceUsed}
-                  </small>
+                  <p>
+                    {item.key === 'primaryScore' || item.key === 'secondaryScore' ? '比分' : '玩法'}：
+                    {formatOverUnderDisplay(item.pick)}
+                  </p>
+                  <dl>
+                    <div>
+                      <dt>投入</dt>
+                      <dd>{item.stake}</dd>
+                    </div>
+                    <div>
+                      <dt>赔率</dt>
+                      <dd>{item.odds}</dd>
+                    </div>
+                    <div>
+                      <dt>赔率来源</dt>
+                      <dd>{item.oddsSourceLabel ?? '默认估算'}</dd>
+                    </div>
+                    <div>
+                      <dt>潜在盈利</dt>
+                      <dd>{formatPotentialProfit(item.potentialProfit)}</dd>
+                    </div>
+                    <div>
+                      <dt>信心</dt>
+                      <dd>{item.confidenceUsed}</dd>
+                    </div>
+                    <div>
+                      <dt>状态</dt>
+                      <dd>{getStakeItemStatusLabel(item, selectedRecord)}</dd>
+                    </div>
+                  </dl>
+                  {editingOddsKey === item.key ? (
+                    <div className="internal-v4-odds-edit">
+                      <input
+                        aria-label={`${item.label}赔率`}
+                        min="1.01"
+                        onChange={(event) =>
+                          setOddsDrafts((current) => ({
+                            ...current,
+                            [item.key]: event.target.value,
+                          }))
+                        }
+                        step="0.01"
+                        type="number"
+                        value={oddsDrafts[item.key] ?? String(item.odds)}
+                      />
+                      <button onClick={() => handleSaveOdds(item)} type="button">
+                        保存赔率
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="internal-v4-odds-actions">
+                      <button onClick={() => handleEditOdds(item)} type="button">
+                        编辑赔率
+                      </button>
+                      <button onClick={() => handleRestoreOdds(item)} type="button">
+                        恢复默认
+                      </button>
+                    </div>
+                  )}
                   <em>{item.reason}</em>
+                  <small>{item.oddsReason}</small>
                 </article>
               ))}
             </div>
+            {selectedStakePlan?.items?.some(
+              (item) => item.key === 'overUnder' && item.pick === '2.5球分界',
+            ) ? (
+              <p className="internal-v4-boundary-note">
+                大小球为 2.5球分界：分界判断，仅保留极小观察额，金额不超过本场总投入 5%。
+              </p>
+            ) : null}
           </section>
 
           <section className="internal-v4-section" aria-label="资金公式说明">
@@ -601,13 +881,35 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
             <div className="internal-v4-section-title">
               <Activity size={18} />
               <h3>复盘输入</h3>
-              {selectedRow?.trustedScore?.trusted ? (
+              {selectedRow?.scoreProvider?.status === 'found' ? (
                 <span>
-                  可信比分 {getScoreTextV4(selectedRow.trustedScore.score)} · 来源 {selectedRow.trustedScore.source}
+                  自动比分 有 · {selectedRow.scoreProvider.homeScore}-{selectedRow.scoreProvider.awayScore} · 来源 {getScoreSourceLabelV5(selectedRow.scoreProvider.source)}
                 </span>
               ) : (
-                <span>自动门禁：{selectedRow?.trustedScore?.reason ?? '无可信赛果'}</span>
+                <span>自动比分 无 · {selectedRow?.scoreProvider?.reason ?? '未找到可信比分，等待手动录入。'}</span>
               )}
+            </div>
+            <div className="internal-v4-score-provider">
+              <Metric
+                label="比分来源"
+                value={getScoreSourceLabelV5(selectedRow?.scoreProvider?.source ?? 'none')}
+              />
+              <Metric
+                label="最近扫描时间"
+                value={
+                  selectedRow?.scoreProvider?.checkedAt
+                    ? new Date(selectedRow.scoreProvider.checkedAt).toLocaleString('zh-CN')
+                    : '-'
+                }
+              />
+              <Metric
+                label="手动录入提示"
+                value={
+                  selectedRow?.scoreProvider?.status === 'found'
+                    ? '已有可信比分'
+                    : '未找到可信比分，等待手动录入'
+                }
+              />
             </div>
             <div className="internal-v4-settle-form">
               <label>
@@ -629,12 +931,13 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
                 />
               </label>
               <button onClick={handleManualSettle} type="button">
-                手动结算本场
+                {isSettledStatus(selectedRecord?.status) ? '重新结算本场' : '结算本场'}
               </button>
             </div>
 
             {isSettledStatus(selectedRecord?.status) ? (
               <div className="internal-v4-settlement-result">
+                <Metric label="本场投入" value={selectedRecord.totalStake} />
                 <Metric
                   label="本场盈亏"
                   tone={getTone(selectedRecord.profit)}
@@ -651,7 +954,7 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
             <div className="internal-v4-section-title">
               <Download size={18} />
               <h3>ledger JSON</h3>
-              <span>V5 key: worldcup_internal_v5_ledger</span>
+              <span>V5 key: worldcup_internal_v5_ledger · odds: {INTERNAL_V5_ODDS_OVERRIDE_KEY}</span>
             </div>
             <textarea
               aria-label="ledger JSON 导入导出"
@@ -697,8 +1000,8 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
       <footer className="internal-v4-footer">
         <span>{notice}</span>
         <small>
-          报告：当前资金 {report.funds.current}，未结算暴露 {report.funds.pendingExposure}，
-          已结算 {report.counts.settled}。
+          报告：当前资金 {summary.currentBankroll}，当前范围未结算暴露 {summary.pendingExposure}，
+          当前范围已结算 {summary.settledCount}。
         </small>
       </footer>
     </main>

@@ -212,7 +212,9 @@ export function clearLegacyInternalV4Ledger() {
   }
 }
 
-function createPlannedRecord(match, analysis, stakePlan, existingRecord = null, now = new Date()) {
+function createPlannedRecord(match, analysis, stakePlan, existingRecord = null, options = {}) {
+  const now = options.now ?? new Date()
+
   return {
     id: getRecordIdV4(match),
     matchId: getMatchIdV4(match),
@@ -222,9 +224,11 @@ function createPlannedRecord(match, analysis, stakePlan, existingRecord = null, 
     kickoff: match?.kickoff ?? analysis?.match?.kickoff ?? '',
     plannedAt: existingRecord?.plannedAt ?? nowIso(),
     settledAt: existingRecord?.settledAt ?? null,
+    planScope: options.planScope ?? existingRecord?.planScope ?? 'future_24h',
     status: getRecordLifecycleStatusV4(match, existingRecord, now),
     analysisSnapshot: analysis,
     stakePlanSnapshot: stakePlan,
+    scoreProviderSnapshot: options.scoreProviderSnapshot ?? existingRecord?.scoreProviderSnapshot ?? null,
     actualScore: existingRecord?.actualScore ?? null,
     actualScoreSource: existingRecord?.actualScoreSource ?? null,
     settlementSource: existingRecord?.settlementSource ?? null,
@@ -256,7 +260,11 @@ export function upsertPlannedRecord(ledger, match, analysis, stakePlan, options 
     analysis,
     stakePlan,
     existingRecord,
-    options.now ?? new Date(),
+    {
+      now: options.now ?? new Date(),
+      planScope: options.planScope,
+      scoreProviderSnapshot: options.scoreProviderSnapshot,
+    },
   )
   const records =
     existingIndex >= 0
@@ -291,6 +299,25 @@ export function addSettlementRecord(ledger, settledRecord) {
   })
 }
 
+export function updateRecordStakePlan(ledger, recordId, stakePlan) {
+  const normalizedLedger = normalizeLedger(ledger)
+  const records = normalizedLedger.records.map((record) => {
+    if (record.id !== recordId) return record
+    return {
+      ...record,
+      stakePlanSnapshot: stakePlan,
+      totalStake: toFiniteNumber(stakePlan?.totalStake, record.totalStake),
+      updatedAt: nowIso(),
+    }
+  })
+
+  return normalizeLedger({
+    ...normalizedLedger,
+    records,
+    updatedAt: nowIso(),
+  })
+}
+
 export function settleRecord(ledger, recordIdOrMatch, actualScore, options = {}) {
   const normalizedLedger = normalizeLedger(ledger)
   const recordId =
@@ -308,7 +335,9 @@ export function settleRecord(ledger, recordIdOrMatch, actualScore, options = {})
     }
   }
 
-  if (isSettledStatus(record.status)) {
+  const isResettle = isSettledStatus(record.status) && options.allowResettle === true
+
+  if (isSettledStatus(record.status) && !isResettle) {
     return {
       ledger: normalizedLedger,
       settlement: record,
@@ -319,8 +348,11 @@ export function settleRecord(ledger, recordIdOrMatch, actualScore, options = {})
   }
 
   const settlementSource = options.settlementSource === 'auto' ? 'auto' : 'manual'
+  const bankrollBefore = isResettle
+    ? roundTo(normalizedLedger.currentBankroll - toFiniteNumber(record.profit, 0), 2)
+    : normalizedLedger.currentBankroll
   const settlement = settleInternalV4Record(record, actualScore, {
-    bankrollBefore: normalizedLedger.currentBankroll,
+    bankrollBefore,
     settlementSource,
     actualScoreSource: options.actualScoreSource ?? settlementSource,
   })
@@ -340,6 +372,16 @@ export function settleRecord(ledger, recordIdOrMatch, actualScore, options = {})
     profit: settlement.profit,
     bankrollBefore: settlement.bankrollBefore,
     bankrollAfter: settlement.bankrollAfter,
+    resettledAt: isResettle ? settlement.settledAt : record.resettledAt ?? null,
+    previousSettlement: isResettle
+      ? {
+          profit: record.profit,
+          totalReturn: record.totalReturn,
+          actualScore: record.actualScore,
+          settledAt: record.settledAt,
+          settlementSource: record.settlementSource,
+        }
+      : record.previousSettlement ?? null,
   }
   const nextLedger = addSettlementRecord(normalizedLedger, settledRecord)
 
@@ -347,8 +389,15 @@ export function settleRecord(ledger, recordIdOrMatch, actualScore, options = {})
     ledger: nextLedger,
     settlement,
     record: settledRecord,
-    action: settlementSource === 'auto' ? 'settled-auto' : 'settled-manual',
+    action: isResettle
+      ? settlementSource === 'auto'
+        ? 'resettled-auto'
+        : 'resettled-manual'
+      : settlementSource === 'auto'
+        ? 'settled-auto'
+        : 'settled-manual',
     duplicate: false,
+    resettled: isResettle,
   }
 }
 
@@ -374,27 +423,39 @@ export function getLedgerSummary(ledger) {
   }
 }
 
-export function getLedgerSummaryForMatches(ledger, matches = []) {
+export function getLedgerSummaryForMatches(ledger, matches = [], options = {}) {
   const normalizedLedger = normalizeLedger(ledger)
   const matchKeys = new Set(matches.map((match) => getMatchIdV4(match)))
   const totalMatches = matchKeys.size
-  const scopedRecords = totalMatches
-    ? normalizedLedger.records.filter((record) =>
-        matchKeys.has(getInternalRecordMatchKeyV4(record)),
-      )
-    : normalizedLedger.records
+  const planScope = options.planScope ?? null
+  const includePendingExposure = options.includePendingExposure !== false
+  const scopedRecords = options.ignoreRecords
+    ? []
+    : (
+        totalMatches
+          ? normalizedLedger.records.filter((record) =>
+              matchKeys.has(getInternalRecordMatchKeyV4(record)),
+            )
+          : options.emptyMatchesMeansEmpty
+            ? []
+            : normalizedLedger.records
+      ).filter((record) => !planScope || record.planScope === planScope)
   const dedupedRecords = dedupeRecordsByMatch(scopedRecords)
   const settledRecords = dedupedRecords.filter((record) => isSettledStatus(record.status))
   const pendingRecords = dedupedRecords.filter((record) => !isSettledStatus(record.status))
-  const settledProfit = roundTo(
+  const scopedSettledProfit = roundTo(
     settledRecords.reduce((sum, record) => sum + toFiniteNumber(record.profit, 0), 0),
     2,
   )
+  const settledProfit = options.useGlobalBankroll
+    ? normalizedLedger.settledProfit
+    : scopedSettledProfit
   const currentBankroll = roundTo(normalizedLedger.initialBankroll + settledProfit, 2)
-  const pendingExposure = roundTo(
+  const rawPendingExposure = roundTo(
     pendingRecords.reduce((sum, record) => sum + toFiniteNumber(record.totalStake, 0), 0),
     2,
   )
+  const pendingExposure = includePendingExposure ? rawPendingExposure : 0
   const totalPlannedStake = roundTo(
     dedupedRecords.reduce((sum, record) => sum + toFiniteNumber(record.totalStake, 0), 0),
     2,
@@ -413,6 +474,7 @@ export function getLedgerSummaryForMatches(ledger, matches = []) {
     ...normalizedLedger,
     currentBankroll,
     settledProfit,
+    scopedSettledProfit,
     pendingExposure,
     availableBankroll: roundTo(currentBankroll - pendingExposure, 2),
     totalPlannedStake,
@@ -452,7 +514,9 @@ export function getLedgerSummaryForMatches(ledger, matches = []) {
     drawdown: calculateMaxDrawdown(normalizedLedger.initialBankroll, settledRecords),
     pendingRecords,
     settledRecords,
-    lastRecords: settledRecords
+    lastRecords: (options.useGlobalLastRecords
+      ? normalizedLedger.records.filter((record) => isSettledStatus(record.status))
+      : settledRecords)
       .slice()
       .sort((a, b) => String(b.settledAt).localeCompare(String(a.settledAt)))
       .slice(0, 20),

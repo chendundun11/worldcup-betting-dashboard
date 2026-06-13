@@ -63,10 +63,29 @@
   max-width: 720px;
 }
 
+.internal-v4-scope-bar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  max-width: 760px;
+}
+
+.internal-v4-scope-bar > span,
+.internal-v4-scope-bar small {
+  color: #94c8b3;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .internal-v4-actions button,
+.internal-v4-scope-bar button,
 .internal-v4-filter button,
 .internal-v4-match-list button,
-.internal-v4-settle-form button {
+.internal-v4-settle-form button,
+.internal-v4-odds-actions button,
+.internal-v4-odds-edit button {
   align-items: center;
   background: #1f2623;
   border: 1px solid rgba(176, 191, 180, 0.26);
@@ -84,9 +103,12 @@
 }
 
 .internal-v4-actions button:hover,
+.internal-v4-scope-bar button:hover,
 .internal-v4-filter button:hover,
 .internal-v4-match-list button:hover,
-.internal-v4-settle-form button:hover {
+.internal-v4-settle-form button:hover,
+.internal-v4-odds-actions button:hover,
+.internal-v4-odds-edit button:hover {
   border-color: rgba(74, 222, 128, 0.7);
 }
 
@@ -206,6 +228,7 @@
   padding: 6px 8px;
 }
 
+.internal-v4-scope-bar button.active,
 .internal-v4-filter button.active,
 .internal-v4-match-list button.active {
   background: #234d36;
@@ -443,6 +466,72 @@
   margin: 0;
 }
 
+.internal-v4-stake-item dl {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.internal-v4-stake-item dl div {
+  background: rgba(13, 15, 14, 0.74);
+  border: 1px solid rgba(176, 191, 180, 0.12);
+  border-radius: 7px;
+  display: grid;
+  gap: 3px;
+  padding: 7px;
+}
+
+.internal-v4-stake-item dt,
+.internal-v4-stake-item dd {
+  margin: 0;
+}
+
+.internal-v4-stake-item dt {
+  color: #aab4ad;
+  font-size: 11px;
+}
+
+.internal-v4-stake-item dd {
+  color: #f7faf6;
+  font-size: 13px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.internal-v4-odds-actions,
+.internal-v4-odds-edit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.internal-v4-odds-actions button,
+.internal-v4-odds-edit button {
+  min-height: 32px;
+  padding: 5px 8px;
+}
+
+.internal-v4-odds-edit input {
+  background: #0d0f0e;
+  border: 1px solid rgba(176, 191, 180, 0.32);
+  border-radius: 7px;
+  color: #f2f5f1;
+  font: inherit;
+  min-height: 32px;
+  padding: 6px 8px;
+  width: 92px;
+}
+
+.internal-v4-boundary-note {
+  background: #1d231f;
+  border: 1px solid rgba(250, 204, 21, 0.28);
+  border-radius: 8px;
+  color: #facc15;
+  margin: 0;
+  padding: 10px;
+}
+
 .internal-v4-check-list {
   display: grid;
   gap: 8px;
@@ -474,6 +563,12 @@
   gap: 10px;
 }
 
+.internal-v4-score-provider {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(140px, 1fr));
+}
+
 .internal-v4-settle-form label {
   color: #c5cdc6;
   display: grid;
@@ -500,7 +595,7 @@
 .internal-v4-settlement-result {
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(3, minmax(140px, 1fr));
+  grid-template-columns: repeat(5, minmax(140px, 1fr));
 }
 
 .internal-v4-section textarea {
@@ -602,7 +697,12 @@
     justify-content: stretch;
   }
 
-  .internal-v4-actions button {
+  .internal-v4-scope-bar {
+    justify-content: stretch;
+  }
+
+  .internal-v4-actions button,
+  .internal-v4-scope-bar button {
     flex: 1 1 180px;
   }
 
@@ -616,6 +716,7 @@
   .internal-v4-rule-list,
   .internal-v4-explanation-list,
   .internal-v4-check-list,
+  .internal-v4-score-provider,
   .internal-v4-settlement-result {
     grid-template-columns: 1fr;
   }
