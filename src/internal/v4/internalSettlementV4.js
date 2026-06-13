@@ -5,7 +5,7 @@ function normalizeActualScore(actualScore) {
   const home = Number(actualScore?.home)
   const away = Number(actualScore?.away)
   if (!Number.isInteger(home) || !Number.isInteger(away) || home < 0 || away < 0) {
-    throw new Error('Invalid actual score for V4 settlement')
+    throw new Error('Invalid actual score for V5 settlement')
   }
   return { home, away }
 }
@@ -27,14 +27,14 @@ function evaluateMainPick(mainPick, score) {
 }
 
 function evaluateScorePick(scorePick, score) {
-  if (!scorePick || scorePick === '跳过') return null
+  if (!scorePick) return null
   return scorePick === getScoreTextV4(score)
 }
 
 function evaluateOverUnderPick(overUnderPick, score) {
   const totalGoals = score.home + score.away
-  if (overUnderPick === '大2.5') return totalGoals > 2.5
-  if (overUnderPick === '小2.5') return totalGoals < 2.5
+  if (overUnderPick === '大2.5') return totalGoals >= 3
+  if (overUnderPick === '小2.5') return totalGoals <= 2
   return null
 }
 
@@ -43,7 +43,7 @@ function evaluateItem(item, actualScore) {
     return {
       key: item?.key ?? 'unknown',
       label: item?.label ?? '未分配',
-      pick: item?.pick ?? '跳过',
+      pick: item?.pick ?? '-',
       stake: 0,
       odds: toFiniteNumber(item?.odds, 0),
       result: 'skipped',
@@ -89,6 +89,7 @@ function evaluateItem(item, actualScore) {
 
 export function settleInternalV4Record(record, actualScore, options = {}) {
   const score = normalizeActualScore(actualScore)
+  const settlementSource = options.settlementSource === 'auto' ? 'auto' : 'manual'
   const itemsByKey = new Map(
     (record?.stakePlanSnapshot?.items ?? []).map((item) => [item.key, item]),
   )
@@ -98,7 +99,7 @@ export function settleInternalV4Record(record, actualScore, options = {}) {
         key,
         label: STAKE_ITEM_LABELS_V4[key],
         stake: 0,
-        pick: '跳过',
+        pick: '-',
         odds: 0,
       },
       score,
@@ -108,7 +109,7 @@ export function settleInternalV4Record(record, actualScore, options = {}) {
   const totalReturn = roundTo(itemResults.reduce((sum, item) => sum + item.totalReturn, 0), 2)
   const profit = roundTo(itemResults.reduce((sum, item) => sum + item.profit, 0), 2)
   const bankrollBefore = toFiniteNumber(
-    options.bankrollBefore ?? record?.bankrollBefore ?? record?.bankrollAfter,
+    options.bankrollBefore ?? record?.bankrollBefore ?? 0,
     0,
   )
   const bankrollAfter = roundTo(bankrollBefore + profit, 2)
@@ -119,6 +120,8 @@ export function settleInternalV4Record(record, actualScore, options = {}) {
     matchName: record?.matchName,
     actualScore: score,
     actualScoreText: getScoreTextV4(score),
+    actualScoreSource: options.actualScoreSource ?? settlementSource,
+    settlementSource,
     itemResults,
     totalStake,
     totalReturn,

@@ -14,6 +14,7 @@ import {
 import { autoReviewFinishedMatches } from '../internal/v4/internalAutoReviewV4.js'
 import { buildInternalV4Analysis } from '../internal/v4/internalEngineV4.js'
 import {
+  clearLegacyInternalV4Ledger,
   clearPendingRecords,
   exportLedgerJson,
   getInternalLedgerV4,
@@ -26,23 +27,31 @@ import {
 } from '../internal/v4/internalLedgerV4.js'
 import { buildInternalV4Report } from '../internal/v4/internalReportV4.js'
 import { buildInternalStakePlan } from '../internal/v4/internalStakeV4.js'
-import { INTERNAL_V4_DISCLAIMER } from '../internal/v4/internalTypesV4.js'
+import {
+  INTERNAL_V4_DISCLAIMER,
+  INTERNAL_V5_SUBTITLE,
+  RECORD_STATUS_LABELS_V4,
+  SCORE_DIMENSION_KEYS_V4,
+  SCORE_DIMENSION_LABELS_V4,
+} from '../internal/v4/internalTypesV4.js'
 import {
   formatKickoffV4,
-  getActualScoreFromMatchV4,
   getMatchNameV4,
   getRecordIdV4,
   getScoreTextV4,
+  getTrustedActualScoreV4,
 } from '../internal/v4/internalSelectorsV4.js'
 import './InternalCommandCenterV4.css'
 
 const FILTERS = [
   { key: 'all', label: '全部' },
-  { key: 'main', label: '主推池' },
-  { key: 'candidate', label: '候选池' },
+  { key: 'upcoming', label: '待赛' },
   { key: 'pending', label: '待结算' },
   { key: 'settled', label: '已结算' },
-  { key: 'excluded', label: '剔除' },
+  { key: 'manual', label: '手动' },
+  { key: 'auto', label: '自动' },
+  { key: 'high', label: '高信心' },
+  { key: 'low', label: '低额' },
 ]
 
 function formatAmount(value) {
@@ -52,7 +61,7 @@ function formatAmount(value) {
   return String(number)
 }
 
-function formatPercent(value) {
+function formatRate(value) {
   const number = Number(value)
   if (!Number.isFinite(number)) return '0%'
   return `${Math.round(number * 1000) / 10}%`
@@ -65,10 +74,11 @@ function getTone(value) {
 }
 
 function getStatusLabel(status) {
-  if (status === 'settled') return '已结算'
-  if (status === 'pending') return '待结算'
-  if (status === 'skipped') return '已剔除'
-  return '未生成'
+  return RECORD_STATUS_LABELS_V4[status] ?? '未计划'
+}
+
+function isSettledStatus(status) {
+  return status === 'settled_auto' || status === 'settled_manual'
 }
 
 function buildRow(match, record, ledger) {
@@ -77,7 +87,7 @@ function buildRow(match, record, ledger) {
     buildInternalV4Analysis(match, { bankroll: ledger?.currentBankroll })
   const stakePlan =
     record?.stakePlanSnapshot ?? buildInternalStakePlan(analysis, ledger)
-  const actualScore = getActualScoreFromMatchV4(match)
+  const trustedScore = getTrustedActualScoreV4(match)
 
   return {
     match,
@@ -86,19 +96,22 @@ function buildRow(match, record, ledger) {
     matchName: getMatchNameV4(match),
     analysis,
     stakePlan,
-    actualScore,
+    trustedScore,
     status: record?.status ?? 'unplanned',
-    poolStatus: analysis?.decision?.poolStatus ?? '观察池',
   }
 }
 
 function filterRow(row, filter) {
   if (filter === 'all') return true
-  if (filter === 'main') return row.poolStatus === '主推池'
-  if (filter === 'candidate') return row.poolStatus === '候选池'
-  if (filter === 'pending') return row.status === 'pending'
-  if (filter === 'settled') return row.status === 'settled'
-  if (filter === 'excluded') return row.poolStatus === '剔除' || row.status === 'skipped'
+  if (filter === 'upcoming') return row.status === 'upcoming'
+  if (filter === 'pending') {
+    return row.status === 'pending_settlement' || row.status === 'live_or_unknown'
+  }
+  if (filter === 'settled') return isSettledStatus(row.status)
+  if (filter === 'manual') return row.status === 'settled_manual'
+  if (filter === 'auto') return row.status === 'settled_auto'
+  if (filter === 'high') return ['A', 'B+'].includes(row.analysis.decision.grade)
+  if (filter === 'low') return ['C', 'D+', 'D'].includes(row.analysis.decision.grade)
   return true
 }
 
@@ -132,7 +145,7 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
     setScanResult(result)
     setSelectedRecordId((current) => current ?? getRecordIdV4(matches[0]))
     setNotice(
-      `自动扫描完成：计划 ${result.planned + result.updated}，结算 ${result.settled}，跳过 ${result.skipped}，待结算 ${result.pending}。`,
+      `自动扫描完成：计划 ${result.planned + result.updated}，自动结算 ${result.settled}，待结算 ${result.pending}，待赛 ${result.upcoming}。`,
     )
   }, [matches])
 
@@ -169,7 +182,7 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
     const result = autoReviewFinishedMatches(matches, ledger)
     const saved = persistLedger(
       result.ledger,
-      `自动扫描完成：计划 ${result.planned + result.updated}，结算 ${result.settled}，跳过 ${result.skipped}，待结算 ${result.pending}。`,
+      `自动扫描完成：计划 ${result.planned + result.updated}，自动结算 ${result.settled}，待结算 ${result.pending}，待赛 ${result.upcoming}。`,
     )
     setScanResult({ ...result, ledger: saved })
   }
@@ -192,7 +205,7 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
 
     persistLedger(
       workingLedger,
-      `V4 计划已刷新：新增 ${counts.planned}，更新 ${counts.updated}，保留已结算 ${counts.kept}。`,
+      `V5 计划已刷新：新增 ${counts.planned}，更新 ${counts.updated}，保留已结算 ${counts.kept}。`,
     )
   }
 
@@ -219,17 +232,20 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
     }
 
     const prepared = ensureSelectedRecord()
-    const result = settleRecord(prepared.ledger, prepared.recordId, { home, away })
+    const result = settleRecord(prepared.ledger, prepared.recordId, { home, away }, {
+      settlementSource: 'manual',
+      actualScoreSource: 'manual',
+    })
     persistLedger(
       result.ledger,
       result.duplicate
         ? '本场已经结算过，ledger 未重复写入。'
-        : `结算本场完成：盈亏 ${formatAmount(result.settlement?.profit ?? 0)}，当前资金 ${result.settlement?.bankrollAfter ?? result.ledger.currentBankroll}。`,
+        : `手动结算完成：盈亏 ${formatAmount(result.settlement?.profit ?? 0)}，当前资金 ${result.ledger.currentBankroll}。`,
     )
   }
 
   function handleClearPending() {
-    persistLedger(clearPendingRecords(ledger), '待结算记录已清理，已结算记录保留。')
+    persistLedger(clearPendingRecords(ledger), '未结算计划已清理，已结算记录保留。')
   }
 
   function handleReset() {
@@ -238,7 +254,12 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
     setScanResult(null)
     setHomeScore('')
     setAwayScore('')
-    setNotice('reset 完成：ledger 已回到初始资金 10000。')
+    setNotice('reset 完成：V5 ledger 已回到初始资金 10000。')
+  }
+
+  function handleClearLegacy() {
+    clearLegacyInternalV4Ledger()
+    setNotice('旧 V4 ledger 已清空，V5 ledger 未受影响。')
   }
 
   function handleExport() {
@@ -251,7 +272,7 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = `internal-v4-ledger-${Date.now()}.json`
+      link.download = `internal-v5-ledger-${Date.now()}.json`
       link.click()
       window.URL.revokeObjectURL(url)
     }
@@ -261,7 +282,7 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
     try {
       const imported = importLedgerJson(jsonBuffer)
       setLedger(imported)
-      setNotice('导入 JSON 成功，ledger 已更新。')
+      setNotice('导入 JSON 成功，V5 ledger 已更新。')
     } catch (error) {
       setNotice(`导入失败：${error.message}`)
     }
@@ -271,7 +292,7 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
     return (
       <main className="internal-v4-shell">
         <section className="internal-v4-empty">
-          <h1>V4 内部指挥台</h1>
+          <h1>V5 内部资金引擎</h1>
           <p>{INTERNAL_V4_DISCLAIMER}</p>
           <strong>当前没有可读取的比赛数据。</strong>
         </section>
@@ -283,19 +304,20 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
     <main className="internal-v4-shell">
       <header className="internal-v4-topbar">
         <div>
-          <span className="internal-v4-eyebrow">Internal V4 Command Center</span>
-          <h1>V4 内部指挥台</h1>
+          <span className="internal-v4-eyebrow">Internal V5 Staking Engine</span>
+          <h1>V5 内部资金引擎</h1>
+          <p>{INTERNAL_V5_SUBTITLE}</p>
           <p>{INTERNAL_V4_DISCLAIMER}</p>
         </div>
 
-        <div className="internal-v4-actions" aria-label="V4 内部操作">
+        <div className="internal-v4-actions" aria-label="V5 内部操作">
           <button onClick={handleAutoScan} type="button">
             <Activity size={16} />
             自动扫描
           </button>
           <button onClick={handleRefreshPlans} type="button">
             <RefreshCw size={16} />
-            生成/刷新全部 V4 计划
+            生成/刷新全部 V5 计划
           </button>
           <button onClick={handleExport} type="button">
             <Download size={16} />
@@ -307,7 +329,11 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
           </button>
           <button onClick={handleClearPending} type="button">
             <Trash2 size={16} />
-            清理待结算
+            清空未结算
+          </button>
+          <button onClick={handleClearLegacy} type="button">
+            <Trash2 size={16} />
+            清空旧 V4
           </button>
           <button className="danger" onClick={handleReset} type="button">
             <RotateCcw size={16} />
@@ -316,21 +342,28 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
         </div>
       </header>
 
-      <section className="internal-v4-funds" aria-label="内部资金池">
-        <Metric label="内部资金池 初始" value={summary.initialBankroll} />
+      <section className="internal-v4-funds" aria-label="V5 顶部资金统计">
+        <Metric label="初始资金" value={summary.initialBankroll} />
         <Metric label="当前资金" value={summary.currentBankroll} />
-        <Metric label="总盈亏" tone={getTone(summary.totalProfit)} value={formatAmount(summary.totalProfit)} />
-        <Metric label="总投入" value={summary.totalStaked} />
-        <Metric label="已结算投入" value={summary.settledStake} />
-        <Metric label="待结算投入" value={summary.pendingStake} />
-        <Metric label="已结算场次" value={summary.settledCount} />
-        <Metric label="待结算场次" value={summary.pendingCount} />
-        <Metric label="胜 / 负 / 跳过" value={`${summary.winCount} / ${summary.lossCount} / ${summary.skippedCount}`} />
-        <Metric label="最大回撤" value={summary.drawdown} />
+        <Metric label="可用资金" tone={getTone(summary.availableBankroll)} value={summary.availableBankroll} />
+        <Metric label="已结算总盈亏" tone={getTone(summary.settledProfit)} value={formatAmount(summary.settledProfit)} />
+        <Metric label="未结算暴露" value={summary.pendingExposure} />
+        <Metric label="今日/全部计划投入" value={summary.totalPlannedStake} />
+        <Metric label="已结算比赛" value={summary.settledCount} />
+        <Metric label="待结算比赛" value={summary.pendingCount} />
+        <Metric label="待赛比赛" value={summary.upcomingCount} />
+        <Metric label="最大回撤" value={summary.maxDrawdown} />
+      </section>
+
+      <section className="internal-v4-review-stats" aria-label="复盘统计">
+        <Metric label="已结算胜场" value={summary.winCount} />
+        <Metric label="已结算负场" value={summary.lossCount} />
+        <Metric label="手动结算" value={summary.manualSettledCount} />
+        <Metric label="自动结算" value={summary.autoSettledCount} />
       </section>
 
       <section className="internal-v4-workspace">
-        <aside className="internal-v4-sidebar" aria-label="V4 比赛列表">
+        <aside className="internal-v4-sidebar" aria-label="V5 比赛列表">
           <div className="internal-v4-panel-head">
             <div>
               <span>Match Queue</span>
@@ -354,11 +387,13 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
 
           {scanResult ? (
             <div className="internal-v4-scan">
-              <strong>扫描结果</strong>
+              <strong>自动复盘扫描结果</strong>
               <span>计划 {scanResult.planned + scanResult.updated}</span>
-              <span>结算 {scanResult.settled}</span>
-              <span>跳过 {scanResult.skipped}</span>
+              <span>自动结算 {scanResult.settled}</span>
               <span>待结算 {scanResult.pending}</span>
+              <span>待赛 {scanResult.upcoming}</span>
+              <span>未来阻断 {scanResult.blockedFuture}</span>
+              <span>比分来源阻断 {scanResult.blockedUntrustedScore}</span>
             </div>
           ) : null}
 
@@ -369,60 +404,84 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
                 key={row.recordId}
                 onClick={() => {
                   setSelectedRecordId(row.recordId)
-                  setHomeScore(row.actualScore?.home ?? '')
-                  setAwayScore(row.actualScore?.away ?? '')
+                  setHomeScore('')
+                  setAwayScore('')
                 }}
                 type="button"
               >
                 <span>{formatKickoffV4(row.match?.kickoff)}</span>
                 <strong>{row.matchName}</strong>
                 <small>
-                  {row.analysis.decision.poolStatus} · {getStatusLabel(row.status)}
+                  {getStatusLabel(row.status)} · {row.analysis.decision.grade}档 · 投入 {row.stakePlan.totalStake}
+                </small>
+                <small>
+                  {row.analysis.decision.mainPick} · {row.analysis.decision.directionStrength}
                 </small>
               </button>
             ))}
           </div>
         </aside>
 
-        <section className="internal-v4-detail" aria-label="V4 当前比赛详情">
+        <section className="internal-v4-detail" aria-label="V5 当前比赛详情">
           <div className="internal-v4-detail-head">
             <div>
               <span>{selectedRow ? formatKickoffV4(selectedRow.match?.kickoff) : '-'}</span>
               <h2>{selectedRow?.matchName ?? '未选择比赛'}</h2>
               <p>
                 {selectedAnalysis?.classification?.gameType ?? '-'} ·{' '}
-                {selectedAnalysis?.decision?.executionLevel ?? '-'} ·{' '}
-                {selectedAnalysis?.decision?.poolStatus ?? '-'}
+                {selectedAnalysis?.decision?.grade ?? '-'}档 ·{' '}
+                {getStatusLabel(selectedRecord?.status ?? selectedRow?.status)}
               </p>
             </div>
             <strong className={`internal-v4-record-state ${selectedRecord?.status ?? 'unplanned'}`}>
-              {getStatusLabel(selectedRecord?.status)}
+              本场投入 {selectedStakePlan?.totalStake ?? 0}
             </strong>
           </div>
 
-          <section className="internal-v4-section" aria-label="当前比赛 V4 内部判断">
+          <section className="internal-v4-section" aria-label="当前比赛 V5 内部判断">
             <div className="internal-v4-section-title">
               <Target size={18} />
-              <h3>当前比赛 V4 内部判断</h3>
+              <h3>当前比赛 V5 内部判断</h3>
             </div>
             <div className="internal-v4-judgement-grid">
               <Metric label="主方向" value={selectedAnalysis?.decision?.mainPick ?? '-'} />
+              <Metric label="方向强度" value={selectedAnalysis?.decision?.directionStrength ?? '-'} />
+              <Metric label="资金档位" value={selectedAnalysis?.decision?.grade ?? '-'} />
               <Metric label="比赛类型" value={selectedAnalysis?.classification?.gameType ?? '-'} />
-              <Metric label="执行级别" value={selectedAnalysis?.decision?.executionLevel ?? '-'} />
-              <Metric label="入池状态" value={selectedAnalysis?.decision?.poolStatus ?? '-'} />
-              <Metric label="评级" value={selectedAnalysis?.decision?.grade ?? '-'} />
-              <Metric label="内部评分" value={selectedAnalysis?.score?.total ?? '-'} />
               <Metric label="主推比分" value={selectedAnalysis?.predictions?.primaryScore ?? '-'} />
               <Metric label="备用比分" value={selectedAnalysis?.predictions?.secondaryScore ?? '-'} />
+              <Metric label="总进球" value={selectedAnalysis?.predictions?.totalGoalsText ?? '-'} />
               <Metric label="大小球" value={selectedAnalysis?.predictions?.overUnder ?? '-'} />
-              <Metric
-                label="模型主方向概率"
-                value={formatPercent(
-                  selectedAnalysis?.facts?.model?.[
-                    selectedAnalysis?.classification?.modelLeader
-                  ],
-                )}
-              />
+            </div>
+          </section>
+
+          <section className="internal-v4-section" aria-label="四大信心指数">
+            <div className="internal-v4-section-title">
+              <Check size={18} />
+              <h3>四大信心指数</h3>
+            </div>
+            <div className="internal-v4-confidence-grid">
+              <Metric label="内部总信心" value={selectedAnalysis?.confidence?.internalConfidence ?? '-'} />
+              <Metric label="方向信心" value={selectedAnalysis?.confidence?.directionConfidence ?? '-'} />
+              <Metric label="比分信心" value={selectedAnalysis?.confidence?.scoreConfidence ?? '-'} />
+              <Metric label="大小球信心" value={selectedAnalysis?.confidence?.overUnderConfidence ?? '-'} />
+              <Metric label="数据稳定" value={selectedAnalysis?.confidence?.dataConfidence ?? '-'} />
+              <Metric label="类型修正" value={selectedAnalysis?.confidence?.gameTypeModifier ?? '-'} />
+            </div>
+          </section>
+
+          <section className="internal-v4-section" aria-label="12 维评分">
+            <div className="internal-v4-section-title">
+              <Activity size={18} />
+              <h3>12 维评分</h3>
+            </div>
+            <div className="internal-v4-dimension-grid">
+              {SCORE_DIMENSION_KEYS_V4.map((key) => (
+                <p key={key}>
+                  <span>{SCORE_DIMENSION_LABELS_V4[key]}</span>
+                  <strong>{selectedAnalysis?.score?.dimensions?.[key] ?? '-'}</strong>
+                </p>
+              ))}
             </div>
           </section>
 
@@ -433,7 +492,7 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
             </div>
             <div className="internal-v4-rule-list">
               {triggeredRules.length ? (
-                triggeredRules.map((rule) => (
+                triggeredRules.slice(0, 10).map((rule) => (
                   <p key={rule.id}>
                     <strong>{rule.label}</strong>
                     <span>{rule.reason}</span>
@@ -441,8 +500,8 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
                 ))
               ) : (
                 <p>
-                  <strong>暂无强触发</strong>
-                  <span>当前只保留基础观察。</span>
+                  <strong>基础计划</strong>
+                  <span>当前按默认低额观察公式生成。</span>
                 </p>
               )}
             </div>
@@ -461,7 +520,7 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
                   <strong>{item.stake}</strong>
                   <p>{item.pick}</p>
                   <small>
-                    赔率 {item.odds} · 潜在盈利 {item.potentialProfit}
+                    赔率 {item.odds} · 潜在盈利 {item.potentialProfit} · 信心 {item.confidenceUsed}
                   </small>
                   <em>{item.reason}</em>
                 </article>
@@ -469,10 +528,26 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
             </div>
           </section>
 
+          <section className="internal-v4-section" aria-label="资金公式说明">
+            <div className="internal-v4-section-title">
+              <Check size={18} />
+              <h3>公式说明</h3>
+            </div>
+            <div className="internal-v4-formula-grid">
+              <Metric label="有效资金" value={selectedStakePlan?.effectiveBankroll ?? '-'} />
+              <Metric label="基础比例" value={formatRate(selectedStakePlan?.baseRate)} />
+              <Metric label="信心因子" value={selectedStakePlan?.confidenceFactor ?? '-'} />
+              <Metric label="回撤因子" value={selectedStakePlan?.drawdownFactor ?? '-'} />
+              <Metric label="暴露因子" value={selectedStakePlan?.exposureFactor ?? '-'} />
+              <Metric label="一致性因子" value={selectedStakePlan?.consistencyFactor ?? '-'} />
+            </div>
+          </section>
+
           <section className="internal-v4-section" aria-label="一致性检查">
             <div className="internal-v4-section-title">
               <Check size={18} />
               <h3>一致性检查</h3>
+              <span>冲突级别 {selectedAnalysis?.consistency?.severity ?? '-'}</span>
             </div>
             <div className="internal-v4-check-list">
               {(selectedAnalysis?.consistency?.checks ?? []).map((check) => (
@@ -487,10 +562,14 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
           <section className="internal-v4-section" aria-label="复盘结算">
             <div className="internal-v4-section-title">
               <Activity size={18} />
-              <h3>实际比分输入框</h3>
-              {selectedRow?.actualScore ? (
-                <span>数据比分 {getScoreTextV4(selectedRow.actualScore)}</span>
-              ) : null}
+              <h3>复盘输入</h3>
+              {selectedRow?.trustedScore?.trusted ? (
+                <span>
+                  可信比分 {getScoreTextV4(selectedRow.trustedScore.score)} · 来源 {selectedRow.trustedScore.source}
+                </span>
+              ) : (
+                <span>自动门禁：{selectedRow?.trustedScore?.reason ?? '无可信赛果'}</span>
+              )}
             </div>
             <div className="internal-v4-settle-form">
               <label>
@@ -512,11 +591,11 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
                 />
               </label>
               <button onClick={handleManualSettle} type="button">
-                结算本场
+                手动结算本场
               </button>
             </div>
 
-            {selectedRecord?.status === 'settled' ? (
+            {isSettledStatus(selectedRecord?.status) ? (
               <div className="internal-v4-settlement-result">
                 <Metric
                   label="本场盈亏"
@@ -525,6 +604,7 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
                 />
                 <Metric label="赛后资金" value={selectedRecord.bankrollAfter} />
                 <Metric label="实际比分" value={getScoreTextV4(selectedRecord.actualScore)} />
+                <Metric label="结算来源" value={selectedRecord.settlementSource ?? '-'} />
               </div>
             ) : null}
           </section>
@@ -533,7 +613,7 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
             <div className="internal-v4-section-title">
               <Download size={18} />
               <h3>ledger JSON</h3>
-              <span>最近记录最多展示 20 条</span>
+              <span>V5 key: worldcup_internal_v5_ledger</span>
             </div>
             <textarea
               aria-label="ledger JSON 导入导出"
@@ -564,7 +644,10 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
                   比分 {getScoreTextV4(record.actualScore)} · 投入 {record.totalStake} · 盈亏{' '}
                   <b className={getTone(record.profit)}>{formatAmount(record.profit)}</b>
                 </p>
-                <small>资金 {record.bankrollAfter}</small>
+                <small>
+                  资金 {record.bankrollAfter} · 来源 {record.settlementSource} · 比分源{' '}
+                  {record.actualScoreSource}
+                </small>
               </article>
             ))
           ) : (
@@ -576,8 +659,8 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
       <footer className="internal-v4-footer">
         <span>{notice}</span>
         <small>
-          报告：资金 {report.funds.current}，记录 {report.counts.records}，已结算{' '}
-          {report.counts.settled}。
+          报告：当前资金 {report.funds.current}，未结算暴露 {report.funds.pendingExposure}，
+          已结算 {report.counts.settled}。
         </small>
       </footer>
     </main>

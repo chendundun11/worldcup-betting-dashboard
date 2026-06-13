@@ -5,20 +5,27 @@ import {
   upsertPlannedRecord,
 } from './internalLedgerV4.js'
 import {
-  getActualScoreFromMatchV4,
   getRecordIdV4,
-  isFinishedMatchV4,
+  getTrustedActualScoreV4,
 } from './internalSelectorsV4.js'
+
+function isSettled(record) {
+  return record?.status === 'settled_auto' || record?.status === 'settled_manual'
+}
 
 export function autoReviewFinishedMatches(matches = [], ledger, options = {}) {
   let workingLedger = ledger
+  const now = options.now ?? new Date()
   const results = []
   const counts = {
     planned: 0,
     updated: 0,
+    autoSettled: 0,
     settled: 0,
-    skipped: 0,
+    blockedFuture: 0,
+    blockedUntrustedScore: 0,
     pending: 0,
+    upcoming: 0,
     duplicates: 0,
   }
 
@@ -26,43 +33,49 @@ export function autoReviewFinishedMatches(matches = [], ledger, options = {}) {
     const recordId = getRecordIdV4(match)
     const existing = workingLedger?.records?.find((record) => record.id === recordId)
 
-    if (existing?.status !== 'settled') {
+    if (!isSettled(existing)) {
       const analysis = buildInternalV4Analysis(match, {
         bankroll: workingLedger?.currentBankroll,
       })
       const stakePlan = buildInternalStakePlan(analysis, workingLedger, options.stakeOptions)
-      const upsertResult = upsertPlannedRecord(workingLedger, match, analysis, stakePlan)
+      const upsertResult = upsertPlannedRecord(workingLedger, match, analysis, stakePlan, {
+        now,
+      })
       workingLedger = upsertResult.ledger
       if (upsertResult.action === 'planned') counts.planned += 1
       if (upsertResult.action === 'updated') counts.updated += 1
     }
 
-    if (!isFinishedMatchV4(match)) {
-      results.push({ recordId, action: 'not-finished' })
+    const currentRecord = workingLedger?.records?.find((record) => record.id === recordId)
+    if (isSettled(currentRecord)) {
+      results.push({ recordId, action: 'already-settled' })
       continue
     }
 
-    const actualScore = getActualScoreFromMatchV4(match)
-    if (!actualScore) {
-      results.push({ recordId, action: 'missing-score' })
+    const gate = getTrustedActualScoreV4(match, now)
+    if (!gate.trusted) {
+      if (gate.reason === 'future-kickoff') counts.blockedFuture += 1
+      if (gate.reason === 'missing-trusted-final-score') counts.blockedUntrustedScore += 1
+      results.push({
+        recordId,
+        action: 'blocked',
+        reason: gate.reason,
+        scoreSource: gate.source,
+      })
       continue
     }
 
-    const settlement = settleRecord(workingLedger, recordId, actualScore)
+    const settlement = settleRecord(workingLedger, recordId, gate.score, {
+      settlementSource: 'auto',
+      actualScoreSource: gate.source,
+    })
     workingLedger = settlement.ledger
 
     if (settlement.duplicate) {
       counts.duplicates += 1
-    } else if (settlement.action === 'settled') {
+    } else if (settlement.action === 'settled-auto') {
+      counts.autoSettled += 1
       counts.settled += 1
-    } else {
-      results.push({
-        recordId,
-        action: settlement.action,
-        duplicate: settlement.duplicate,
-        profit: settlement.settlement?.profit ?? 0,
-      })
-      continue
     }
 
     results.push({
@@ -70,12 +83,17 @@ export function autoReviewFinishedMatches(matches = [], ledger, options = {}) {
       action: settlement.action,
       duplicate: settlement.duplicate,
       profit: settlement.settlement?.profit ?? 0,
+      settlementSource: 'auto',
+      actualScoreSource: gate.source,
     })
   }
 
   const finalRecords = workingLedger?.records ?? []
-  counts.pending = finalRecords.filter((record) => record.status === 'pending').length
-  counts.skipped += finalRecords.filter((record) => record.status === 'skipped').length
+  counts.pending = finalRecords.filter(
+    (record) =>
+      record.status === 'pending_settlement' || record.status === 'live_or_unknown',
+  ).length
+  counts.upcoming = finalRecords.filter((record) => record.status === 'upcoming').length
 
   return {
     ledger: workingLedger,

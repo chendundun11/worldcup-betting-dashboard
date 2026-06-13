@@ -34,15 +34,15 @@ export function buildInternalV4Facts(match) {
   const contextRisk = getContextRiskV4(match)
   const modelLeader = getBestOutcomeV4(model)
   const marketFavorite = getLowestOddOutcomeV4(odds)
-  const favoriteProbability = model[modelLeader]
-  const leaderEdge = favoriteProbability - Math.max(
-    ...Object.entries(model)
-      .filter(([key]) => key !== modelLeader)
-      .map(([, value]) => value),
-  )
+  const sortedModelValues = Object.values(model).sort((a, b) => b - a)
+  const leaderSpread = (sortedModelValues[0] ?? 0.34) - (sortedModelValues[1] ?? 0.33)
   const overUnderEdge = totalGoals.over25 - totalGoals.under25
   const homeForm = getTeamMetricV4(match, 'home', 'recentForm')
   const awayForm = getTeamMetricV4(match, 'away', 'recentForm')
+  const homeAttack = getTeamMetricV4(match, 'home', 'attackRating')
+  const awayAttack = getTeamMetricV4(match, 'away', 'attackRating')
+  const homeDefense = getTeamMetricV4(match, 'home', 'defenseRating')
+  const awayDefense = getTeamMetricV4(match, 'away', 'defenseRating')
   const moraleGap =
     getTeamMetricV4(match, 'home', 'morale') - getTeamMetricV4(match, 'away', 'morale')
   const fatiguePressure = Math.max(
@@ -53,6 +53,11 @@ export function buildInternalV4Facts(match) {
     getTeamMetricV4(match, 'home', 'injuryRisk'),
     getTeamMetricV4(match, 'away', 'injuryRisk'),
   )
+  const directionEdge =
+    strengthGap +
+    (model.home - model.away) * 45 +
+    moraleGap * 0.12 +
+    3
 
   return {
     odds,
@@ -65,14 +70,18 @@ export function buildInternalV4Facts(match) {
     contextRisk,
     modelLeader,
     marketFavorite,
-    favoriteProbability,
-    leaderEdge,
+    leaderSpread,
     overUnderEdge,
     homeForm,
     awayForm,
+    homeAttack,
+    awayAttack,
+    homeDefense,
+    awayDefense,
     moraleGap,
     fatiguePressure,
     injuryPressure,
+    directionEdge,
     hasOdds: odds.hasOneXTwo,
     hasTotals: odds.hasTotals,
   }
@@ -82,37 +91,35 @@ export function strengthRules(facts) {
   return [
     makeRule(
       'strength-home-clear',
-      '主队实力差拉开',
+      '主队强势',
       'strength',
-      12,
-      facts.strengthGap >= 12,
-      `主客实力差为 ${Math.round(facts.strengthGap)}，主队具备压制基础。`,
+      10,
+      facts.directionEdge >= 14,
+      `内部方向差 ${Math.round(facts.directionEdge)}，主队优势清楚。`,
     ),
     makeRule(
       'strength-away-clear',
-      '客队实力差拉开',
+      '客队强势',
       'strength',
-      12,
-      facts.strengthGap <= -12,
-      `主客实力差为 ${Math.round(facts.strengthGap)}，客队具备压制基础。`,
-    ),
-    makeRule(
-      'model-leader-supported',
-      '模型主方向有边际',
-      'direction',
       10,
-      facts.favoriteProbability >= 0.46 && facts.leaderEdge >= 0.08,
-      `主方向概率 ${Math.round(facts.favoriteProbability * 100)}%，领先边际 ${Math.round(
-        facts.leaderEdge * 100,
-      )} 个百分点。`,
+      facts.directionEdge <= -14,
+      `内部方向差 ${Math.round(facts.directionEdge)}，客队优势清楚。`,
     ),
     makeRule(
-      'form-side-support',
-      '近期状态支持强侧',
-      'strength',
+      'strength-balanced',
+      '双方接近',
+      'draw',
+      7,
+      Math.abs(facts.directionEdge) < 8,
+      `内部方向差 ${Math.round(facts.directionEdge)}，胜负方向需要保护。`,
+    ),
+    makeRule(
+      'strength-unclear',
+      '强弱不明',
+      'data',
       5,
-      Math.abs(facts.homeForm - facts.awayForm) >= 10,
-      `两队近期状态差为 ${Math.round(facts.homeForm - facts.awayForm)}。`,
+      !facts.hasOdds || facts.leaderSpread < 0.035,
+      '方向边际偏薄，按低额计划处理。',
     ),
   ]
 }
@@ -120,57 +127,68 @@ export function strengthRules(facts) {
 export function tempoRules(facts) {
   return [
     makeRule(
-      'tempo-high',
-      '进攻节奏偏高',
-      'tempoHigh',
-      8,
-      facts.attackTempo >= 62,
-      `攻防节奏评分 ${Math.round(facts.attackTempo)}，具备开放走势。`,
-    ),
-    makeRule(
-      'tempo-low',
-      '进攻节奏偏低',
+      'tempo-slow',
+      '慢节奏',
       'tempoLow',
-      8,
+      6,
       facts.attackTempo <= 44,
-      `攻防节奏评分 ${Math.round(facts.attackTempo)}，更接近谨慎节奏。`,
+      `节奏评分 ${Math.round(facts.attackTempo)}，比分空间偏窄。`,
     ),
     makeRule(
-      'fatigue-slows-tempo',
-      '体能压力压低节奏',
-      'tempoLow',
+      'tempo-mid',
+      '中速节奏',
+      'tempoMid',
       4,
-      facts.fatiguePressure >= 66,
-      `最高体能压力 ${Math.round(facts.fatiguePressure)}，节奏需要降档。`,
+      facts.attackTempo > 44 && facts.attackTempo < 62,
+      `节奏评分 ${Math.round(facts.attackTempo)}，按中速展开。`,
+    ),
+    makeRule(
+      'tempo-fast',
+      '快节奏',
+      'tempoHigh',
+      7,
+      facts.attackTempo >= 62,
+      `节奏评分 ${Math.round(facts.attackTempo)}，进球弹性提升。`,
+    ),
+    makeRule(
+      'tempo-open-game',
+      '对攻倾向',
+      'openGame',
+      8,
+      facts.attackTempo >= 66 && facts.absoluteStrengthGap <= 18,
+      '双方进攻指标同时打开，保留对攻比分。',
     ),
   ]
 }
 
 export function drawRules(facts) {
+  const drawPressure =
+    facts.model.draw * 100 + Math.max(0, 12 - facts.absoluteStrengthGap) * 1.6
+
   return [
     makeRule(
-      'draw-probability-high',
-      '平局概率偏高',
+      'draw-pressure-high',
+      '平局高压',
       'draw',
       9,
-      facts.model.draw >= 0.29,
-      `平局概率 ${Math.round(facts.model.draw * 100)}%，需要保护。`,
+      drawPressure >= 42,
+      `平局压力指数 ${Math.round(drawPressure)}，比分必须覆盖平局。`,
     ),
     makeRule(
-      'balanced-strength',
-      '实力接近',
+      'draw-pressure-mid',
+      '平局中压',
       'draw',
-      7,
-      facts.absoluteStrengthGap <= 7,
-      `实力差 ${Math.round(facts.absoluteStrengthGap)}，方向优势不明显。`,
+      5,
+      drawPressure >= 34 && drawPressure < 42,
+      `平局压力指数 ${Math.round(drawPressure)}，保留不败路径。`,
     ),
     makeRule(
-      'morale-balance',
-      '情绪面没有明显单边',
-      'draw',
-      3,
-      Math.abs(facts.moraleGap) <= 7,
-      `士气差 ${Math.round(facts.moraleGap)}，没有明显单边倾斜。`,
+      'draw-pressure-low',
+      '平局低压',
+      'direction',
+      4,
+      drawPressure < 34,
+      `平局压力指数 ${Math.round(drawPressure)}，方向可更集中。`,
     ),
   ]
 }
@@ -178,28 +196,28 @@ export function drawRules(facts) {
 export function goalRules(facts) {
   return [
     makeRule(
-      'favorite-can-score',
-      '强侧进球基础较稳',
-      'score',
+      'goal-range-low',
+      '0-2球',
+      'goalLow',
       7,
-      facts.favoriteProbability >= 0.48 && facts.attackTempo >= 50,
-      '主方向和节奏同时支持至少一球以上的比分方案。',
+      facts.attackTempo <= 48 || facts.overUnderEdge <= -0.08,
+      '节奏或大小球信号支持低比分区间。',
     ),
     makeRule(
-      'clean-sheet-window',
-      '强侧零封窗口',
-      'score',
-      5,
-      facts.absoluteStrengthGap >= 16 && facts.attackTempo <= 58,
-      '实力差较大且节奏未失控，保留零封比分窗口。',
+      'goal-range-mid',
+      '2-3球',
+      'goalMid',
+      6,
+      facts.attackTempo > 48 && facts.attackTempo < 64,
+      '节奏处于中段，优先覆盖 2-3 球。',
     ),
     makeRule(
-      'both-score-window',
-      '双方进球窗口',
-      'score',
-      5,
-      facts.attackTempo >= 60 && facts.absoluteStrengthGap <= 18,
-      '节奏偏高且实力差未完全拉开，双方进球概率上升。',
+      'goal-range-high',
+      '3球以上',
+      'goalHigh',
+      7,
+      facts.attackTempo >= 64 || facts.overUnderEdge >= 0.08,
+      '节奏或大小球信号支持更高进球区间。',
     ),
   ]
 }
@@ -207,28 +225,28 @@ export function goalRules(facts) {
 export function overUnderRules(facts) {
   return [
     makeRule(
-      'over-25-support',
-      '大2.5有模型支持',
+      'over-25-clear',
+      '大 2.5',
       'over',
       8,
-      facts.totalGoals.over25 >= 0.54 && facts.overUnderEdge >= 0.08,
-      `大2.5概率 ${Math.round(facts.totalGoals.over25 * 100)}%。`,
+      facts.overUnderEdge >= 0.08,
+      `大小球差值 ${Math.round(facts.overUnderEdge * 100)}，大球更清楚。`,
     ),
     makeRule(
-      'under-25-support',
-      '小2.5有模型支持',
+      'under-25-clear',
+      '小 2.5',
       'under',
       8,
-      facts.totalGoals.under25 >= 0.54 && facts.overUnderEdge <= -0.08,
-      `小2.5概率 ${Math.round(facts.totalGoals.under25 * 100)}%。`,
+      facts.overUnderEdge <= -0.08,
+      `大小球差值 ${Math.round(facts.overUnderEdge * 100)}，小球更清楚。`,
     ),
     makeRule(
       'ou-boundary',
-      '大小球处于2.5分界',
+      '2.5球分界',
       'ouBoundary',
       10,
-      Math.abs(facts.overUnderEdge) < 0.04,
-      `大小球概率差 ${Math.round(Math.abs(facts.overUnderEdge) * 100)} 个百分点，暂停大小球投入。`,
+      Math.abs(facts.overUnderEdge) < 0.05,
+      `大小球差值 ${Math.round(Math.abs(facts.overUnderEdge) * 100)}，只保留观察金额。`,
     ),
   ]
 }
@@ -236,113 +254,107 @@ export function overUnderRules(facts) {
 export function volatilityRules(facts) {
   return [
     makeRule(
-      'context-risk-high',
-      '赛事情境波动偏高',
-      'volatility',
-      10,
-      facts.contextRisk >= 65,
-      `情境风险 ${Math.round(facts.contextRisk)}，需要降级。`,
+      'volatility-stable',
+      '稳定',
+      'stable',
+      5,
+      facts.contextRisk < 45 && facts.injuryPressure < 50,
+      '情境风险和伤停压力较低。',
     ),
     makeRule(
-      'favorite-heat',
-      '强侧价格偏热',
+      'volatility-medium',
+      '中等',
       'volatility',
-      7,
-      facts.hasOdds &&
-        facts.marketFavorite !== 'draw' &&
-        facts.odds[facts.marketFavorite] <= 1.62 &&
-        facts.favoriteProbability < 0.56,
-      `市场低价方向为 ${facts.marketFavorite}，模型支持不足以无条件放大。`,
+      5,
+      facts.contextRisk >= 45 && facts.contextRisk < 65,
+      `情境风险 ${Math.round(facts.contextRisk)}，资金保持中性。`,
     ),
     makeRule(
-      'injury-pressure',
-      '伤停压力偏高',
+      'volatility-high',
+      '高波动',
       'volatility',
-      6,
-      facts.injuryPressure >= 62,
-      `最高伤停压力 ${Math.round(facts.injuryPressure)}，保留临场复核。`,
+      9,
+      facts.contextRisk >= 65 || facts.injuryPressure >= 65,
+      `情境风险 ${Math.round(facts.contextRisk)}，伤停压力 ${Math.round(facts.injuryPressure)}。`,
     ),
   ]
 }
 
 export function rejectionRules(facts) {
-  const modelMarketConflict =
+  const directionConflict =
     facts.hasOdds &&
     facts.modelLeader !== facts.marketFavorite &&
     facts.modelLeader !== 'draw' &&
     facts.marketFavorite !== 'draw' &&
-    Math.abs(facts.model[facts.modelLeader] - facts.model[facts.marketFavorite]) >= 0.08
+    facts.leaderSpread >= 0.08
 
   return [
     makeRule(
-      'missing-core-odds',
-      '缺少胜平负核心赔率',
-      'infoReject',
-      12,
-      !facts.hasOdds,
-      '没有完整胜平负赔率，内部模型只能保守处理。',
+      'data-not-complete',
+      '信息不足',
+      'data',
+      8,
+      !facts.hasOdds || !facts.hasTotals,
+      '基础赔率或大小球数据不完整，只能降低资金档位。',
     ),
     makeRule(
-      'missing-total-odds',
-      '缺少大小球赔率',
-      'info',
-      5,
-      !facts.hasTotals,
-      '没有完整大小球赔率，大小球投入降权。',
+      'direction-conflict',
+      '方向冲突',
+      'conflict',
+      10,
+      directionConflict,
+      '内部方向与市场低价方向不一致，进入低额计划。',
     ),
     makeRule(
-      'model-market-hard-conflict',
-      '模型方向与市场强冲突',
-      'hardConflict',
-      14,
-      modelMarketConflict,
-      `模型方向 ${facts.modelLeader} 与市场低价方向 ${facts.marketFavorite} 存在明显冲突。`,
-    ),
-    makeRule(
-      'leader-edge-too-thin',
-      '主方向优势过薄',
-      'info',
+      'score-conflict',
+      '比分冲突',
+      'conflict',
       6,
-      facts.leaderEdge < 0.035,
-      `主方向领先边际仅 ${Math.round(facts.leaderEdge * 100)} 个百分点。`,
+      facts.attackTempo >= 66 && facts.model.draw >= 0.3,
+      '高节奏与平局压力同时存在，比分需要分散。',
+    ),
+    makeRule(
+      'capital-risk-high',
+      '资金风险过高',
+      'capitalRisk',
+      6,
+      facts.contextRisk >= 76,
+      '情境波动过高，资金公式必须降档。',
     ),
   ]
 }
 
 export function poolRules(facts) {
-  const positiveBase = clampNumber(
-    facts.favoriteProbability * 100 +
-      facts.leaderEdge * 120 +
-      Math.min(facts.absoluteStrengthGap, 24) -
-      facts.contextRisk * 0.18,
-    0,
-    100,
-  )
+  const raw =
+    52 +
+    Math.abs(facts.directionEdge) * 1.2 +
+    facts.leaderSpread * 160 -
+    facts.contextRisk * 0.25
 
   return [
     makeRule(
-      'pool-main-candidate',
-      '主推池候选分达标',
-      'pool',
-      8,
-      positiveBase >= 72 && facts.leaderEdge >= 0.08,
-      `候选分 ${Math.round(positiveBase)}，达到主推观察线。`,
+      'plan-high',
+      '高信心计划',
+      'plan',
+      7,
+      raw >= 82,
+      `计划分 ${Math.round(clampNumber(raw, 0, 100))}，可进入高信心资金档。`,
     ),
     makeRule(
-      'pool-candidate',
-      '候选池分达标',
-      'pool',
+      'plan-standard',
+      '标准计划',
+      'plan',
       5,
-      positiveBase >= 62,
-      `候选分 ${Math.round(positiveBase)}，达到候选观察线。`,
+      raw >= 66 && raw < 82,
+      `计划分 ${Math.round(clampNumber(raw, 0, 100))}，使用标准资金档。`,
     ),
     makeRule(
-      'pool-excluded',
-      '剔除条件触发',
-      'poolReject',
-      12,
-      positiveBase < 46 || facts.contextRisk >= 82,
-      `候选分 ${Math.round(positiveBase)}，或情境风险过高。`,
+      'plan-minimum',
+      '低额观察',
+      'plan',
+      4,
+      raw < 66,
+      `计划分 ${Math.round(clampNumber(raw, 0, 100))}，仍保留小金额计划。`,
     ),
   ]
 }

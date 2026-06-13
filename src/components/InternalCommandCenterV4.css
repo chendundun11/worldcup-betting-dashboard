@@ -22,13 +22,19 @@
 }
 
 .internal-v4-eyebrow,
-.internal-v4-panel-head span,
-.internal-v4-section-title span {
+.internal-v4-panel-head span {
   color: #94c8b3;
   display: block;
   font-size: 12px;
   font-weight: 800;
   text-transform: uppercase;
+}
+
+.internal-v4-section-title span {
+  color: #94c8b3;
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .internal-v4-topbar h1,
@@ -93,6 +99,14 @@
   display: grid;
   gap: 10px;
   grid-template-columns: repeat(10, minmax(110px, 1fr));
+  margin: 0 auto 18px;
+  max-width: 1440px;
+}
+
+.internal-v4-review-stats {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(130px, 1fr));
   margin: 0 auto 18px;
   max-width: 1440px;
 }
@@ -275,6 +289,24 @@
   color: #fca5a5;
 }
 
+.internal-v4-record-state.upcoming {
+  color: #c4b5fd;
+}
+
+.internal-v4-record-state.live_or_unknown,
+.internal-v4-record-state.pending_settlement {
+  color: #facc15;
+}
+
+.internal-v4-record-state.settled_auto,
+.internal-v4-record-state.settled_manual {
+  color: #7ddf9a;
+}
+
+.internal-v4-record-state.unplanned {
+  color: #c5cdc6;
+}
+
 .internal-v4-section {
   border-top: 1px solid rgba(176, 191, 180, 0.12);
   display: grid;
@@ -294,6 +326,41 @@
   display: grid;
   gap: 10px;
   grid-template-columns: repeat(5, minmax(120px, 1fr));
+}
+
+.internal-v4-confidence-grid,
+.internal-v4-formula-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(6, minmax(120px, 1fr));
+}
+
+.internal-v4-dimension-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(6, minmax(130px, 1fr));
+}
+
+.internal-v4-dimension-grid p {
+  background: #171b1a;
+  border: 1px solid rgba(176, 191, 180, 0.16);
+  border-radius: 8px;
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  min-height: 78px;
+  padding: 11px;
+}
+
+.internal-v4-dimension-grid span {
+  color: #aab4ad;
+  font-size: 12px;
+}
+
+.internal-v4-dimension-grid strong {
+  color: #f7faf6;
+  font-size: 22px;
+  line-height: 1;
 }
 
 .internal-v4-rule-list {
@@ -477,7 +544,14 @@
     grid-template-columns: repeat(5, minmax(120px, 1fr));
   }
 
+  .internal-v4-review-stats {
+    grid-template-columns: repeat(4, minmax(120px, 1fr));
+  }
+
   .internal-v4-judgement-grid,
+  .internal-v4-confidence-grid,
+  .internal-v4-dimension-grid,
+  .internal-v4-formula-grid,
   .internal-v4-check-list {
     grid-template-columns: repeat(3, minmax(120px, 1fr));
   }
@@ -506,8 +580,12 @@
   }
 
   .internal-v4-funds,
+  .internal-v4-review-stats,
   .internal-v4-workspace,
   .internal-v4-judgement-grid,
+  .internal-v4-confidence-grid,
+  .internal-v4-dimension-grid,
+  .internal-v4-formula-grid,
   .internal-v4-rule-list,
   .internal-v4-check-list,
   .internal-v4-settlement-result {

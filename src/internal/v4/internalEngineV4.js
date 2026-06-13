@@ -1,10 +1,14 @@
 import {
+  DIRECTION_STRENGTH_LABELS_V4,
+  EXECUTION_LEVELS_V4,
   GAME_TYPES_V4,
   GRADES_V4,
   INTERNAL_V4_VERSION,
   MAIN_PICKS_V4,
   OVER_UNDER_PICKS_V4,
   POOL_STATUS_V4,
+  SCORE_DIMENSION_KEYS_V4,
+  SCORE_DIMENSION_LABELS_V4,
 } from './internalTypesV4.js'
 import { evaluateInternalRulesV4 } from './internalRulesV4.js'
 import {
@@ -18,123 +22,235 @@ import {
   roundTo,
 } from './internalSelectorsV4.js'
 
-function effectWeight(triggered, effect) {
-  return triggered
-    .filter((rule) => rule.effect === effect)
-    .reduce((sum, rule) => sum + rule.weight, 0)
-}
-
 function hasEffect(triggered, effect) {
   return triggered.some((rule) => rule.effect === effect)
 }
 
-function getGrade(score, hardRejected) {
-  if (hardRejected) return 'D'
-  if (score >= 82) return 'A'
-  if (score >= 72) return 'B+'
-  if (score >= 62) return 'B'
-  if (score >= 48) return 'C'
+function calculateDimensions(facts) {
+  const formGap = Math.abs(facts.homeForm - facts.awayForm)
+  const styleGap = Math.abs(
+    facts.homeAttack - facts.awayDefense - (facts.awayAttack - facts.homeDefense),
+  )
+  const drawPressureRaw =
+    facts.model.draw * 100 + Math.max(0, 12 - facts.absoluteStrengthGap) * 1.7
+  const heatRisk =
+    facts.hasOdds && facts.marketFavorite !== 'draw' && facts.odds[facts.marketFavorite] <= 1.62
+      ? 24
+      : 0
+  const dataMissingPenalty = (facts.hasOdds ? 0 : 24) + (facts.hasTotals ? 0 : 14)
+  const scoreFocus =
+    60 +
+    Math.abs(facts.directionEdge) * 0.9 +
+    Math.abs(facts.overUnderEdge) * 130 -
+    Math.min(facts.contextRisk, 80) * 0.22
+
+  return {
+    strengthGapScore: clampNumber(
+      45 + facts.absoluteStrengthGap * 2.2 + facts.leaderSpread * 90,
+      0,
+      100,
+    ),
+    formScore: clampNumber(50 + formGap * 1.45, 0, 100),
+    homeAwayScore: clampNumber(55 + facts.directionEdge * 0.55, 0, 100),
+    lineupStabilityScore: clampNumber(
+      100 - facts.injuryPressure * 0.42 - facts.fatiguePressure * 0.24,
+      0,
+      100,
+    ),
+    styleMatchupScore: clampNumber(50 + styleGap * 1.2, 0, 100),
+    tempoScore: clampNumber(facts.attackTempo, 0, 100),
+    drawPressureScore: clampNumber(drawPressureRaw, 0, 100),
+    marketHeatScore: clampNumber(
+      82 - heatRisk - Math.max(0, facts.contextRisk - 55) * 0.4,
+      0,
+      100,
+    ),
+    volatilityScore: clampNumber(
+      100 - facts.contextRisk * 0.78 - facts.injuryPressure * 0.18,
+      0,
+      100,
+    ),
+    scoreConcentrationScore: clampNumber(scoreFocus, 0, 100),
+    overUnderClarityScore: clampNumber(48 + Math.abs(facts.overUnderEdge) * 260, 0, 100),
+    dataStabilityScore: clampNumber(88 - dataMissingPenalty - facts.contextRisk * 0.12, 0, 100),
+  }
+}
+
+function getGameType(facts, dimensions, triggered) {
+  if (hasEffect(triggered, 'conflict') && dimensions.dataStabilityScore < 58) {
+    return '方向冲突局'
+  }
+  if (dimensions.dataStabilityScore < 45) return '信息不足局'
+  if (dimensions.drawPressureScore >= 42 && facts.absoluteStrengthGap <= 10) {
+    return '平局保护局'
+  }
+  if (hasEffect(triggered, 'openGame') || (facts.attackTempo >= 64 && facts.overUnderEdge >= 0.05)) {
+    return '对攻大球局'
+  }
+  if (facts.attackTempo <= 46 || facts.overUnderEdge <= -0.08) return '低比分胶着局'
+  if (hasEffect(triggered, 'volatility-high')) return '冷门波动局'
+  if (facts.hasOdds && facts.marketFavorite !== 'draw' && facts.odds[facts.marketFavorite] <= 1.62) {
+    return '强队过热局'
+  }
+  if (facts.absoluteStrengthGap >= 12 || Math.abs(facts.directionEdge) >= 16) {
+    return '强队压制局'
+  }
+  return facts.contextRisk >= 58 ? '冷门波动局' : '平局保护局'
+}
+
+function getGameTypeModifier(gameType) {
+  return (
+    {
+      强队压制局: 88,
+      对攻大球局: 82,
+      低比分胶着局: 76,
+      平局保护局: 74,
+      强队过热局: 66,
+      冷门波动局: 64,
+      信息不足局: 55,
+      方向冲突局: 52,
+    }[gameType] ?? 60
+  )
+}
+
+function buildConfidence(dimensions, gameType) {
+  const directionConfidence = clampNumber(
+    dimensions.strengthGapScore * 0.38 +
+      dimensions.formScore * 0.18 +
+      dimensions.homeAwayScore * 0.16 +
+      dimensions.marketHeatScore * 0.14 +
+      dimensions.volatilityScore * 0.14,
+    0,
+    100,
+  )
+  const scoreConfidence = clampNumber(
+    dimensions.scoreConcentrationScore * 0.34 +
+      dimensions.lineupStabilityScore * 0.18 +
+      dimensions.styleMatchupScore * 0.18 +
+      (100 - Math.abs(dimensions.tempoScore - 55)) * 0.14 +
+      dimensions.dataStabilityScore * 0.16,
+    0,
+    100,
+  )
+  const overUnderConfidence = clampNumber(
+    dimensions.overUnderClarityScore * 0.55 +
+      (100 - Math.abs(dimensions.tempoScore - 58)) * 0.2 +
+      dimensions.dataStabilityScore * 0.25,
+    0,
+    100,
+  )
+  const dataConfidence = clampNumber(dimensions.dataStabilityScore, 0, 100)
+  const gameTypeModifier = getGameTypeModifier(gameType)
+  const internalConfidence = clampNumber(
+    directionConfidence * 0.35 +
+      scoreConfidence * 0.2 +
+      overUnderConfidence * 0.2 +
+      dataConfidence * 0.15 +
+      gameTypeModifier * 0.1,
+    0,
+    100,
+  )
+
+  return {
+    directionConfidence: Math.round(directionConfidence),
+    scoreConfidence: Math.round(scoreConfidence),
+    overUnderConfidence: Math.round(overUnderConfidence),
+    dataConfidence: Math.round(dataConfidence),
+    gameTypeModifier: Math.round(gameTypeModifier),
+    internalConfidence: Math.round(internalConfidence),
+  }
+}
+
+function getGrade(internalConfidence) {
+  if (internalConfidence >= 90) return 'A'
+  if (internalConfidence >= 82) return 'B+'
+  if (internalConfidence >= 74) return 'B'
+  if (internalConfidence >= 66) return 'C'
+  if (internalConfidence >= 58) return 'D+'
   return 'D'
 }
 
 function getExecutionLevel(grade) {
-  if (grade === 'A') return '强推候选'
-  if (grade === 'B+') return '稳健候选'
-  if (grade === 'B') return '保守候选'
-  if (grade === 'C') return '内部观察'
-  return '不进主推池'
+  if (grade === 'A') return '强信心计划'
+  if (grade === 'B+') return '中高信心计划'
+  if (grade === 'B') return '标准计划'
+  if (grade === 'C' || grade === 'D+') return '低额观察'
+  return '最低观察'
 }
 
-function getPoolStatus(grade, triggered) {
-  if (grade === 'D' || hasEffect(triggered, 'poolReject') || hasEffect(triggered, 'hardConflict')) {
-    return '剔除'
-  }
-  if (grade === 'A' || grade === 'B+') return '主推池'
-  if (grade === 'B') return '候选池'
-  return '观察池'
+function getPoolStatus(grade) {
+  if (grade === 'A') return '高信心'
+  if (grade === 'B+') return '中高信心'
+  if (grade === 'B') return '标准观察'
+  if (grade === 'C' || grade === 'D+') return '低额观察'
+  return '最低观察'
 }
 
-function getGameType(facts, triggered) {
-  if (hasEffect(triggered, 'hardConflict')) return '方向冲突局'
-  if (hasEffect(triggered, 'infoReject') || (!facts.hasOdds && facts.leaderEdge < 0.08)) {
-    return '信息不足局'
-  }
-  if (hasEffect(triggered, 'volatility') && facts.marketFavorite !== 'draw') {
-    if (facts.odds[facts.marketFavorite] <= 1.62) return '强队过热局'
-    if (facts.contextRisk >= 65) return '冷门波动局'
-  }
-  if (hasEffect(triggered, 'over') && facts.attackTempo >= 58) return '对攻大球局'
-  if (hasEffect(triggered, 'draw') && facts.absoluteStrengthGap <= 9) return '平局保护局'
-  if (hasEffect(triggered, 'tempoLow') || hasEffect(triggered, 'under')) return '低比分胶着局'
-  if (facts.favoriteProbability >= 0.48 && facts.absoluteStrengthGap >= 10) {
-    return '强队压制局'
-  }
-  if (facts.contextRisk >= 58) return '冷门波动局'
-  return '平局保护局'
+function getDirectionStrengthLabel(directionConfidence) {
+  if (directionConfidence >= 86) return '强'
+  if (directionConfidence >= 76) return '中强'
+  if (directionConfidence >= 66) return '中等'
+  if (directionConfidence >= 56) return '偏弱'
+  return '最低观察'
 }
 
-function getMainPick(facts, gameType, grade) {
-  if (grade === 'D' || gameType === '方向冲突局') return '不进主推池'
-  if (gameType === '信息不足局' && facts.leaderEdge < 0.06) return '不进主推池'
-  if (gameType === '平局保护局' && facts.model.draw >= 0.29) return '平局'
-
-  if (facts.modelLeader === 'home') {
-    return facts.model.home >= 0.48 && facts.leaderEdge >= 0.07 ? '主队胜' : '主队不败'
-  }
-
-  if (facts.modelLeader === 'away') {
-    return facts.model.away >= 0.48 && facts.leaderEdge >= 0.07 ? '客队胜' : '客队不败'
-  }
-
-  return '平局'
+function getMainPick(facts, dimensions, gameType) {
+  if (gameType === '平局保护局' && dimensions.drawPressureScore >= 52) return '平局'
+  if (Math.abs(facts.directionEdge) < 5 && dimensions.drawPressureScore >= 38) return '平局'
+  const outcome = facts.directionEdge >= 0 ? 'home' : 'away'
+  return mapOutcomeToMainPickV4(outcome, Math.abs(facts.directionEdge))
 }
 
-function getOverUnderPick(facts, gameType) {
-  if (Math.abs(facts.overUnderEdge) < 0.04) return '2.5分界'
-  if (facts.overUnderEdge > 0) return '大2.5'
-  if (facts.overUnderEdge < 0) return '小2.5'
-  if (gameType === '对攻大球局') return '大2.5'
-  return '小2.5'
-}
+function getScorePair(mainPick, gameType) {
+  const homeSide = mainPick === '主队胜' || mainPick === '主队不败'
+  const awaySide = mainPick === '客队胜' || mainPick === '客队不败'
 
-function uniqueScorePair(primary, secondary) {
-  if (primary !== secondary) return { primary, secondary }
-  const [home, away] = primary.split('-').map((part) => Number(part))
-  if (home === away) return { primary, secondary: `${home + 1}-${away + 1}` }
-  if (home > away) return { primary, secondary: `${home}-${Math.max(0, away + 1)}` }
-  return { primary, secondary: `${Math.max(0, home + 1)}-${away}` }
-}
-
-function getScorePair(mainPick, gameType, overUnderPick) {
-  if (gameType === '方向冲突局' || mainPick === '不进主推池') {
-    return { primaryScore: '0-0', secondaryScore: '1-1' }
-  }
-
-  if (mainPick === '平局') {
-    if (overUnderPick === '大2.5' || gameType === '对攻大球局') {
-      return { primaryScore: '2-2', secondaryScore: '1-1' }
-    }
+  if (gameType === '平局保护局') {
+    if (mainPick === '平局') return { primaryScore: '1-1', secondaryScore: '0-0' }
+    if (homeSide) return { primaryScore: '1-1', secondaryScore: '2-1' }
+    if (awaySide) return { primaryScore: '1-1', secondaryScore: '1-2' }
     return { primaryScore: '1-1', secondaryScore: '0-0' }
   }
 
-  const homeSide = mainPick === '主队胜' || mainPick === '主队不败'
-  const awaySide = mainPick === '客队胜' || mainPick === '客队不败'
-  const openGame = overUnderPick === '大2.5' || gameType === '对攻大球局'
-  const lowGame = gameType === '低比分胶着局' || overUnderPick === '小2.5'
-
-  if (homeSide) {
-    if (openGame) return { primaryScore: '2-1', secondaryScore: '3-1' }
-    if (lowGame) return { primaryScore: '1-0', secondaryScore: '1-1' }
-    return { primaryScore: '2-0', secondaryScore: '2-1' }
+  if (gameType === '低比分胶着局') {
+    if (homeSide) return { primaryScore: '1-0', secondaryScore: '1-1' }
+    if (awaySide) return { primaryScore: '0-1', secondaryScore: '0-0' }
+    return { primaryScore: '1-1', secondaryScore: '0-0' }
   }
 
-  if (awaySide) {
-    if (openGame) return { primaryScore: '1-2', secondaryScore: '1-3' }
-    if (lowGame) return { primaryScore: '0-1', secondaryScore: '1-1' }
-    return { primaryScore: '0-2', secondaryScore: '1-2' }
+  if (gameType === '对攻大球局') {
+    if (homeSide) return { primaryScore: '2-1', secondaryScore: '2-2' }
+    if (awaySide) return { primaryScore: '1-2', secondaryScore: '2-2' }
+    return { primaryScore: '2-2', secondaryScore: '1-1' }
+  }
+
+  if (gameType === '信息不足局') {
+    if (homeSide) return { primaryScore: '1-1', secondaryScore: '1-0' }
+    if (awaySide) return { primaryScore: '1-1', secondaryScore: '0-1' }
+    return { primaryScore: '1-1', secondaryScore: '0-0' }
+  }
+
+  if (gameType === '强队压制局') {
+    if (homeSide) return { primaryScore: '2-0', secondaryScore: '2-1' }
+    if (awaySide) return { primaryScore: '0-2', secondaryScore: '1-2' }
+    return { primaryScore: '1-1', secondaryScore: '2-1' }
+  }
+
+  if (gameType === '强队过热局' || gameType === '冷门波动局' || gameType === '方向冲突局') {
+    if (homeSide) return { primaryScore: '1-1', secondaryScore: '1-0' }
+    if (awaySide) return { primaryScore: '1-1', secondaryScore: '0-1' }
+    return { primaryScore: '1-1', secondaryScore: '0-0' }
   }
 
   return { primaryScore: '1-1', secondaryScore: '0-0' }
+}
+
+function getOverUnderFromScores(primaryScore, secondaryScore) {
+  const primaryTotal = getScoreTotalGoalsV4(primaryScore)
+  const secondaryTotal = getScoreTotalGoalsV4(secondaryScore)
+  if (primaryTotal >= 3 && secondaryTotal >= 3) return '大2.5'
+  if (primaryTotal <= 2 && secondaryTotal <= 2) return '小2.5'
+  return '2.5球分界'
 }
 
 function scoreMatchesMainPick(scoreText, mainPick) {
@@ -147,50 +263,66 @@ function scoreMatchesMainPick(scoreText, mainPick) {
   return false
 }
 
-function scoreMatchesOverUnder(scoreText, overUnderPick) {
-  const total = getScoreTotalGoalsV4(scoreText)
-  if (overUnderPick === '大2.5') return total > 2.5
-  if (overUnderPick === '小2.5') return total < 2.5
-  return true
+function isDrawScore(scoreText) {
+  return getScoreOutcomeV4(scoreText) === 'draw'
 }
 
-function buildConsistency(mainPick, predictions, triggered) {
-  const directionAligned = scoreMatchesMainPick(predictions.primaryScore, mainPick)
-  const backupDirectionAligned = scoreMatchesMainPick(predictions.secondaryScore, mainPick)
-  const overUnderAligned = scoreMatchesOverUnder(
-    predictions.primaryScore,
-    predictions.overUnder,
-  )
-  const hardConflict = hasEffect(triggered, 'hardConflict') || !directionAligned
+function buildConsistency(gameType, mainPick, predictions) {
+  const primaryDirectionAligned = scoreMatchesMainPick(predictions.primaryScore, mainPick)
+  const secondaryDirectionAligned = scoreMatchesMainPick(predictions.secondaryScore, mainPick)
+  const hasDrawForProtection =
+    gameType !== '平局保护局' ||
+    isDrawScore(predictions.primaryScore) ||
+    isDrawScore(predictions.secondaryScore)
+  const lowScoreGuard =
+    gameType !== '低比分胶着局' ||
+    (getScoreTotalGoalsV4(predictions.primaryScore) <= 2 &&
+      getScoreTotalGoalsV4(predictions.secondaryScore) <= 2)
+  const overUnderAligned =
+    predictions.overUnder === getOverUnderFromScores(
+      predictions.primaryScore,
+      predictions.secondaryScore,
+    )
   const checks = [
     {
-      id: 'direction-primary-score',
-      label: '主方向与主推比分一致',
-      passed: directionAligned,
+      id: 'primary-direction',
+      label: '主推比分与主方向一致',
+      passed: primaryDirectionAligned,
     },
     {
-      id: 'direction-secondary-score',
-      label: '主方向与备用比分一致',
-      passed: backupDirectionAligned,
+      id: 'secondary-direction',
+      label: '备用比分覆盖主方向或保护路径',
+      passed: secondaryDirectionAligned || gameType === '平局保护局' || gameType === '信息不足局',
     },
     {
-      id: 'ou-primary-score',
-      label: '大小球与主推比分一致',
+      id: 'draw-protection-score',
+      label: '平局保护局至少一个平局比分',
+      passed: hasDrawForProtection,
+    },
+    {
+      id: 'low-score-guard',
+      label: '低比分局不输出高比分',
+      passed: lowScoreGuard,
+    },
+    {
+      id: 'over-under-score-link',
+      label: '比分与大小球一致',
       passed: overUnderAligned,
     },
-    {
-      id: 'hard-conflict',
-      label: '未触发方向强冲突',
-      passed: !hasEffect(triggered, 'hardConflict'),
-    },
   ]
+  const failedCount = checks.filter((check) => !check.passed).length
+  const severity =
+    failedCount === 0 ? 'none' : failedCount === 1 ? 'light' : failedCount === 2 ? 'medium' : 'severe'
 
   return {
-    directionAligned,
-    backupDirectionAligned,
+    directionScoreAligned: primaryDirectionAligned,
+    totalGoalsAligned: lowScoreGuard,
     overUnderAligned,
-    hardConflict,
-    hasConflict: checks.some((check) => !check.passed),
+    stakeAligned: true,
+    hasHardConflict: severity === 'severe',
+    severity,
+    consistencyFactor:
+      severity === 'none' ? 1 : severity === 'light' ? 0.75 : severity === 'medium' ? 0.5 : 0.3,
     checks,
     conflictReasons: checks.filter((check) => !check.passed).map((check) => check.label),
   }
@@ -199,60 +331,31 @@ function buildConsistency(mainPick, predictions, triggered) {
 export function buildInternalV4Analysis(match, context = {}) {
   const evaluated = evaluateInternalRulesV4(match)
   const { facts, groups, allRules, triggered } = evaluated
-  const strengthScore = effectWeight(triggered, 'strength') + effectWeight(triggered, 'direction')
-  const tempoScore = effectWeight(triggered, 'tempoHigh') - effectWeight(triggered, 'tempoLow') * 0.5
-  const drawScore = effectWeight(triggered, 'draw')
-  const goalScore = effectWeight(triggered, 'score')
-  const overUnderScore = effectWeight(triggered, 'over') - effectWeight(triggered, 'under')
-  const volatilityPenalty = effectWeight(triggered, 'volatility')
-  const infoPenalty = effectWeight(triggered, 'info') + effectWeight(triggered, 'infoReject')
-  const poolBoost = effectWeight(triggered, 'pool') - effectWeight(triggered, 'poolReject')
-  const baseScore =
-    50 +
-    facts.favoriteProbability * 32 +
-    facts.leaderEdge * 120 +
-    Math.min(facts.absoluteStrengthGap, 24) * 0.75 -
-    facts.contextRisk * 0.2
-  const totalScore = clampNumber(
-    baseScore +
-      strengthScore +
-      tempoScore * 0.35 +
-      drawScore * 0.2 +
-      goalScore * 0.2 +
-      Math.max(overUnderScore, 0) * 0.2 +
-      poolBoost -
-      volatilityPenalty -
-      infoPenalty,
-    0,
-    100,
-  )
-  const gameType = getGameType(facts, triggered)
-  const hardRejected =
-    gameType === '方向冲突局' ||
-    hasEffect(triggered, 'poolReject') ||
-    (hasEffect(triggered, 'infoReject') && facts.leaderEdge < 0.04)
-  const grade = getGrade(totalScore, hardRejected)
+  const dimensions = calculateDimensions(facts)
+  const gameType = getGameType(facts, dimensions, triggered)
+  const confidence = buildConfidence(dimensions, gameType)
+  const grade = getGrade(confidence.internalConfidence)
   const executionLevel = getExecutionLevel(grade)
-  const poolStatus = getPoolStatus(grade, triggered)
-  const mainPick = getMainPick(facts, gameType, grade)
-  const overUnder = getOverUnderPick(facts, gameType)
-  const scorePair = getScorePair(mainPick, gameType, overUnder)
-  const uniqueScores = uniqueScorePair(scorePair.primaryScore, scorePair.secondaryScore)
+  const poolStatus = getPoolStatus(grade)
+  const directionStrength = getDirectionStrengthLabel(confidence.directionConfidence)
+  const mainPick = getMainPick(facts, dimensions, gameType)
+  const scorePair = getScorePair(mainPick, gameType)
+  const overUnder = getOverUnderFromScores(scorePair.primaryScore, scorePair.secondaryScore)
   const predictions = {
-    primaryScore: uniqueScores.primary,
-    secondaryScore: uniqueScores.secondary,
-    totalGoals: getScoreTotalGoalsV4(uniqueScores.primary),
+    primaryScore: scorePair.primaryScore,
+    secondaryScore: scorePair.secondaryScore,
+    totalGoalsText:
+      overUnder === '大2.5'
+        ? '3球以上'
+        : overUnder === '小2.5'
+          ? '0-2球'
+          : '2-3球分界',
+    overUnderText: overUnder,
+    overUnderValue: 2.5,
     overUnder,
   }
-  const consistency = buildConsistency(mainPick, predictions, triggered)
+  const consistency = buildConsistency(gameType, mainPick, predictions)
   const normalizedMatch = normalizeMatchForV4(match)
-  const allowedFallbacks = {
-    gameType: GAME_TYPES_V4.includes(gameType) ? gameType : '信息不足局',
-    grade: GRADES_V4.includes(grade) ? grade : 'D',
-    mainPick: MAIN_PICKS_V4.includes(mainPick) ? mainPick : '不进主推池',
-    poolStatus: POOL_STATUS_V4.includes(poolStatus) ? poolStatus : '观察池',
-    overUnder: OVER_UNDER_PICKS_V4.includes(overUnder) ? overUnder : '2.5分界',
-  }
 
   return {
     version: INTERNAL_V4_VERSION,
@@ -263,61 +366,90 @@ export function buildInternalV4Analysis(match, context = {}) {
       matchName: getMatchNameV4(match),
     },
     classification: {
-      gameType: allowedFallbacks.gameType,
-      modelLeader: facts.modelLeader,
-      marketFavorite: facts.marketFavorite,
-      contextRisk: Math.round(facts.contextRisk),
+      gameType: GAME_TYPES_V4.includes(gameType) ? gameType : '信息不足局',
+      strengthSide: facts.directionEdge >= 0 ? '主队' : '客队',
+      tempo:
+        dimensions.tempoScore >= 62
+          ? '快节奏'
+          : dimensions.tempoScore <= 44
+            ? '慢节奏'
+            : '中速节奏',
+      goalProfile: predictions.totalGoalsText,
+      drawPressure:
+        dimensions.drawPressureScore >= 42
+          ? '高'
+          : dimensions.drawPressureScore >= 34
+            ? '中'
+            : '低',
+      volatility:
+        dimensions.volatilityScore >= 70
+          ? '稳定'
+          : dimensions.volatilityScore >= 50
+            ? '中等'
+            : '高波动',
+      confidenceShape: directionStrength,
     },
     rules: {
       groups,
       all: allRules,
       triggered,
+      triggeredRules: triggered,
+      blockedRules: allRules.filter((rule) => !rule.fired),
+      ruleScoreMap: Object.fromEntries(triggered.map((rule) => [rule.id, rule.weight])),
     },
     score: {
-      total: Math.round(totalScore),
-      base: roundTo(baseScore, 2),
-      strength: roundTo(strengthScore, 2),
-      tempo: roundTo(tempoScore, 2),
-      draw: roundTo(drawScore, 2),
-      goals: roundTo(goalScore, 2),
-      overUnder: roundTo(overUnderScore, 2),
-      volatilityPenalty,
-      infoPenalty,
-      poolBoost,
+      dimensions: Object.fromEntries(
+        SCORE_DIMENSION_KEYS_V4.map((key) => [key, Math.round(dimensions[key])]),
+      ),
+      dimensionLabels: SCORE_DIMENSION_LABELS_V4,
+      finalScore: confidence.internalConfidence,
+      grade,
     },
+    confidence,
     decision: {
-      mainPick: allowedFallbacks.mainPick,
-      executionLevel,
-      poolStatus: allowedFallbacks.poolStatus,
-      grade: allowedFallbacks.grade,
+      mainPick: MAIN_PICKS_V4.includes(mainPick) ? mainPick : '平局',
+      attackPick: predictions.totalGoalsText,
+      coverPick:
+        gameType === '平局保护局' || gameType === '信息不足局'
+          ? '平局保护'
+          : '相邻比分保护',
+      executionLevel: EXECUTION_LEVELS_V4.includes(executionLevel)
+        ? executionLevel
+        : '最低观察',
+      poolStatus: POOL_STATUS_V4.includes(poolStatus) ? poolStatus : '最低观察',
+      isMainPoolCandidate: grade === 'A' || grade === 'B+',
+      grade: GRADES_V4.includes(grade) ? grade : 'D',
+      fundingTier: grade,
+      directionStrength: DIRECTION_STRENGTH_LABELS_V4.includes(directionStrength)
+        ? directionStrength
+        : '最低观察',
     },
     predictions: {
       ...predictions,
-      overUnder: allowedFallbacks.overUnder,
+      totalGoals: getScoreTotalGoalsV4(predictions.primaryScore),
+      primaryScoreTotal: getScoreTotalGoalsV4(predictions.primaryScore),
+      secondaryScoreTotal: getScoreTotalGoalsV4(predictions.secondaryScore),
     },
     staking: {
-      recommendedCapPercent:
-        allowedFallbacks.grade === 'A'
-          ? 5
-          : allowedFallbacks.grade === 'B+'
-            ? 3.5
-            : allowedFallbacks.grade === 'B'
-              ? 2.5
-              : allowedFallbacks.grade === 'C'
-                ? 1.2
-                : 0,
       bankrollReference: context.bankroll ?? null,
       stakeEngineRequired: true,
+      fundingTier: grade,
     },
     consistency,
-    reasons: triggered.slice(0, 8).map((rule) => rule.reason),
+    reasons: {
+      headline: `${gameType} · ${directionStrength} · ${grade}档`,
+      hardReasons: triggered
+        .filter((rule) => ['strength', 'direction', 'plan'].includes(rule.effect))
+        .map((rule) => rule.reason),
+      cautionReasons: triggered
+        .filter((rule) => ['volatility', 'data', 'capitalRisk'].includes(rule.effect))
+        .map((rule) => rule.reason),
+      rejectReasons: [],
+    },
     facts: {
-      market: facts.market,
-      model: facts.model,
-      totalGoals: facts.totalGoals,
       strengthGap: Math.round(facts.strengthGap),
       attackTempo: Math.round(facts.attackTempo),
-      leaderEdge: roundTo(facts.leaderEdge, 4),
+      directionEdge: roundTo(facts.directionEdge, 2),
       overUnderEdge: roundTo(facts.overUnderEdge, 4),
       oddsSource: facts.odds.source,
     },
