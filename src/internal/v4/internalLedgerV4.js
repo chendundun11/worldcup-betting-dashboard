@@ -196,6 +196,19 @@ export function resetInternalLedgerV4() {
   return ledger
 }
 
+export function getPlanningLedgerBaselineForScope(ledger, planScope) {
+  const normalizedLedger = normalizeLedger(ledger)
+  if (!planScope) return normalizedLedger
+
+  return normalizeLedger({
+    ...normalizedLedger,
+    records: normalizedLedger.records.filter(
+      (record) => isSettledStatus(record.status) || record.planScope !== planScope,
+    ),
+    updatedAt: normalizedLedger.updatedAt,
+  })
+}
+
 export function getLegacyInternalV4Ledger() {
   if (!hasStorage()) return null
   try {
@@ -255,6 +268,34 @@ export function upsertPlannedRecord(ledger, match, analysis, stakePlan, options 
     }
   }
 
+  const nextPlanScope = options.planScope ?? existingRecord?.planScope ?? 'future_24h'
+  if (
+    existingRecord &&
+    existingRecord.planScope === nextPlanScope &&
+    options.forceRefresh !== true
+  ) {
+    const refreshedRecord = {
+      ...existingRecord,
+      status: getRecordLifecycleStatusV4(match, existingRecord, options.now ?? new Date()),
+      scoreProviderSnapshot:
+        options.scoreProviderSnapshot ?? existingRecord.scoreProviderSnapshot ?? null,
+      updatedAt: nowIso(),
+    }
+    const records = normalizedLedger.records.map((record, index) =>
+      index === existingIndex ? refreshedRecord : record,
+    )
+
+    return {
+      ledger: normalizeLedger({
+        ...normalizedLedger,
+        records,
+        updatedAt: nowIso(),
+      }),
+      record: refreshedRecord,
+      action: 'kept-existing',
+    }
+  }
+
   const nextRecord = createPlannedRecord(
     match,
     analysis,
@@ -262,7 +303,7 @@ export function upsertPlannedRecord(ledger, match, analysis, stakePlan, options 
     existingRecord,
     {
       now: options.now ?? new Date(),
-      planScope: options.planScope,
+      planScope: nextPlanScope,
       scoreProviderSnapshot: options.scoreProviderSnapshot,
     },
   )
@@ -523,13 +564,60 @@ export function getLedgerSummaryForMatches(ledger, matches = [], options = {}) {
   }
 }
 
-export function exportLedgerJson(ledger) {
-  return JSON.stringify(normalizeLedger(ledger), null, 2)
+function sanitizeExportValue(value) {
+  if (value === null || value === undefined) return ''
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0
+  if (Array.isArray(value)) return value.map(sanitizeExportValue)
+  if (typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, sanitizeExportValue(item)]),
+    )
+  }
+  return value
+}
+
+export function buildInternalV5ExportPayload(ledger, options = {}) {
+  return sanitizeExportValue({
+    version: 'internal-v5-export',
+    exportedAt: nowIso(),
+    ledger: normalizeLedger(ledger),
+    oddsOverrides: options.oddsOverrides ?? {},
+    planScope: options.planScope ?? 'future_24h',
+    activeScope: options.activeScope ?? options.planScope ?? 'future_24h',
+    appNote: 'V5 internal ledger export. For internal simulation review only.',
+  })
+}
+
+export function exportLedgerJson(ledger, options = {}) {
+  const payload = options.envelope
+    ? buildInternalV5ExportPayload(ledger, options)
+    : sanitizeExportValue(normalizeLedger(ledger))
+  return JSON.stringify(payload, null, 2)
 }
 
 export function importLedgerJson(jsonText) {
   const parsed = JSON.parse(jsonText)
-  return saveInternalLedgerV4(normalizeLedger(parsed))
+  return saveInternalLedgerV4(normalizeLedger(parsed?.ledger ?? parsed))
+}
+
+export function parseInternalV5ImportJson(jsonText) {
+  const parsed = JSON.parse(jsonText)
+  const ledger = normalizeLedger(parsed?.ledger ?? parsed)
+  return {
+    ledger,
+    oddsOverrides:
+      parsed && typeof parsed === 'object' && parsed.oddsOverrides
+        ? parsed.oddsOverrides
+        : null,
+    planScope:
+      parsed && typeof parsed === 'object'
+        ? parsed.planScope ?? parsed.activeScope ?? null
+        : null,
+    version:
+      parsed && typeof parsed === 'object'
+        ? parsed.version ?? ledger.version
+        : ledger.version,
+  }
 }
 
 export function clearPendingRecords(ledger) {

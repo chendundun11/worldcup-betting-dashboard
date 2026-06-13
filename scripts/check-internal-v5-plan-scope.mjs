@@ -8,8 +8,13 @@ import {
 } from '../src/internal/v4/internalPlanScopeV5.js'
 import {
   createDefaultLedger,
+  exportLedgerJson,
   getLedgerSummaryForMatches,
+  getPlanningLedgerBaselineForScope,
+  importLedgerJson,
+  parseInternalV5ImportJson,
 } from '../src/internal/v4/internalLedgerV4.js'
+import { autoReviewFinishedMatches } from '../src/internal/v4/internalAutoReviewV4.js'
 import { RECORD_STATUS_V4 } from '../src/internal/v4/internalTypesV4.js'
 
 const now = new Date('2026-06-13T10:00:00+08:00')
@@ -124,5 +129,153 @@ const emptyFuture = getLedgerSummaryForMatches(ledger, [], {
 assert.equal(emptyFuture.totalMatches, 0)
 assert.equal(emptyFuture.pendingExposure, 0)
 assert.equal(emptyFuture.plannedCount, 0)
+
+const richHome = {
+  name: 'France',
+  shortName: 'France',
+  teamStrength: 88,
+  recentForm: 82,
+  attackRating: 84,
+  defenseRating: 78,
+  morale: 78,
+  fatigue: 28,
+  injuryRisk: 18,
+}
+const richAway = {
+  name: 'Haiti',
+  shortName: 'Haiti',
+  teamStrength: 52,
+  recentForm: 49,
+  attackRating: 48,
+  defenseRating: 45,
+  morale: 48,
+  fatigue: 50,
+  injuryRisk: 42,
+}
+const formalPlanMatches = [
+  {
+    id: 'scope-stable-one',
+    kickoff: '2026-06-13T12:00:00+08:00',
+    status: 'scheduled',
+    homeTeam: richHome,
+    awayTeam: richAway,
+    odds: { home: 1.72, draw: 3.85, away: 5.8, over25: 1.94, under25: 1.92 },
+    model: { home: 0.58, draw: 0.25, away: 0.17 },
+    totalGoals: { model: { over25Probability: 0.52, under25Probability: 0.48 } },
+    contextRisk: 34,
+  },
+  {
+    id: 'scope-stable-two',
+    kickoff: '2026-06-13T18:00:00+08:00',
+    status: 'scheduled',
+    homeTeam: richAway,
+    awayTeam: richHome,
+    odds: { home: 5.4, draw: 3.75, away: 1.76, over25: 2.04, under25: 1.82 },
+    model: { home: 0.2, draw: 0.25, away: 0.55 },
+    totalGoals: { model: { over25Probability: 0.47, under25Probability: 0.53 } },
+    contextRisk: 40,
+  },
+]
+
+const firstPlanRun = autoReviewFinishedMatches(formalPlanMatches, createDefaultLedger(), {
+  now,
+  planScope: PLAN_SCOPE_V5.future24h,
+})
+assert.equal(firstPlanRun.planned, formalPlanMatches.length)
+
+const firstFormalSummary = getLedgerSummaryForMatches(firstPlanRun.ledger, formalPlanMatches, {
+  emptyMatchesMeansEmpty: true,
+  planScope: PLAN_SCOPE_V5.future24h,
+  useGlobalBankroll: true,
+})
+const firstStakes = new Map(
+  firstPlanRun.ledger.records.map((record) => [record.id, record.totalStake]),
+)
+const firstItemStakes = new Map(
+  firstPlanRun.ledger.records.map((record) => [
+    record.id,
+    (record.stakePlanSnapshot?.items ?? []).map((item) => `${item.key}:${item.stake}`).join('|'),
+  ]),
+)
+assert.equal(firstFormalSummary.pendingExposure > 0, true)
+
+const stablePlanRun = autoReviewFinishedMatches(formalPlanMatches, firstPlanRun.ledger, {
+  now,
+  planScope: PLAN_SCOPE_V5.future24h,
+})
+assert.equal(stablePlanRun.planned, 0)
+assert.equal(stablePlanRun.updated, 0)
+
+const stableFormalSummary = getLedgerSummaryForMatches(stablePlanRun.ledger, formalPlanMatches, {
+  emptyMatchesMeansEmpty: true,
+  planScope: PLAN_SCOPE_V5.future24h,
+  useGlobalBankroll: true,
+})
+assert.equal(stableFormalSummary.pendingExposure, firstFormalSummary.pendingExposure)
+for (const record of stablePlanRun.ledger.records) {
+  if (record.planScope === PLAN_SCOPE_V5.future24h) {
+    assert.equal(record.totalStake, firstStakes.get(record.id))
+    assert.equal(
+      (record.stakePlanSnapshot?.items ?? []).map((item) => `${item.key}:${item.stake}`).join('|'),
+      firstItemStakes.get(record.id),
+    )
+  }
+}
+
+const planningBaseline = getPlanningLedgerBaselineForScope(
+  stablePlanRun.ledger,
+  PLAN_SCOPE_V5.future24h,
+)
+assert.equal(
+  planningBaseline.records.some(
+    (record) =>
+      record.planScope === PLAN_SCOPE_V5.future24h &&
+      record.status !== RECORD_STATUS_V4.settledAuto &&
+      record.status !== RECORD_STATUS_V4.settledManual,
+  ),
+  false,
+)
+
+const previewAfterPlanSummary = getLedgerSummaryForMatches(stablePlanRun.ledger, formalPlanMatches, {
+  emptyMatchesMeansEmpty: true,
+  ignoreRecords: true,
+  includePendingExposure: false,
+  useGlobalBankroll: true,
+})
+assert.equal(previewAfterPlanSummary.pendingExposure, 0)
+assert.equal(previewAfterPlanSummary.totalPlannedStake, 0)
+assert.equal(previewAfterPlanSummary.currentBankroll, stableFormalSummary.currentBankroll)
+
+const exportJson = exportLedgerJson(stablePlanRun.ledger, {
+  activeScope: PLAN_SCOPE_V5.future24h,
+  envelope: true,
+  oddsOverrides: {
+    'scope-stable-one': {
+      mainDirection: {
+        odds: 1.88,
+        source: 'manual',
+      },
+    },
+  },
+  planScope: PLAN_SCOPE_V5.future24h,
+})
+const exportPayload = JSON.parse(exportJson)
+assert.equal(exportPayload.version, 'internal-v5-export')
+assert.equal(exportPayload.planScope, PLAN_SCOPE_V5.future24h)
+assert.equal(exportPayload.activeScope, PLAN_SCOPE_V5.future24h)
+assert.equal(exportPayload.ledger.records.length, stablePlanRun.ledger.records.length)
+assert.equal(exportPayload.oddsOverrides['scope-stable-one'].mainDirection.odds, 1.88)
+assert.equal(exportJson.includes('undefined'), false)
+assert.equal(exportJson.includes('NaN'), false)
+assert.equal(exportJson.includes('null'), false)
+
+const parsedImport = parseInternalV5ImportJson(exportJson)
+assert.equal(parsedImport.version, 'internal-v5-export')
+assert.equal(parsedImport.planScope, PLAN_SCOPE_V5.future24h)
+assert.equal(parsedImport.oddsOverrides['scope-stable-one'].mainDirection.source, 'manual')
+assert.equal(parsedImport.ledger.records.length, stablePlanRun.ledger.records.length)
+
+const importedLedger = importLedgerJson(exportJson)
+assert.equal(importedLedger.records.length, stablePlanRun.ledger.records.length)
 
 console.log('check-internal-v5-plan-scope: ok')

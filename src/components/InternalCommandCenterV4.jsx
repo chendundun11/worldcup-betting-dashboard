@@ -19,7 +19,9 @@ import {
   exportLedgerJson,
   getInternalLedgerV4,
   getLedgerSummaryForMatches,
+  getPlanningLedgerBaselineForScope,
   importLedgerJson,
+  parseInternalV5ImportJson,
   resetInternalLedgerV4,
   saveInternalLedgerV4,
   settleRecord,
@@ -27,6 +29,7 @@ import {
   upsertPlannedRecord,
 } from '../internal/v4/internalLedgerV4.js'
 import {
+  DEFAULT_PLAN_SCOPE_V5,
   PLAN_SCOPE_OPTIONS_V5,
   getPlanScopeLabelV5,
   isFormalPlanScopeV5,
@@ -37,6 +40,7 @@ import {
 } from '../internal/v4/internalPlanScopeV5.js'
 import {
   INTERNAL_V5_ODDS_OVERRIDE_KEY,
+  clearOddsOverridesV5,
   loadOddsOverridesV5,
   removeOddsOverrideV5,
   saveOddsOverridesV5,
@@ -73,6 +77,16 @@ const FILTERS = [
   { key: 'auto', label: '自动' },
   { key: 'high', label: '高信心' },
   { key: 'low', label: '低额' },
+]
+
+const RESET_CONFIRM_MESSAGE = '确认重置 V5 账本？这会清空资金记录、复盘记录和赔率覆盖。'
+
+const PLAN_LOADING_STEPS = [
+  '正在读取比赛数据',
+  '正在生成未来24小时计划',
+  '正在读取账本',
+  '正在同步赔率覆盖',
+  '计划生成完成',
 ]
 
 function formatAmount(value) {
@@ -197,6 +211,12 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
   const [jsonBuffer, setJsonBuffer] = useState('')
   const [editingOddsKey, setEditingOddsKey] = useState(null)
   const [oddsDrafts, setOddsDrafts] = useState({})
+  const [startupSyncComplete, setStartupSyncComplete] = useState(false)
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setStartupSyncComplete(true), 4200)
+    return () => window.clearTimeout(timer)
+  }, [])
 
   useEffect(() => {
     if (!matches.length) return
@@ -204,6 +224,13 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
     const scopedMatches = selectMatchesByPlanScopeV5(matches, planScope, {
       ledger: baseLedger,
     })
+
+    if (isFormalPlanScopeV5(planScope) && !startupSyncComplete) {
+      setLedger(baseLedger)
+      setScanResult(null)
+      setNotice(`${getPlanScopeLabelV5(planScope)}计划生成中...`)
+      return
+    }
 
     if (!isFormalPlanScopeV5(planScope)) {
       setLedger(baseLedger)
@@ -249,7 +276,7 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
     setNotice(
       `${getPlanScopeLabelV5(planScope)}自动扫描完成：扫描 ${result.scanned}，计划 ${result.planned + result.updated}，找到真实比分 ${result.foundScores}，自动结算 ${result.settled}，跳过 ${result.skipped}。`,
     )
-  }, [matches, oddsOverrides, planScope])
+  }, [matches, oddsOverrides, planScope, startupSyncComplete])
 
   const scopedMatches = useMemo(
     () =>
@@ -292,6 +319,8 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
   const selectedAnalysis = selectedRow?.analysis ?? null
   const selectedStakePlan = selectedRow?.stakePlan ?? null
   const triggeredRules = selectedAnalysis?.rules?.triggered ?? []
+  const isPlanInitializing = isFormalPlanScopeV5(planScope) && !startupSyncComplete
+
   function persistLedger(nextLedger, nextNotice) {
     const saved = saveInternalLedgerV4(nextLedger)
     setLedger(saved)
@@ -317,25 +346,27 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
     }
 
     let workingLedger = ledger
+    const baselineLedger = getPlanningLedgerBaselineForScope(ledger, savedScope)
     const planMatches = selectMatchesByPlanScopeV5(matches, savedScope, {
       ledger: workingLedger,
+    })
+    const planningSummary = getLedgerSummaryForMatches(baselineLedger, planMatches, {
+      emptyMatchesMeansEmpty: true,
+      planScope: savedScope,
+      useGlobalBankroll: true,
     })
     const counts = { planned: 0, updated: 0, kept: 0 }
 
     for (const match of planMatches) {
-      const scopedLedger = getLedgerSummaryForMatches(workingLedger, planMatches, {
-        emptyMatchesMeansEmpty: true,
-        planScope: savedScope,
-        useGlobalBankroll: true,
-      })
       const analysis = buildInternalV4Analysis(match, {
-        bankroll: scopedLedger.currentBankroll,
+        bankroll: planningSummary.currentBankroll,
       })
-      const stakePlan = buildInternalStakePlan(analysis, scopedLedger, {
+      const stakePlan = buildInternalStakePlan(analysis, planningSummary, {
         match,
         oddsOverrides,
       })
       const result = upsertPlannedRecord(workingLedger, match, analysis, stakePlan, {
+        forceRefresh: true,
         planScope: savedScope,
       })
       workingLedger = result.ledger
@@ -452,12 +483,25 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
   }
 
   function handleReset() {
+    if (typeof window !== 'undefined' && !window.confirm(RESET_CONFIRM_MESSAGE)) {
+      setNotice('reset 已取消。')
+      return
+    }
     const nextLedger = resetInternalLedgerV4()
+    const nextOddsOverrides = clearOddsOverridesV5()
+    const nextPlanScope = savePlanScopeV5(DEFAULT_PLAN_SCOPE_V5)
     setLedger(nextLedger)
+    setOddsOverrides(nextOddsOverrides)
+    setPlanScope(nextPlanScope)
     setScanResult(null)
     setHomeScore('')
     setAwayScore('')
-    setNotice('reset 完成：V5 ledger 已回到初始资金 10000。')
+    setJsonBuffer('')
+    setEditingOddsKey(null)
+    setOddsDrafts({})
+    setFilter('all')
+    setSelectedRecordId(null)
+    setNotice('reset 完成：V5 ledger 已回到初始资金 10000，复盘记录和赔率覆盖已清空。')
   }
 
   function handleClearLegacy() {
@@ -466,9 +510,14 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
   }
 
   function handleExport() {
-    const json = exportLedgerJson(ledger)
+    const json = exportLedgerJson(ledger, {
+      activeScope: planScope,
+      envelope: true,
+      oddsOverrides,
+      planScope,
+    })
     setJsonBuffer(json)
-    setNotice('导出 JSON 已生成。')
+    setNotice('导出账本 JSON 已生成，可复制或稍后导入。')
 
     if (typeof window !== 'undefined') {
       const blob = new Blob([json], { type: 'application/json' })
@@ -483,12 +532,40 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
 
   function handleImport() {
     try {
+      const importedPayload = parseInternalV5ImportJson(jsonBuffer)
       const imported = importLedgerJson(jsonBuffer)
       setLedger(imported)
-      setNotice('导入 JSON 成功，V5 ledger 已更新。')
+      if (importedPayload.oddsOverrides) {
+        setOddsOverrides(saveOddsOverridesV5(importedPayload.oddsOverrides))
+      }
+      if (importedPayload.planScope) {
+        setPlanScope(savePlanScopeV5(importedPayload.planScope))
+      }
+      setNotice('导入 JSON 成功，V5 ledger、赔率覆盖和计划范围已恢复。')
     } catch (error) {
       setNotice(`导入失败：${error.message}`)
     }
+  }
+
+  if (!matches.length && !startupSyncComplete) {
+    return (
+      <main className="internal-v4-shell">
+        <section className="internal-v4-loading" aria-live="polite">
+          <div>
+            <span>Plan Sync</span>
+            <h1>未来24小时计划生成中...</h1>
+          </div>
+          <div className="internal-v4-loading-steps">
+            {PLAN_LOADING_STEPS.map((step) => (
+              <p key={step}>
+                <Check size={14} />
+                <span>{step}</span>
+              </p>
+            ))}
+          </div>
+        </section>
+      </main>
+    )
   }
 
   if (!matches.length) {
@@ -519,47 +596,72 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
             <button
               className={planScope === item.key ? 'active' : ''}
               key={item.key}
-              onClick={() => refreshPlansForScope(item.key)}
+              onClick={() => activatePlanScope(item.key)}
               type="button"
             >
               {item.label}
             </button>
           ))}
-          <small>{getPlanScopeLabelV5(planScope)} · {scopedMatches.length} 场</small>
+          <small>
+            {isPlanInitializing
+              ? `${getPlanScopeLabelV5(planScope)}计划生成中...`
+              : scopedMatches.length
+                ? `${getPlanScopeLabelV5(planScope)} · ${scopedMatches.length} 场`
+                : `${getPlanScopeLabelV5(planScope)}暂无比赛`}
+          </small>
         </div>
 
         <div className="internal-v4-actions" aria-label="V5 内部操作">
-          <button onClick={handleAutoScan} type="button">
+          <button disabled={isPlanInitializing} onClick={handleAutoScan} type="button">
             <Activity size={16} />
             扫描赛果并复盘
           </button>
-          <button onClick={handleRefreshPlans} type="button">
+          <button disabled={isPlanInitializing} onClick={handleRefreshPlans} type="button">
             <RefreshCw size={16} />
             刷新当前范围计划
           </button>
-          <button onClick={handleExport} type="button">
+          <button disabled={isPlanInitializing} onClick={handleExport} type="button">
             <Download size={16} />
-            导出 JSON
+            导出账本 JSON
           </button>
-          <button onClick={handleImport} type="button">
+          <button disabled={isPlanInitializing} onClick={handleImport} type="button">
             <Upload size={16} />
             导入 JSON
           </button>
-          <button onClick={handleClearPending} type="button">
+          <button disabled={isPlanInitializing} onClick={handleClearPending} type="button">
             <Trash2 size={16} />
             清空未结算
           </button>
-          <button onClick={handleClearLegacy} type="button">
+          <button disabled={isPlanInitializing} onClick={handleClearLegacy} type="button">
             <Trash2 size={16} />
             清空旧 V4
           </button>
-          <button className="danger" onClick={handleReset} type="button">
+          <button className="danger" disabled={isPlanInitializing} onClick={handleReset} type="button">
             <RotateCcw size={16} />
             reset
           </button>
         </div>
       </header>
 
+      {isPlanInitializing ? (
+        <section className="internal-v4-loading" aria-live="polite">
+          <div>
+            <span>Plan Sync</span>
+            <h2>未来24小时计划生成中...</h2>
+          </div>
+          <div className="internal-v4-loading-steps">
+            {PLAN_LOADING_STEPS.map((step) => (
+              <p key={step}>
+                <Check size={14} />
+                <span>{step}</span>
+              </p>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {!isPlanInitializing ? (
+        <>
       <section className="internal-v4-funds" aria-label="V5 顶部资金统计">
         <Metric label="初始资金" value={summary.initialBankroll} />
         <Metric label="当前资金" value={summary.currentBankroll} />
@@ -682,6 +784,11 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
                 value={formatOverUnderDisplay(selectedAnalysis?.predictions?.overUnder)}
               />
             </div>
+            {selectedAnalysis?.consistency?.scoreStrategyNotice ? (
+              <p className="internal-v4-strategy-note">
+                {selectedAnalysis.consistency.scoreStrategyNotice}
+              </p>
+            ) : null}
           </section>
 
           <section className="internal-v4-section" aria-label="四大信心指数">
@@ -1004,6 +1111,8 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
           当前范围已结算 {summary.settledCount}。
         </small>
       </footer>
+        </>
+      ) : null}
     </main>
   )
 }

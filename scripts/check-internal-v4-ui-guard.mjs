@@ -39,6 +39,12 @@ for (const text of [
   '未来24小时',
   '北京时间今天',
   '全赛程预览',
+  '未来24小时计划生成中...',
+  '正在读取比赛数据',
+  '正在生成未来24小时计划',
+  '正在读取账本',
+  '正在同步赔率覆盖',
+  '计划生成完成',
   '当前比赛 V5 内部判断',
   '四大信心指数',
   '12 维评分',
@@ -64,8 +70,12 @@ for (const text of [
   '结算来源',
   '最近复盘记录',
   'ledger JSON',
+  '导出账本 JSON',
+  '确认重置 V5 账本？这会清空资金记录、复盘记录和赔率覆盖。',
   'worldcup_internal_v5_ledger',
   'worldcup_internal_v5_odds_overrides',
+  'internal-v5-export',
+  'scoreStrategyNotice',
   'reset',
 ]) {
   assert.ok(combinedInternalSource.includes(text), `internal UI must include: ${text}`)
@@ -73,6 +83,10 @@ for (const text of [
 
 for (const text of ['模型主方向概率', '剔除', '不进主推池', '稳赚', '必中', '保证命中', '内幕']) {
   assert.equal(combinedInternalSource.includes(text), false, `internal source must not include: ${text}`)
+}
+
+for (const text of ['未来24小时 · 0 场', '未来24小时·0场']) {
+  assert.equal(combinedInternalSource.includes(text), false, `loading must not show misleading zero copy: ${text}`)
 }
 
 for (const text of ['总进球：2-3球分界', '2-3球分界', '0-2球分界']) {
@@ -86,6 +100,20 @@ assert.match(typeSource, /LEGACY_INTERNAL_V4_LEDGER_KEY\s*=\s*['"]worldcup_inter
 assert.match(ledgerSource, /currentBankroll\s*=\s*roundTo\(initialBankroll \+ settledProfit/)
 assert.match(ledgerSource, /pendingExposure\s*=\s*roundTo\(/)
 assert.match(ledgerSource, /availableBankroll\s*=\s*roundTo\(currentBankroll - pendingExposure/)
+assert.match(componentSource, /onClick=\{\(\) => activatePlanScope\(item\.key\)\}/)
+assert.doesNotMatch(componentSource, /onClick=\{\(\) => refreshPlansForScope\(item\.key\)\}/)
+assert.match(componentSource, /isPlanInitializing/)
+assert.match(componentSource, /startupSyncComplete/)
+assert.match(componentSource, /window\.confirm\(RESET_CONFIRM_MESSAGE\)/)
+assert.match(componentSource, /clearOddsOverridesV5\(\)/)
+assert.match(componentSource, /exportLedgerJson\(ledger,\s*\{/)
+assert.match(componentSource, /envelope:\s*true/)
+assert.match(ledgerSource, /version:\s*['"]internal-v5-export['"]/)
+assert.match(ledgerSource, /oddsOverrides:/)
+assert.match(ledgerSource, /parseInternalV5ImportJson/)
+assert.match(ledgerSource, /getPlanningLedgerBaselineForScope/)
+assert.match(oddsOverrideSource, /clearOddsOverridesV5/)
+assert.match(engineSource, /getScoreStrategyNotice/)
 
 const changedFiles = execFileSync('git', ['diff', '--name-only'], {
   encoding: 'utf8',

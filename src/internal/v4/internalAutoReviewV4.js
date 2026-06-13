@@ -1,6 +1,7 @@
 import { buildInternalV4Analysis } from './internalEngineV4.js'
 import { buildInternalStakePlan } from './internalStakeV4.js'
 import {
+  getPlanningLedgerBaselineForScope,
   getLedgerSummaryForMatches,
   settleRecord,
   upsertPlannedRecord,
@@ -24,6 +25,13 @@ export function autoReviewFinishedMatches(matches = [], ledger, options = {}) {
   const results = []
   const shouldCreatePlans = options.createPlans !== false
   const planScope = options.planScope ?? 'future_24h'
+  const forceRefresh = options.forceRefresh === true
+  const planningBaseline = getPlanningLedgerBaselineForScope(ledger, planScope)
+  const planningSummary = getLedgerSummaryForMatches(planningBaseline, matches, {
+    emptyMatchesMeansEmpty: true,
+    planScope,
+    useGlobalBankroll: true,
+  })
   const counts = {
     scanned: matches.length,
     planned: 0,
@@ -46,15 +54,10 @@ export function autoReviewFinishedMatches(matches = [], ledger, options = {}) {
     const scoreProviderResult = getInternalScoreProviderV5(match, { now })
 
     if (!isSettled(existing) && shouldCreatePlans) {
-      const scopedLedger = getLedgerSummaryForMatches(workingLedger, matches, {
-        emptyMatchesMeansEmpty: true,
-        planScope,
-        useGlobalBankroll: true,
-      })
       const analysis = buildInternalV4Analysis(match, {
-        bankroll: scopedLedger.currentBankroll,
+        bankroll: planningSummary.currentBankroll,
       })
-      const stakePlan = buildInternalStakePlan(analysis, scopedLedger, {
+      const stakePlan = buildInternalStakePlan(analysis, planningSummary, {
         ...(options.stakeOptions ?? {}),
         match,
         oddsOverrides: options.oddsOverrides ?? options.stakeOptions?.oddsOverrides ?? {},
@@ -62,6 +65,7 @@ export function autoReviewFinishedMatches(matches = [], ledger, options = {}) {
       const upsertResult = upsertPlannedRecord(workingLedger, match, analysis, stakePlan, {
         now,
         planScope,
+        forceRefresh,
         scoreProviderSnapshot: scoreProviderResult,
       })
       workingLedger = upsertResult.ledger

@@ -51,6 +51,13 @@ export function saveOddsOverridesV5(overrides) {
   return normalized
 }
 
+export function clearOddsOverridesV5() {
+  if (hasStorage()) {
+    window.localStorage.removeItem(INTERNAL_V5_ODDS_OVERRIDE_KEY)
+  }
+  return {}
+}
+
 export function setOddsOverrideV5(overrides, matchKey, itemKey, odds) {
   const normalizedOdds = toFiniteNumber(odds, NaN)
   if (!matchKey || !itemKey || !Number.isFinite(normalizedOdds) || normalizedOdds <= 1) {

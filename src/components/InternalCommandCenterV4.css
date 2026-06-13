@@ -112,9 +112,69 @@
   border-color: rgba(74, 222, 128, 0.7);
 }
 
+.internal-v4-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .internal-v4-actions button.danger {
   border-color: rgba(248, 113, 113, 0.55);
   color: #fecaca;
+}
+
+.internal-v4-loading {
+  background: rgba(18, 21, 20, 0.9);
+  border: 1px solid rgba(94, 224, 138, 0.2);
+  border-radius: 8px;
+  display: grid;
+  gap: 14px;
+  margin: 0 auto 18px;
+  max-width: 1440px;
+  padding: 18px;
+}
+
+.internal-v4-loading span {
+  color: #94c8b3;
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.internal-v4-loading h1,
+.internal-v4-loading h2 {
+  font-size: 24px;
+  line-height: 1.2;
+  margin: 4px 0 0;
+}
+
+.internal-v4-loading-steps {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(5, minmax(150px, 1fr));
+}
+
+.internal-v4-loading-steps p {
+  align-items: center;
+  background: #171b1a;
+  border: 1px solid rgba(176, 191, 180, 0.16);
+  border-radius: 8px;
+  display: flex;
+  gap: 8px;
+  margin: 0;
+  min-height: 42px;
+  padding: 10px;
+}
+
+.internal-v4-loading-steps svg {
+  color: #7ddf9a;
+  flex: 0 0 auto;
+}
+
+.internal-v4-loading-steps span {
+  color: #d7efe0;
+  font-size: 13px;
+  text-transform: none;
 }
 
 .internal-v4-funds {
@@ -435,6 +495,16 @@
   font-style: normal;
 }
 
+.internal-v4-strategy-note {
+  background: #1d231f;
+  border: 1px solid rgba(94, 224, 138, 0.22);
+  border-radius: 8px;
+  color: #d7efe0;
+  line-height: 1.45;
+  margin: 0;
+  padding: 10px;
+}
+
 .internal-v4-stake-grid {
   display: grid;
   gap: 10px;
@@ -681,6 +751,10 @@
   .internal-v4-stake-grid {
     grid-template-columns: repeat(2, minmax(150px, 1fr));
   }
+
+  .internal-v4-loading-steps {
+    grid-template-columns: repeat(3, minmax(140px, 1fr));
+  }
 }
 
 @media (max-width: 860px) {
@@ -718,6 +792,10 @@
   .internal-v4-check-list,
   .internal-v4-score-provider,
   .internal-v4-settlement-result {
+    grid-template-columns: 1fr;
+  }
+
+  .internal-v4-loading-steps {
     grid-template-columns: 1fr;
   }
 

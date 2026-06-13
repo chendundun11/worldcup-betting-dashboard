@@ -202,11 +202,19 @@ function getMainPick(facts, dimensions, gameType) {
 }
 
 function getScorePair(mainPick, gameType) {
-  const homeSide = mainPick === '主队胜' || mainPick === '主队不败'
-  const awaySide = mainPick === '客队胜' || mainPick === '客队不败'
+  const homeWin = mainPick === '主队胜'
+  const awayWin = mainPick === '客队胜'
+  const homeSide = homeWin || mainPick === '主队不败'
+  const awaySide = awayWin || mainPick === '客队不败'
+
+  if (mainPick === '平局') {
+    if (gameType === '对攻大球局') return { primaryScore: '1-1', secondaryScore: '2-1' }
+    return { primaryScore: '1-1', secondaryScore: '0-0' }
+  }
 
   if (gameType === '平局保护局') {
-    if (mainPick === '平局') return { primaryScore: '1-1', secondaryScore: '0-0' }
+    if (homeWin) return { primaryScore: '2-1', secondaryScore: '1-1' }
+    if (awayWin) return { primaryScore: '1-2', secondaryScore: '1-1' }
     if (homeSide) return { primaryScore: '1-1', secondaryScore: '2-1' }
     if (awaySide) return { primaryScore: '1-1', secondaryScore: '1-2' }
     return { primaryScore: '1-1', secondaryScore: '0-0' }
@@ -225,8 +233,10 @@ function getScorePair(mainPick, gameType) {
   }
 
   if (gameType === '信息不足局') {
-    if (homeSide) return { primaryScore: '1-1', secondaryScore: '1-0' }
-    if (awaySide) return { primaryScore: '1-1', secondaryScore: '0-1' }
+    if (homeWin) return { primaryScore: '1-0', secondaryScore: '1-1' }
+    if (awayWin) return { primaryScore: '0-1', secondaryScore: '1-1' }
+    if (homeSide) return { primaryScore: '1-0', secondaryScore: '1-1' }
+    if (awaySide) return { primaryScore: '0-1', secondaryScore: '1-1' }
     return { primaryScore: '1-1', secondaryScore: '0-0' }
   }
 
@@ -237,8 +247,10 @@ function getScorePair(mainPick, gameType) {
   }
 
   if (gameType === '强队过热局' || gameType === '冷门波动局' || gameType === '方向冲突局') {
-    if (homeSide) return { primaryScore: '1-1', secondaryScore: '1-0' }
-    if (awaySide) return { primaryScore: '1-1', secondaryScore: '0-1' }
+    if (homeWin) return { primaryScore: '1-0', secondaryScore: '1-1' }
+    if (awayWin) return { primaryScore: '0-1', secondaryScore: '1-1' }
+    if (homeSide) return { primaryScore: '1-0', secondaryScore: '1-1' }
+    if (awaySide) return { primaryScore: '0-1', secondaryScore: '1-1' }
     return { primaryScore: '1-1', secondaryScore: '0-0' }
   }
 
@@ -265,6 +277,20 @@ function scoreMatchesMainPick(scoreText, mainPick) {
 
 function isDrawScore(scoreText) {
   return getScoreOutcomeV4(scoreText) === 'draw'
+}
+
+function getScoreStrategyNotice(gameType, mainPick, predictions) {
+  const primaryOutcome = getScoreOutcomeV4(predictions.primaryScore)
+  if (mainPick === '主队不败' && primaryOutcome === 'draw' && gameType === '平局保护局') {
+    return '平局保护主推，方向为主队不败。'
+  }
+  if (mainPick === '客队不败' && primaryOutcome === 'draw' && gameType === '平局保护局') {
+    return '平局保护主推，方向为客队不败。'
+  }
+  if (!scoreMatchesMainPick(predictions.primaryScore, mainPick)) {
+    return `主方向与波胆存在保护差异：主方向看 ${mainPick}，波胆用于防 ${predictions.primaryScore}。`
+  }
+  return ''
 }
 
 function buildConsistency(gameType, mainPick, predictions) {
@@ -325,6 +351,7 @@ function buildConsistency(gameType, mainPick, predictions) {
       severity === 'none' ? 1 : severity === 'light' ? 0.75 : severity === 'medium' ? 0.5 : 0.3,
     checks,
     conflictReasons: checks.filter((check) => !check.passed).map((check) => check.label),
+    scoreStrategyNotice: getScoreStrategyNotice(gameType, mainPick, predictions),
   }
 }
 

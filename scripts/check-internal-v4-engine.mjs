@@ -209,6 +209,34 @@ function assertScoreLinkage(analysis) {
   assert.equal(overUnder, expectedOverUnder)
 }
 
+function assertPrimaryScoreDirection(analysis) {
+  const { gameType } = analysis.classification
+  const { mainPick } = analysis.decision
+  const { primaryScore, secondaryScore } = analysis.predictions
+  const primaryOutcome = getScoreOutcomeV4(primaryScore)
+  const secondaryOutcome = getScoreOutcomeV4(secondaryScore)
+
+  if (mainPick === '主队胜') {
+    assert.equal(primaryOutcome, 'home', '主队胜 must use a home-win primary score')
+    assert.notEqual(secondaryOutcome, 'away', '主队胜 secondary score must not be away-win')
+  }
+  if (mainPick === '客队胜') {
+    assert.equal(primaryOutcome, 'away', '客队胜 must use an away-win primary score')
+    assert.notEqual(secondaryOutcome, 'home', '客队胜 secondary score must not be home-win')
+  }
+  if (mainPick === '平局') {
+    assert.equal(primaryOutcome, 'draw', '平局 must use a draw primary score')
+    assert.equal(getScoreTotalGoalsV4(primaryScore) <= 2, true, '平局 primary score must not be high')
+    assert.equal(getScoreTotalGoalsV4(secondaryScore) <= 3, true, '平局 secondary score must not be big')
+  }
+  if (mainPick === '主队不败' && gameType !== '平局保护局') {
+    assert.equal(primaryOutcome, 'home', '主队不败 non-protection must prefer home-win primary score')
+  }
+  if (mainPick === '客队不败' && gameType !== '平局保护局') {
+    assert.equal(primaryOutcome, 'away', '客队不败 non-protection must prefer away-win primary score')
+  }
+}
+
 function assertConfidenceFormula(analysis) {
   const confidence = analysis.confidence
   const expected = Math.round(
@@ -287,6 +315,7 @@ for (const sample of samples) {
   }
 
   assertScoreLinkage(analysis)
+  assertPrimaryScoreDirection(analysis)
   assertConfidenceFormula(analysis)
   assertScoreDistribution(analysis)
   assert.equal(analysis.predictions.totalGoalsText.includes('分界'), false)
@@ -322,6 +351,7 @@ const confidenceDistribution = new Map()
 
 for (const analysis of datasetAnalyses) {
   assertScoreDistribution(analysis)
+  assertPrimaryScoreDirection(analysis)
   assert.equal(analysis.predictions.totalGoalsText.includes('分界'), false)
   confidenceDistribution.set(
     analysis.confidence.internalConfidence,
