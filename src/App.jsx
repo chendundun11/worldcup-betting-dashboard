@@ -61,6 +61,7 @@ import {
   formatSettlementHit,
   settlePredictionSnapshot,
 } from './services/predictionSettlement.js'
+import InternalV3Panel from './components/InternalV3Panel.jsx'
 import {
   applyFinishedMatchAdjustments,
   applyFinishedMatchAdjustmentsBefore,
@@ -4322,6 +4323,10 @@ function App() {
           ))}
         </div>
       </section>
+
+      {import.meta.env.DEV ? (
+        <InternalV3Panel activeMatch={activeMatch} matches={normalizedMatches} />
+      ) : null}
 
       {isPosterModalOpen ? (
         <div
