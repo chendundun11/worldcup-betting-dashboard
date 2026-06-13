@@ -18,7 +18,7 @@ import {
   clearPendingRecords,
   exportLedgerJson,
   getInternalLedgerV4,
-  getLedgerSummary,
+  getLedgerSummaryForMatches,
   importLedgerJson,
   resetInternalLedgerV4,
   saveInternalLedgerV4,
@@ -77,6 +77,12 @@ function getStatusLabel(status) {
   return RECORD_STATUS_LABELS_V4[status] ?? '未计划'
 }
 
+function formatOverUnderDisplay(value) {
+  if (value === '大2.5') return '大 2.5'
+  if (value === '小2.5') return '小 2.5'
+  return value ?? '-'
+}
+
 function isSettledStatus(status) {
   return status === 'settled_auto' || status === 'settled_manual'
 }
@@ -85,8 +91,7 @@ function buildRow(match, record, ledger) {
   const analysis =
     record?.analysisSnapshot ??
     buildInternalV4Analysis(match, { bankroll: ledger?.currentBankroll })
-  const stakePlan =
-    record?.stakePlanSnapshot ?? buildInternalStakePlan(analysis, ledger)
+  const stakePlan = record?.stakePlanSnapshot ?? buildInternalStakePlan(analysis, ledger)
   const trustedScore = getTrustedActualScoreV4(match)
 
   return {
@@ -149,15 +154,15 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
     )
   }, [matches])
 
-  const summary = useMemo(() => getLedgerSummary(ledger), [ledger])
+  const summary = useMemo(() => getLedgerSummaryForMatches(ledger, matches), [ledger, matches])
   const recordsById = useMemo(
     () => new Map((ledger.records ?? []).map((record) => [record.id, record])),
     [ledger.records],
   )
   const rows = useMemo(
     () =>
-      matches.map((match) => buildRow(match, recordsById.get(getRecordIdV4(match)), ledger)),
-    [ledger, matches, recordsById],
+      matches.map((match) => buildRow(match, recordsById.get(getRecordIdV4(match)), summary)),
+    [summary, matches, recordsById],
   )
   const filteredRows = useMemo(
     () => rows.filter((row) => filterRow(row, filter)),
@@ -169,7 +174,10 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
   const selectedAnalysis = selectedRow?.analysis ?? null
   const selectedStakePlan = selectedRow?.stakePlan ?? null
   const triggeredRules = selectedAnalysis?.rules?.triggered ?? []
-  const report = useMemo(() => buildInternalV4Report(ledger, scanResult), [ledger, scanResult])
+  const report = useMemo(
+    () => buildInternalV4Report(ledger, scanResult, matches),
+    [ledger, scanResult, matches],
+  )
 
   function persistLedger(nextLedger, nextNotice) {
     const saved = saveInternalLedgerV4(nextLedger)
@@ -192,10 +200,11 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
     const counts = { planned: 0, updated: 0, kept: 0 }
 
     for (const match of matches) {
+      const scopedLedger = getLedgerSummaryForMatches(workingLedger, matches)
       const analysis = buildInternalV4Analysis(match, {
-        bankroll: workingLedger.currentBankroll,
+        bankroll: scopedLedger.currentBankroll,
       })
-      const stakePlan = buildInternalStakePlan(analysis, workingLedger)
+      const stakePlan = buildInternalStakePlan(analysis, scopedLedger)
       const result = upsertPlannedRecord(workingLedger, match, analysis, stakePlan)
       workingLedger = result.ledger
       if (result.action === 'planned') counts.planned += 1
@@ -214,9 +223,9 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
     if (selectedRow.record) return { ledger, recordId: selectedRow.recordId }
 
     const analysis = buildInternalV4Analysis(selectedRow.match, {
-      bankroll: ledger.currentBankroll,
+      bankroll: summary.currentBankroll,
     })
-    const stakePlan = buildInternalStakePlan(analysis, ledger)
+    const stakePlan = buildInternalStakePlan(analysis, summary)
     const result = upsertPlannedRecord(ledger, selectedRow.match, analysis, stakePlan)
     return { ledger: result.ledger, recordId: selectedRow.recordId }
   }
@@ -348,7 +357,7 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
         <Metric label="可用资金" tone={getTone(summary.availableBankroll)} value={summary.availableBankroll} />
         <Metric label="已结算总盈亏" tone={getTone(summary.settledProfit)} value={formatAmount(summary.settledProfit)} />
         <Metric label="未结算暴露" value={summary.pendingExposure} />
-        <Metric label="今日/全部计划投入" value={summary.totalPlannedStake} />
+        <Metric label="全部计划投入" value={summary.totalPlannedStake} />
         <Metric label="已结算比赛" value={summary.settledCount} />
         <Metric label="待结算比赛" value={summary.pendingCount} />
         <Metric label="待赛比赛" value={summary.upcomingCount} />
@@ -451,7 +460,10 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
               <Metric label="主推比分" value={selectedAnalysis?.predictions?.primaryScore ?? '-'} />
               <Metric label="备用比分" value={selectedAnalysis?.predictions?.secondaryScore ?? '-'} />
               <Metric label="总进球" value={selectedAnalysis?.predictions?.totalGoalsText ?? '-'} />
-              <Metric label="大小球" value={selectedAnalysis?.predictions?.overUnder ?? '-'} />
+              <Metric
+                label="大小球"
+                value={formatOverUnderDisplay(selectedAnalysis?.predictions?.overUnder)}
+              />
             </div>
           </section>
 
@@ -480,6 +492,25 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
                 <p key={key}>
                   <span>{SCORE_DIMENSION_LABELS_V4[key]}</span>
                   <strong>{selectedAnalysis?.score?.dimensions?.[key] ?? '-'}</strong>
+                  <small>
+                    {selectedAnalysis?.score?.dimensionAudit?.items?.[key]?.state ?? '待评估'}
+                  </small>
+                </p>
+              ))}
+            </div>
+          </section>
+
+          <section className="internal-v4-section" aria-label="规则解释链条">
+            <div className="internal-v4-section-title">
+              <ShieldAlert size={18} />
+              <h3>规则解释链条</h3>
+              <span>方向 / 比分 / 总进球 / 大小球 / 资金</span>
+            </div>
+            <div className="internal-v4-explanation-list">
+              {(selectedAnalysis?.explanations ?? []).map((item) => (
+                <p key={item.key}>
+                  <strong>{item.label}</strong>
+                  <span>{item.text}</span>
                 </p>
               ))}
             </div>
@@ -540,6 +571,13 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
               <Metric label="回撤因子" value={selectedStakePlan?.drawdownFactor ?? '-'} />
               <Metric label="暴露因子" value={selectedStakePlan?.exposureFactor ?? '-'} />
               <Metric label="一致性因子" value={selectedStakePlan?.consistencyFactor ?? '-'} />
+            </div>
+            <div className="internal-v4-formula-explain">
+              <strong>金额公式</strong>
+              <span>{selectedStakePlan?.formulaExplanation?.summary ?? '-'}</span>
+              {selectedStakePlan?.formulaExplanation?.compressionNote ? (
+                <em>{selectedStakePlan.formulaExplanation.compressionNote}</em>
+              ) : null}
             </div>
           </section>
 

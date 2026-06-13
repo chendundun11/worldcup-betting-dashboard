@@ -1,7 +1,7 @@
-import { getLedgerSummary } from './internalLedgerV4.js'
+import { getLedgerSummaryForMatches } from './internalLedgerV4.js'
 
-export function buildInternalV4Report(ledger, scanResult = null) {
-  const summary = getLedgerSummary(ledger)
+export function buildInternalV4Report(ledger, scanResult = null, matches = []) {
+  const summary = getLedgerSummaryForMatches(ledger, matches)
   return {
     generatedAt: new Date().toISOString(),
     funds: {

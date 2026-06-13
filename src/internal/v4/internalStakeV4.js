@@ -229,11 +229,34 @@ function getItemReason(analysis, key, amount, formula) {
   return `大小球信心 ${confidence}，按动态比例分配。`
 }
 
+function buildFormulaExplanation(analysis, formula, totalStake) {
+  const grade = analysis?.decision?.grade ?? 'D'
+  const baseRateText = `${roundTo(formula.baseRate * 100, 1)}%`
+  const exposureLabel = formula.exposureFactor < 1 ? '暴露压缩' : '暴露'
+  const compressionNote =
+    formula.exposureFactor < 1
+      ? '未结算暴露较高，后续投入已压缩。'
+      : ''
+
+  return {
+    grade,
+    baseRateText,
+    confidenceFactor: formula.confidenceFactor,
+    drawdownFactor: formula.drawdownFactor,
+    exposureFactor: formula.exposureFactor,
+    consistencyFactor: formula.consistencyFactor,
+    totalStake,
+    summary: `${grade}档基础 ${baseRateText} × 信心 ${formula.confidenceFactor} × 回撤 ${formula.drawdownFactor} × ${exposureLabel} ${formula.exposureFactor} × 一致性 ${formula.consistencyFactor} = 本场投入 ${totalStake}`,
+    compressionNote,
+  }
+}
+
 export function buildInternalStakePlan(v4Analysis, ledger, options = {}) {
   const formula = getTotalStake(v4Analysis, ledger)
   const odds = getOdds(options)
   const { amounts, split } = allocateAmounts(formula.totalStake, v4Analysis)
   const totalStake = STAKE_ITEM_KEYS_V4.reduce((sum, key) => sum + amounts[key], 0)
+  const formulaExplanation = buildFormulaExplanation(v4Analysis, formula, totalStake)
   const items = STAKE_ITEM_KEYS_V4.map((key) => {
     const stake = amounts[key]
     const itemOdds = odds[key]
@@ -267,6 +290,7 @@ export function buildInternalStakePlan(v4Analysis, ledger, options = {}) {
     split,
     dominantConfidence: getDominantConfidence(v4Analysis),
     items,
+    formulaExplanation,
     formula,
     hardRules: {
       everyMatchHasAmount: formula.currentBankroll <= 0 ? totalStake === 0 : totalStake > 0,

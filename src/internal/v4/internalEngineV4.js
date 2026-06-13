@@ -328,6 +328,69 @@ function buildConsistency(gameType, mainPick, predictions) {
   }
 }
 
+function buildDimensionAudit(roundedDimensions) {
+  const items = Object.fromEntries(
+    SCORE_DIMENSION_KEYS_V4.map((key) => {
+      const value = roundedDimensions[key]
+      return [
+        key,
+        {
+          value,
+          label: SCORE_DIMENSION_LABELS_V4[key],
+          state: value === 50 ? '数据中性' : '参与判断',
+        },
+      ]
+    }),
+  )
+  const neutralDimensionCount = SCORE_DIMENSION_KEYS_V4.filter(
+    (key) => roundedDimensions[key] === 50,
+  ).length
+
+  return {
+    items,
+    neutralDimensionCount,
+    nonDefaultDimensionCount: SCORE_DIMENSION_KEYS_V4.length - neutralDimensionCount,
+  }
+}
+
+function buildExplanationChain(facts, gameType, mainPick, predictions, confidence, grade) {
+  const directionSide = facts.directionEdge >= 0 ? '主队侧' : '客队侧'
+  const overUnderReason =
+    predictions.overUnder === '2.5球分界'
+      ? '大小球差值接近中线，只保留观察金额。'
+      : predictions.overUnder === '大2.5'
+        ? '两个比分路径均落在 3 球以上。'
+        : '两个比分路径均落在 0-2 球区间。'
+
+  return [
+    {
+      key: 'direction',
+      label: '方向判断',
+      text: `${directionSide}内部方向差 ${roundTo(facts.directionEdge, 1)}，主方向为 ${mainPick}，方向强度来自实力、状态和市场热度综合。`,
+    },
+    {
+      key: 'score',
+      label: '比分判断',
+      text: `${gameType} 输出 ${predictions.primaryScore} / ${predictions.secondaryScore}，避免重复比分并覆盖保护路径。`,
+    },
+    {
+      key: 'totalGoals',
+      label: '总进球判断',
+      text: `总进球区间为 ${predictions.totalGoalsText}，节奏评分 ${Math.round(facts.attackTempo)} 与比分总进球共同决定。`,
+    },
+    {
+      key: 'overUnder',
+      label: '大小球判断',
+      text: `大小球为 ${predictions.overUnder}。${overUnderReason}`,
+    },
+    {
+      key: 'funding',
+      label: '资金判断',
+      text: `${grade}档来自内部总信心 ${confidence.internalConfidence}，后续由信心、回撤、暴露和一致性系数压缩或放大。`,
+    },
+  ]
+}
+
 export function buildInternalV4Analysis(match, context = {}) {
   const evaluated = evaluateInternalRulesV4(match)
   const { facts, groups, allRules, triggered } = evaluated
@@ -349,13 +412,25 @@ export function buildInternalV4Analysis(match, context = {}) {
         ? '3球以上'
         : overUnder === '小2.5'
           ? '0-2球'
-          : '2-3球分界',
+          : '2-3球',
     overUnderText: overUnder,
     overUnderValue: 2.5,
     overUnder,
   }
   const consistency = buildConsistency(gameType, mainPick, predictions)
   const normalizedMatch = normalizeMatchForV4(match)
+  const roundedDimensions = Object.fromEntries(
+    SCORE_DIMENSION_KEYS_V4.map((key) => [key, Math.round(dimensions[key])]),
+  )
+  const dimensionAudit = buildDimensionAudit(roundedDimensions)
+  const explanations = buildExplanationChain(
+    facts,
+    gameType,
+    mainPick,
+    predictions,
+    confidence,
+    grade,
+  )
 
   return {
     version: INTERNAL_V4_VERSION,
@@ -398,10 +473,9 @@ export function buildInternalV4Analysis(match, context = {}) {
       ruleScoreMap: Object.fromEntries(triggered.map((rule) => [rule.id, rule.weight])),
     },
     score: {
-      dimensions: Object.fromEntries(
-        SCORE_DIMENSION_KEYS_V4.map((key) => [key, Math.round(dimensions[key])]),
-      ),
+      dimensions: roundedDimensions,
       dimensionLabels: SCORE_DIMENSION_LABELS_V4,
+      dimensionAudit,
       finalScore: confidence.internalConfidence,
       grade,
     },
@@ -436,6 +510,7 @@ export function buildInternalV4Analysis(match, context = {}) {
       fundingTier: grade,
     },
     consistency,
+    explanations,
     reasons: {
       headline: `${gameType} · ${directionStrength} · ${grade}档`,
       hardReasons: triggered

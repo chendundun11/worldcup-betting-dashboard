@@ -28,6 +28,45 @@ function isSettledStatus(status) {
   return status === RECORD_STATUS_V4.settledAuto || status === RECORD_STATUS_V4.settledManual
 }
 
+export function getInternalRecordMatchKeyV4(record) {
+  const rawKey =
+    record?.matchId ??
+    record?.analysisSnapshot?.match?.id ??
+    record?.stakePlanSnapshot?.matchId ??
+    record?.id
+  return String(rawKey ?? '').replace(/^v5-/, '')
+}
+
+function getRecordSortTime(record) {
+  const time = Date.parse(record?.settledAt ?? record?.plannedAt ?? record?.updatedAt ?? '')
+  return Number.isFinite(time) ? time : 0
+}
+
+function chooseRecordForMatch(existingRecord, nextRecord) {
+  if (!existingRecord) return nextRecord
+
+  const existingSettled = isSettledStatus(existingRecord.status)
+  const nextSettled = isSettledStatus(nextRecord.status)
+  if (nextSettled && !existingSettled) return nextRecord
+  if (existingSettled && !nextSettled) return existingRecord
+
+  return getRecordSortTime(nextRecord) >= getRecordSortTime(existingRecord)
+    ? nextRecord
+    : existingRecord
+}
+
+function dedupeRecordsByMatch(records) {
+  const recordsByMatch = new Map()
+
+  for (const record of records) {
+    const matchKey = getInternalRecordMatchKeyV4(record)
+    if (!matchKey) continue
+    recordsByMatch.set(matchKey, chooseRecordForMatch(recordsByMatch.get(matchKey), record))
+  }
+
+  return Array.from(recordsByMatch.values())
+}
+
 function sortBySettledAt(records) {
   return records
     .slice()
@@ -58,7 +97,9 @@ function normalizeRecord(record) {
 
 function normalizeLedger(raw) {
   const initialBankroll = toFiniteNumber(raw?.initialBankroll, INTERNAL_V4_INITIAL_BANKROLL)
-  const records = Array.isArray(raw?.records) ? raw.records.map(normalizeRecord) : []
+  const records = Array.isArray(raw?.records)
+    ? dedupeRecordsByMatch(raw.records.map(normalizeRecord))
+    : []
   const settledRecords = records.filter((record) => isSettledStatus(record.status))
   const unsettledRecords = records.filter((record) => !isSettledStatus(record.status))
   const settledProfit = roundTo(
@@ -324,6 +365,91 @@ export function getLedgerSummary(ledger) {
     totalProfit: normalizedLedger.settledProfit,
     totalStaked: normalizedLedger.totalPlannedStake,
     drawdown: normalizedLedger.maxDrawdown,
+    pendingRecords,
+    settledRecords,
+    lastRecords: settledRecords
+      .slice()
+      .sort((a, b) => String(b.settledAt).localeCompare(String(a.settledAt)))
+      .slice(0, 20),
+  }
+}
+
+export function getLedgerSummaryForMatches(ledger, matches = []) {
+  const normalizedLedger = normalizeLedger(ledger)
+  const matchKeys = new Set(matches.map((match) => getMatchIdV4(match)))
+  const totalMatches = matchKeys.size
+  const scopedRecords = totalMatches
+    ? normalizedLedger.records.filter((record) =>
+        matchKeys.has(getInternalRecordMatchKeyV4(record)),
+      )
+    : normalizedLedger.records
+  const dedupedRecords = dedupeRecordsByMatch(scopedRecords)
+  const settledRecords = dedupedRecords.filter((record) => isSettledStatus(record.status))
+  const pendingRecords = dedupedRecords.filter((record) => !isSettledStatus(record.status))
+  const settledProfit = roundTo(
+    settledRecords.reduce((sum, record) => sum + toFiniteNumber(record.profit, 0), 0),
+    2,
+  )
+  const currentBankroll = roundTo(normalizedLedger.initialBankroll + settledProfit, 2)
+  const pendingExposure = roundTo(
+    pendingRecords.reduce((sum, record) => sum + toFiniteNumber(record.totalStake, 0), 0),
+    2,
+  )
+  const totalPlannedStake = roundTo(
+    dedupedRecords.reduce((sum, record) => sum + toFiniteNumber(record.totalStake, 0), 0),
+    2,
+  )
+  const pendingCount = pendingRecords.filter(
+    (record) =>
+      record.status === RECORD_STATUS_V4.pendingSettlement ||
+      record.status === RECORD_STATUS_V4.liveOrUnknown,
+  ).length
+  const upcomingCount = pendingRecords.filter(
+    (record) => record.status === RECORD_STATUS_V4.upcoming,
+  ).length
+  const scopedTotal = totalMatches || dedupedRecords.length
+
+  return {
+    ...normalizedLedger,
+    currentBankroll,
+    settledProfit,
+    pendingExposure,
+    availableBankroll: roundTo(currentBankroll - pendingExposure, 2),
+    totalPlannedStake,
+    totalSettledStake: roundTo(
+      settledRecords.reduce((sum, record) => sum + toFiniteNumber(record.totalStake, 0), 0),
+      2,
+    ),
+    totalReturned: roundTo(
+      settledRecords.reduce((sum, record) => sum + toFiniteNumber(record.totalReturn, 0), 0),
+      2,
+    ),
+    maxDrawdown: calculateMaxDrawdown(normalizedLedger.initialBankroll, settledRecords),
+    totalMatches: scopedTotal,
+    plannedCount: Math.min(dedupedRecords.length, scopedTotal),
+    pendingCount: Math.min(pendingCount, scopedTotal),
+    upcomingCount: Math.min(upcomingCount, scopedTotal),
+    settledCount: Math.min(settledRecords.length, scopedTotal),
+    manualSettledCount: Math.min(
+      settledRecords.filter((record) => record.settlementSource === 'manual').length,
+      settledRecords.length,
+    ),
+    autoSettledCount: Math.min(
+      settledRecords.filter((record) => record.settlementSource === 'auto').length,
+      settledRecords.length,
+    ),
+    winCount: settledRecords.filter((record) => toFiniteNumber(record.profit, 0) > 0).length,
+    lossCount: settledRecords.filter((record) => toFiniteNumber(record.profit, 0) < 0).length,
+    records: dedupedRecords,
+    recordCount: dedupedRecords.length,
+    settledStake: roundTo(
+      settledRecords.reduce((sum, record) => sum + toFiniteNumber(record.totalStake, 0), 0),
+      2,
+    ),
+    pendingStake: pendingExposure,
+    totalProfit: settledProfit,
+    totalStaked: totalPlannedStake,
+    drawdown: calculateMaxDrawdown(normalizedLedger.initialBankroll, settledRecords),
     pendingRecords,
     settledRecords,
     lastRecords: settledRecords

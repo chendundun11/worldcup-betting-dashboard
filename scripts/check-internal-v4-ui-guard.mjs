@@ -5,9 +5,10 @@ import { readFileSync } from 'node:fs'
 const appSource = readFileSync('src/App.jsx', 'utf8')
 const componentSource = readFileSync('src/components/InternalCommandCenterV4.jsx', 'utf8')
 const cssSource = readFileSync('src/components/InternalCommandCenterV4.css', 'utf8')
+const engineSource = readFileSync('src/internal/v4/internalEngineV4.js', 'utf8')
 const typeSource = readFileSync('src/internal/v4/internalTypesV4.js', 'utf8')
 const ledgerSource = readFileSync('src/internal/v4/internalLedgerV4.js', 'utf8')
-const combinedInternalSource = `${componentSource}\n${cssSource}\n${typeSource}\n${ledgerSource}`
+const combinedInternalSource = `${componentSource}\n${cssSource}\n${engineSource}\n${typeSource}\n${ledgerSource}`
 
 assert.match(appSource, /InternalCommandCenterV4/)
 assert.match(appSource, /function isInternalV4RouteActive\(\)/)
@@ -25,7 +26,7 @@ for (const text of [
   '可用资金',
   '已结算总盈亏',
   '未结算暴露',
-  '今日/全部计划投入',
+  '全部计划投入',
   '已结算比赛',
   '待结算比赛',
   '待赛比赛',
@@ -33,11 +34,14 @@ for (const text of [
   '当前比赛 V5 内部判断',
   '四大信心指数',
   '12 维评分',
+  '数据中性',
+  '规则解释链条',
   '模拟资金分配',
   '主方向投入',
   '主推比分投入',
   '备用比分投入',
   '大小球投入',
+  '金额公式',
   '公式说明',
   '一致性检查',
   '复盘输入',
@@ -53,6 +57,10 @@ for (const text of [
 
 for (const text of ['模型主方向概率', '剔除', '不进主推池', '稳赚', '必中', '保证命中', '内幕']) {
   assert.equal(combinedInternalSource.includes(text), false, `internal source must not include: ${text}`)
+}
+
+for (const text of ['总进球：2-3球分界', '2-3球分界', '0-2球分界']) {
+  assert.equal(combinedInternalSource.includes(text), false, `total goals copy must not include: ${text}`)
 }
 
 assert.match(typeSource, /INTERNAL_V4_VERSION\s*=\s*['"]internal-v5['"]/)

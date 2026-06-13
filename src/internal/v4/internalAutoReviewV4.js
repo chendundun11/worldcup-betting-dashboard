@@ -1,6 +1,7 @@
 import { buildInternalV4Analysis } from './internalEngineV4.js'
 import { buildInternalStakePlan } from './internalStakeV4.js'
 import {
+  getLedgerSummaryForMatches,
   settleRecord,
   upsertPlannedRecord,
 } from './internalLedgerV4.js'
@@ -34,10 +35,11 @@ export function autoReviewFinishedMatches(matches = [], ledger, options = {}) {
     const existing = workingLedger?.records?.find((record) => record.id === recordId)
 
     if (!isSettled(existing)) {
+      const scopedLedger = getLedgerSummaryForMatches(workingLedger, matches)
       const analysis = buildInternalV4Analysis(match, {
-        bankroll: workingLedger?.currentBankroll,
+        bankroll: scopedLedger.currentBankroll,
       })
-      const stakePlan = buildInternalStakePlan(analysis, workingLedger, options.stakeOptions)
+      const stakePlan = buildInternalStakePlan(analysis, scopedLedger, options.stakeOptions)
       const upsertResult = upsertPlannedRecord(workingLedger, match, analysis, stakePlan, {
         now,
       })
@@ -88,7 +90,10 @@ export function autoReviewFinishedMatches(matches = [], ledger, options = {}) {
     })
   }
 
-  const finalRecords = workingLedger?.records ?? []
+  const currentRecordIds = new Set(matches.map((match) => getRecordIdV4(match)))
+  const finalRecords = (workingLedger?.records ?? []).filter((record) =>
+    currentRecordIds.has(record.id),
+  )
   counts.pending = finalRecords.filter(
     (record) =>
       record.status === 'pending_settlement' || record.status === 'live_or_unknown',

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { buildInternalV4Analysis } from '../src/internal/v4/internalEngineV4.js'
 import {
   createDefaultLedger,
+  getLedgerSummaryForMatches,
   upsertPlannedRecord,
 } from '../src/internal/v4/internalLedgerV4.js'
 import { buildInternalStakePlan } from '../src/internal/v4/internalStakeV4.js'
@@ -82,6 +83,13 @@ function assertPlanShape(plan, currentBankroll = 10000) {
     assert.equal(typeof item.reason, 'string')
     assert.equal(typeof item.confidenceUsed, 'number')
   }
+
+  assert.equal(typeof plan.formulaExplanation?.summary, 'string')
+  assert.match(plan.formulaExplanation.summary, /本场投入/)
+  assert.equal(Number.isFinite(plan.formulaExplanation.confidenceFactor), true)
+  assert.equal(Number.isFinite(plan.formulaExplanation.drawdownFactor), true)
+  assert.equal(Number.isFinite(plan.formulaExplanation.exposureFactor), true)
+  assert.equal(Number.isFinite(plan.formulaExplanation.consistencyFactor), true)
 }
 
 const ledger = createDefaultLedger()
@@ -155,6 +163,16 @@ assert.equal(scoreDominant.dominantConfidence, 'score')
 assert.equal(scoreDominant.split.primaryScore >= 20, true)
 assertPlanShape(scoreDominant)
 
+const compressedPlan = buildInternalStakePlan(makeAnalysis(), {
+  ...ledger,
+  pendingExposure: 2800,
+})
+assert.equal(compressedPlan.exposureFactor < 1, true)
+assert.equal(
+  compressedPlan.formulaExplanation.compressionNote,
+  '未结算暴露较高，后续投入已压缩。',
+)
+
 const futureMatch = {
   id: 'stake-ledger-pending',
   kickoff: '2026-06-20T12:00:00+08:00',
@@ -191,5 +209,58 @@ assert.equal(pendingResult.ledger.currentBankroll, 10000)
 assert.equal(pendingResult.ledger.settledProfit, 0)
 assert.equal(pendingResult.ledger.pendingExposure, pendingPlan.totalStake)
 assert.equal(pendingResult.record.totalStake > 0, true)
+
+const duplicateStatsLedger = {
+  ...ledger,
+  records: [
+    {
+      id: 'v5-stat-a',
+      matchId: 'stat-a',
+      matchName: 'A',
+      status: 'upcoming',
+      totalStake: 20,
+      plannedAt: '2026-06-13T00:00:00.000Z',
+    },
+    {
+      id: 'v5-stat-a-late',
+      matchId: 'stat-a',
+      matchName: 'A duplicate',
+      status: 'upcoming',
+      totalStake: 25,
+      plannedAt: '2026-06-14T00:00:00.000Z',
+    },
+    {
+      id: 'v5-stat-b',
+      matchId: 'stat-b',
+      matchName: 'B',
+      status: 'settled_manual',
+      settlementSource: 'manual',
+      totalStake: 10,
+      totalReturn: 17,
+      profit: 7,
+      bankrollAfter: 10007,
+      settledAt: '2026-06-15T00:00:00.000Z',
+    },
+    {
+      id: 'v5-stale',
+      matchId: 'stale',
+      matchName: 'Stale',
+      status: 'upcoming',
+      totalStake: 999,
+      plannedAt: '2026-06-16T00:00:00.000Z',
+    },
+  ],
+}
+const scopedStats = getLedgerSummaryForMatches(duplicateStatsLedger, [
+  { id: 'stat-a' },
+  { id: 'stat-b' },
+])
+assert.equal(scopedStats.totalMatches, 2)
+assert.equal(scopedStats.plannedCount <= scopedStats.totalMatches, true)
+assert.equal(scopedStats.upcomingCount <= scopedStats.totalMatches, true)
+assert.equal(scopedStats.settledCount <= scopedStats.totalMatches, true)
+assert.equal(scopedStats.manualSettledCount + scopedStats.autoSettledCount <= scopedStats.settledCount, true)
+assert.equal(scopedStats.pendingExposure, 25)
+assert.equal(scopedStats.currentBankroll, scopedStats.initialBankroll + scopedStats.settledProfit)
 
 console.log('check-internal-v4-stake: ok')

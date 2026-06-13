@@ -222,6 +222,39 @@ function assertConfidenceFormula(analysis) {
   assert.equal(Math.abs(confidence.internalConfidence - expected) <= 2, true)
 }
 
+function assertScoreDistribution(analysis) {
+  const dimensionValues = Object.values(analysis.score.dimensions)
+  const nonDefaultCount = dimensionValues.filter((value) => value !== 50).length
+  assert.equal(nonDefaultCount >= 5, true, 'at least 5 dimensions must not be default 50')
+  assert.equal(analysis.score.dimensionAudit.nonDefaultDimensionCount, nonDefaultCount)
+
+  for (const key of SCORE_DIMENSION_KEYS_V4) {
+    const audit = analysis.score.dimensionAudit.items[key]
+    assert.equal(audit.value, analysis.score.dimensions[key])
+    assert.ok(['数据中性', '参与判断'].includes(audit.state))
+  }
+
+  const confidenceSet = new Set([
+    analysis.confidence.directionConfidence,
+    analysis.confidence.scoreConfidence,
+    analysis.confidence.overUnderConfidence,
+    analysis.confidence.dataConfidence,
+  ])
+  assert.equal(confidenceSet.size > 1, true, 'four confidence values must not all be identical')
+}
+
+function buildDatasetMatches() {
+  const matchesData = JSON.parse(readFileSync('src/data/matches.json', 'utf8'))
+  const teamsData = JSON.parse(readFileSync('src/data/teams.json', 'utf8'))
+  const teamMap = new Map(teamsData.teams.map((team) => [team.id, team]))
+
+  return matchesData.matches.map((match) => ({
+    ...match,
+    homeTeam: teamMap.get(match.homeTeamId),
+    awayTeam: teamMap.get(match.awayTeamId),
+  }))
+}
+
 for (const sample of samples) {
   const analysis = buildInternalV4Analysis(sample, { bankroll: 10000 })
   assert.equal(assertInternalV4AnalysisShape(analysis), true)
@@ -255,6 +288,13 @@ for (const sample of samples) {
 
   assertScoreLinkage(analysis)
   assertConfidenceFormula(analysis)
+  assertScoreDistribution(analysis)
+  assert.equal(analysis.predictions.totalGoalsText.includes('分界'), false)
+  assert.equal((analysis.explanations ?? []).length >= 5, true)
+  assert.deepEqual(
+    (analysis.explanations ?? []).map((item) => item.key),
+    ['direction', 'score', 'totalGoals', 'overUnder', 'funding'],
+  )
   assert.ok(Array.isArray(analysis.rules.triggered))
   assert.ok(analysis.rules.triggered.every((rule) => typeof rule.id === 'string'))
   assert.ok(analysis.rules.triggered.every((rule) => typeof rule.label === 'string'))
@@ -274,5 +314,26 @@ assertScoreLinkage(drawProtection)
 const lowScore = buildInternalV4Analysis(samples[2], { bankroll: 10000 })
 assert.equal(lowScore.classification.gameType, '低比分胶着局')
 assertScoreLinkage(lowScore)
+
+const datasetAnalyses = buildDatasetMatches().map((match) =>
+  buildInternalV4Analysis(match, { bankroll: 10000 }),
+)
+const confidenceDistribution = new Map()
+
+for (const analysis of datasetAnalyses) {
+  assertScoreDistribution(analysis)
+  assert.equal(analysis.predictions.totalGoalsText.includes('分界'), false)
+  confidenceDistribution.set(
+    analysis.confidence.internalConfidence,
+    (confidenceDistribution.get(analysis.confidence.internalConfidence) ?? 0) + 1,
+  )
+}
+
+const largestConfidenceBucket = Math.max(...confidenceDistribution.values())
+assert.equal(
+  largestConfidenceBucket / datasetAnalyses.length < 0.8,
+  true,
+  'internalConfidence distribution must not collapse into one score',
+)
 
 console.log('check-internal-v4-engine: ok')

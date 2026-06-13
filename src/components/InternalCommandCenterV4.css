@@ -357,19 +357,26 @@
   font-size: 12px;
 }
 
+.internal-v4-dimension-grid small {
+  color: #94c8b3;
+  font-size: 12px;
+}
+
 .internal-v4-dimension-grid strong {
   color: #f7faf6;
   font-size: 22px;
   line-height: 1;
 }
 
-.internal-v4-rule-list {
+.internal-v4-rule-list,
+.internal-v4-explanation-list {
   display: grid;
   gap: 8px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.internal-v4-rule-list p {
+.internal-v4-rule-list p,
+.internal-v4-explanation-list p {
   background: #171b1a;
   border: 1px solid rgba(176, 191, 180, 0.16);
   border-radius: 8px;
@@ -379,10 +386,30 @@
   padding: 10px;
 }
 
-.internal-v4-rule-list span {
+.internal-v4-rule-list span,
+.internal-v4-explanation-list span {
   color: #c5cdc6;
   font-size: 13px;
   line-height: 1.45;
+}
+
+.internal-v4-formula-explain {
+  background: #171b1a;
+  border: 1px solid rgba(94, 224, 138, 0.18);
+  border-radius: 8px;
+  display: grid;
+  gap: 7px;
+  padding: 12px;
+}
+
+.internal-v4-formula-explain span {
+  color: #d7efe0;
+  line-height: 1.45;
+}
+
+.internal-v4-formula-explain em {
+  color: #facc15;
+  font-style: normal;
 }
 
 .internal-v4-stake-grid {
@@ -587,6 +614,7 @@
   .internal-v4-dimension-grid,
   .internal-v4-formula-grid,
   .internal-v4-rule-list,
+  .internal-v4-explanation-list,
   .internal-v4-check-list,
   .internal-v4-settlement-result {
     grid-template-columns: 1fr;
