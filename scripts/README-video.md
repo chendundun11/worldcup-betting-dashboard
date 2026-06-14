@@ -46,6 +46,42 @@ v3 详细说明见：
 scripts\README-video-v3.md
 ```
 
+## v4 素材库 + 可定制口播版
+
+v4 是独立的新模式，不会替换 v3。它会扫描本地素材库，支持自定义口播文件，并生成足球氛围背景 + 数据卡片 + 配音字幕的视频。
+
+默认 sharp 风格：
+
+```powershell
+node .\scripts\build-douyin-video-v4.mjs --match "葡萄牙"
+```
+
+指定风格：
+
+```powershell
+node .\scripts\build-douyin-video-v4.mjs --match "葡萄牙" --style record
+node .\scripts\build-douyin-video-v4.mjs --match "葡萄牙" --style sharp
+node .\scripts\build-douyin-video-v4.mjs --match "葡萄牙" --style explain
+```
+
+使用自定义口播：
+
+```powershell
+node .\scripts\build-douyin-video-v4.mjs --match "葡萄牙" --script ".\scripts\voiceover-custom.txt"
+```
+
+v4 素材库目录：
+
+```text
+C:\Users\chend\Desktop\新建文件夹\video-factory\materials
+```
+
+v4 详细说明见：
+
+```text
+scripts\README-video-v4.md
+```
+
 ## 批量视频生成
 
 按多个比赛关键词生成：
@@ -135,6 +171,12 @@ v3 总报告：
 C:\Users\chend\Desktop\新建文件夹\worldcup-betting-dashboard\scripts\douyin-video-v3-report.json
 ```
 
+v4 总报告：
+
+```text
+C:\Users\chend\Desktop\新建文件夹\worldcup-betting-dashboard\scripts\douyin-video-v4-report.json
+```
+
 批量总报告：
 
 ```text
@@ -189,6 +231,12 @@ v3 配音版说法：
 
 ```text
 使用 worldcup-douyin-video Skill，按比赛名“葡萄牙”生成 v3 配音解说版抖音短视频，并回报配音、字幕、contentScore 和桌面 mp4 路径。
+```
+
+v4 素材库 + 可定制口播说法：
+
+```text
+使用 worldcup-douyin-video Skill，按比赛名“葡萄牙”生成 v4 短视频，使用 sharp 风格或指定 voiceover-custom.txt，并回报 materialMode、voiceoverSource、contentScore 和桌面 mp4 路径。
 ```
 
 批量说法：

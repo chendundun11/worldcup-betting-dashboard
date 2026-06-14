@@ -1,0 +1,18 @@
+{
+  "footballMood": [
+    {
+      "type": "video",
+      "path": "C:/Users/chend/Desktop/新建文件夹/video-factory/materials/football/stadium/stadium_01.mp4",
+      "tags": ["stadium", "football", "opening"],
+      "usage": ["intro", "transition"]
+    }
+  ],
+  "aiMood": [
+    {
+      "type": "image",
+      "path": "C:/Users/chend/Desktop/新建文件夹/video-factory/materials/abstract/dashboard/dashboard_01.png",
+      "tags": ["ai", "data", "scan"],
+      "usage": ["analysis", "score"]
+    }
+  ]
+}

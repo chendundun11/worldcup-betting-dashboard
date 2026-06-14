@@ -19,6 +19,16 @@ scripts/video-package-export-report.json
 scripts/douyin-video-build-report.json
 scripts/douyin-batch-report.json
 scripts/douyin-video-v3-report.json
+scripts/douyin-video-v4-report.json
+scripts/voiceover-custom.txt
+
+# Local video materials and generated media
+video-factory/materials/**
+materials/**
+*.mp4
+*.mov
+*.mp3
+*.wav
 
 # Editor directories and files
 .vscode/*
