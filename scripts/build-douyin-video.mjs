@@ -103,6 +103,11 @@ function readJson(filePath, fallback = null) {
   return JSON.parse(readFileSync(filePath, 'utf8'))
 }
 
+function readText(filePath, fallback = '') {
+  if (!existsSync(filePath)) return fallback
+  return readFileSync(filePath, 'utf8')
+}
+
 function fileInfo(filePath) {
   if (!existsSync(filePath)) {
     return {
@@ -417,12 +422,157 @@ function copyArtifact(sourcePath, targetDir, targetFileName) {
   }
 }
 
-function copyOutputsToDesktop(matchName) {
+function generateDouyinCopy(meta) {
+  const matchName = meta.match_name ?? '本场比赛'
+  const mainPick = meta.main_pick ?? '临场复核'
+  const score1 = meta.score_1 ?? '待复核'
+  const score2 = meta.score_2 ?? '待复核'
+  const totalGoals = meta.total_goals ?? '2.5球分界'
+  const riskNote = meta.risk_note ?? '临场阵容与轮换需要复核'
+  const footer = meta.footer_note ?? '仅供娱乐参考'
+
+  return [
+    '【短版】',
+    `本地搭了个 AI 世界杯预测系统，今天记录：${matchName}。方向看 ${mainPick}，比分参考 ${score1} / ${score2}，大小球 ${totalGoals}。${footer}。`,
+    '',
+    '【正常版】',
+    `本地 AI 分析系统今天跑到 ${matchName}，模型给到的主推方向是 ${mainPick}，比分先记录 ${score1} / ${score2}，大小球方向看 ${totalGoals}。风险点：${riskNote}。不承诺命中，不诱导下注，只做数据记录与娱乐参考。`,
+    '',
+    '【口语版】',
+    `今天继续拿本地 AI 系统跑一场世界杯预测：${matchName}。这场先记 ${mainPick}，比分我会盯 ${score1} 和 ${score2}，大小球看 ${totalGoals}。不过 ${riskNote}，所以还是当成每日观察样本，${footer}。`,
+    '',
+  ].join('\n')
+}
+
+function normalizeText(value) {
+  return String(value ?? '').replace(/\s+/g, '').toLowerCase()
+}
+
+function readQualityReportValue(key) {
+  const text = readText(qualityReportPath)
+  return text.match(new RegExp(`^${key}=(.+)$`, 'm'))?.[1]?.trim() ?? null
+}
+
+function scoreItem(pass, points) {
+  return pass ? points : 0
+}
+
+function evaluateContentQuality({
+  copyText,
+  desktopCopy,
+  exportReport,
+  finalVideo,
+  meta,
+  previewMatchName,
+  previewStatus,
+  qualityReport,
+  selectedMatchName,
+  videoInfo,
+}) {
+  const qualitySelectedMatch = readQualityReportValue('selected_match')
+  const desktopVideo = fileInfo(desktopCopy?.desktopVideoPath ?? '')
+  const copyTextInfo = fileInfo(desktopCopy?.copyTextPath ?? '')
+  const previewFilesExist = Object.values(previewStatus?.files ?? {}).every((item) => item.exists)
+  const normalizedCopy = normalizeText(copyText)
+  const normalizedMatch = normalizeText(selectedMatchName)
+  const copyTextMatches = normalizedMatch ? normalizedCopy.includes(normalizedMatch) : false
+
+  const consistencyChecks = {
+    finalVideoExists: finalVideo.exists,
+    desktopVideoExists: desktopVideo.exists,
+    previewFilesExist,
+    previewMatchMatchesSelected: previewMatchName === selectedMatchName,
+    qualityReportSelectedMatchMatches: qualitySelectedMatch === selectedMatchName,
+    buildReportMatchInCopyText: copyTextMatches,
+    copiedToDesktop: desktopCopy?.copiedToDesktop === true,
+    okBase:
+      finalVideo.exists &&
+      desktopVideo.exists &&
+      previewFilesExist &&
+      previewStatus?.updated === true &&
+      qualityReport.exists,
+    usedFallbackFalse: exportReport?.usedFallback === false,
+  }
+
+  const warnings = []
+  if (!consistencyChecks.finalVideoExists) warnings.push('final_douyin.mp4 不存在。')
+  if (!consistencyChecks.desktopVideoExists) warnings.push('桌面 mp4 不存在。')
+  if (!consistencyChecks.previewFilesExist) warnings.push('preview 图不完整。')
+  if (!consistencyChecks.previewMatchMatchesSelected) {
+    warnings.push(`previewMatchName 与 selectedMatchName 不一致：${previewMatchName ?? 'unknown'} / ${selectedMatchName ?? 'unknown'}`)
+  }
+  if (!consistencyChecks.qualityReportSelectedMatchMatches) {
+    warnings.push(`quality_report.txt selected_match 不一致：${qualitySelectedMatch ?? 'unknown'} / ${selectedMatchName ?? 'unknown'}`)
+  }
+  if (!consistencyChecks.buildReportMatchInCopyText) warnings.push('copy.txt 未包含当前比赛名。')
+  if (!consistencyChecks.copiedToDesktop) warnings.push('copiedToDesktop 不是 true。')
+  if (!consistencyChecks.usedFallbackFalse) warnings.push('usedFallback 不是 false。')
+
+  const matchNameClear = Boolean(meta.match_name)
+  const mainPickClear = Boolean(meta.main_pick)
+  const scoresClear = Boolean(meta.score_1 && meta.score_2)
+  const totalGoalsClear = Boolean(meta.total_goals)
+  const riskClear = Boolean(meta.risk_note)
+  const previewMatchesFinal =
+    previewStatus?.updated === true &&
+    consistencyChecks.previewFilesExist &&
+    consistencyChecks.previewMatchMatchesSelected &&
+    consistencyChecks.qualityReportSelectedMatchMatches
+  const durationOk = videoInfo.durationSeconds >= 8 && videoInfo.durationSeconds <= 18
+  const noObviousAnomaly =
+    finalVideo.exists &&
+    videoInfo.hasAudioTrack === true &&
+    videoInfo.videoCodec === 'h264' &&
+    videoInfo.audioCodec === 'aac' &&
+    videoInfo.width === 1080 &&
+    videoInfo.height === 1920 &&
+    copyTextInfo.exists
+
+  const contentScoreBreakdown = {
+    matchNameClear: scoreItem(matchNameClear, 20),
+    mainPickClear: scoreItem(mainPickClear, 15),
+    scoresClear: scoreItem(scoresClear, 15),
+    totalGoalsClear: scoreItem(totalGoalsClear, 10),
+    riskNoteClear: scoreItem(riskClear, 10),
+    previewMatchesFinal: scoreItem(previewMatchesFinal, 10),
+    usedFallbackFalse: scoreItem(consistencyChecks.usedFallbackFalse, 10),
+    duration8To18Seconds: scoreItem(durationOk, 5),
+    noObviousAnomaly: scoreItem(noObviousAnomaly, 5),
+  }
+  const contentScore = Object.values(contentScoreBreakdown).reduce((sum, value) => sum + value, 0)
+  const criticalFailure =
+    !consistencyChecks.finalVideoExists ||
+    !consistencyChecks.desktopVideoExists ||
+    !consistencyChecks.previewFilesExist ||
+    !consistencyChecks.qualityReportSelectedMatchMatches ||
+    !consistencyChecks.buildReportMatchInCopyText ||
+    !consistencyChecks.copiedToDesktop
+  const publishReadiness = criticalFailure || contentScore < 70
+    ? 'blocked'
+    : warnings.length || contentScore < 90
+      ? 'review'
+      : 'ready'
+
+  return {
+    contentScore,
+    contentScoreBreakdown,
+    consistencyChecks,
+    copyTextExists: copyTextInfo.exists,
+    qualitySelectedMatch,
+    publishReadiness,
+    warnings,
+  }
+}
+
+function copyOutputsToDesktop(matchName, meta) {
   const safeMatchName = sanitizeFileName(matchName)
   const outputDirName = `${formatLocalTimestamp()}_${safeMatchName}`
   const desktopOutputDir = uniqueDirectory(path.join(desktopOutputRoot, outputDirName))
 
   mkdirSync(desktopOutputDir, { recursive: true })
+  const copyText = generateDouyinCopy(meta)
+  const copyTextPath = path.join(desktopOutputDir, 'copy.txt')
+  writeFileSync(copyTextPath, copyText, 'utf8')
 
   const copiedFiles = [
     copyArtifact(finalVideoPath, desktopOutputDir, `${safeMatchName}.mp4`),
@@ -430,6 +580,12 @@ function copyOutputsToDesktop(matchName) {
       copyArtifact(path.join(outputDir, preview.fileName), desktopOutputDir, preview.fileName),
     ),
     copyArtifact(qualityReportPath, desktopOutputDir, 'quality_report.txt'),
+    {
+      fileName: 'copy.txt',
+      sourcePath: copyTextPath,
+      targetPath: copyTextPath,
+      sizeBytes: fileInfo(copyTextPath).sizeBytes,
+    },
   ]
 
   const buildReportTargetPath = path.join(desktopOutputDir, 'douyin-video-build-report.json')
@@ -446,6 +602,8 @@ function copyOutputsToDesktop(matchName) {
       },
     ],
     copiedToDesktop: true,
+    copyText,
+    copyTextPath,
     desktopOutputDir,
     desktopVideoPath: path.join(desktopOutputDir, `${safeMatchName}.mp4`),
   }
@@ -457,6 +615,7 @@ function writeBuildReport(report) {
 
 function buildReport({
   command,
+  contentQuality,
   exportReport,
   finalVideo,
   desktopCopy,
@@ -466,6 +625,7 @@ function buildReport({
   pythonCommand,
   qualityReport,
   renderMode,
+  videoInfo,
   warnings,
 }) {
   const packageOk = Object.values(packageFiles).every((item) => item.exists)
@@ -477,11 +637,17 @@ function buildReport({
     previewFilesUpdated &&
     qualityReport.exists &&
     renderMode === 'package' &&
-    exportReport?.usedFallback === false
+    exportReport?.usedFallback === false &&
+    (contentQuality?.publishReadiness ?? 'blocked') !== 'blocked'
 
   return {
     builtAt: new Date().toISOString(),
     command,
+    contentScore: contentQuality?.contentScore ?? 0,
+    contentScoreBreakdown: contentQuality?.contentScoreBreakdown ?? {},
+    consistencyChecks: contentQuality?.consistencyChecks ?? {},
+    copyTextExists: contentQuality?.copyTextExists ?? false,
+    copyTextPath: desktopCopy?.copyTextPath ?? null,
     selectedMatchName: exportReport?.selectedMatchName ?? null,
     selectedMatchId: exportReport?.selectedMatchId ?? null,
     matchKey: exportReport?.matchKey ?? null,
@@ -500,11 +666,15 @@ function buildReport({
     qualityReportExists: qualityReport.exists,
     qualityReportPath,
     renderMode,
+    publishReadiness: contentQuality?.publishReadiness ?? 'blocked',
+    qualitySelectedMatch: contentQuality?.qualitySelectedMatch ?? null,
     usedFallback: exportReport?.usedFallback ?? null,
     fallbackFields: exportReport?.fallbackFields ?? [],
     packageFiles,
     pythonCommand,
-    warnings,
+    videoInfo,
+    videoMeta: readPackageMeta(),
+    warnings: [...warnings, ...(contentQuality?.warnings ?? [])],
     ok,
   }
 }
@@ -546,9 +716,23 @@ function main() {
     warnings.push(`export-video-package 使用了 fallback：${(exportReport.fallbackFields ?? []).join(', ')}`)
   }
 
-  const desktopCopy = copyOutputsToDesktop(qualityReportMeta.selectedMatch)
+  const meta = readPackageMeta()
+  const desktopCopy = copyOutputsToDesktop(qualityReportMeta.selectedMatch, meta)
+  const contentQuality = evaluateContentQuality({
+    copyText: desktopCopy.copyText,
+    desktopCopy,
+    exportReport,
+    finalVideo,
+    meta,
+    previewMatchName: qualityReportMeta.selectedMatch,
+    previewStatus,
+    qualityReport,
+    selectedMatchName: exportReport?.selectedMatchName ?? qualityReportMeta.selectedMatch,
+    videoInfo,
+  })
   const report = buildReport({
     command: userCommand,
+    contentQuality,
     exportReport,
     desktopCopy,
     finalVideo,
@@ -558,10 +742,20 @@ function main() {
     pythonCommand,
     qualityReport,
     renderMode: confirmedRenderMode,
+    videoInfo,
     warnings,
   })
   writeBuildReport(report)
   copyFileSync(buildReportPath, desktopCopy.buildReportTargetPath)
+  const reportFile = desktopCopy.copiedFiles.find(
+    (item) => item.fileName === 'douyin-video-build-report.json',
+  )
+  if (reportFile) {
+    reportFile.sizeBytes = fileInfo(desktopCopy.buildReportTargetPath).sizeBytes
+    report.copiedFiles = desktopCopy.copiedFiles
+    writeBuildReport(report)
+    copyFileSync(buildReportPath, desktopCopy.buildReportTargetPath)
+  }
 
   console.log(
     JSON.stringify(
@@ -571,6 +765,7 @@ function main() {
         desktopVideoPath: report.desktopVideoPath,
         finalVideoPath,
         ok: report.ok,
+        publishReadiness: report.publishReadiness,
         reportPath: buildReportPath,
         selectedMatchName: report.selectedMatchName,
         usedFallback: report.usedFallback,
@@ -579,7 +774,15 @@ function main() {
       2,
     ),
   )
-  console.log(`视频已生成：\n${report.desktopVideoPath}`)
+  console.log(
+    [
+      '视频已生成：',
+      `桌面路径：${report.desktopVideoPath}`,
+      `文案路径：${report.copyTextPath}`,
+      `预览图：${previewSpecs.map((preview) => preview.fileName).join(' / ')}`,
+      `是否建议发布：${report.publishReadiness}`,
+    ].join('\n'),
+  )
 
   if (!report.ok) process.exit(1)
 }

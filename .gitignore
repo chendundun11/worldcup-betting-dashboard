@@ -17,6 +17,7 @@ dist-ssr
 # Local video build reports
 scripts/video-package-export-report.json
 scripts/douyin-video-build-report.json
+scripts/douyin-batch-report.json
 
 # Editor directories and files
 .vscode/*
