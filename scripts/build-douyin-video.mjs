@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -8,6 +8,7 @@ const __dirname = path.dirname(__filename)
 const projectRoot = path.resolve(__dirname, '..')
 const workspaceRoot = path.resolve(projectRoot, '..')
 const videoFactoryPath = path.join(workspaceRoot, 'video-factory')
+const desktopOutputRoot = path.join(path.resolve(workspaceRoot, '..'), '世界杯短视频输出')
 const exportScriptPath = path.join(__dirname, 'export-video-package.mjs')
 const exportReportPath = path.join(__dirname, 'video-package-export-report.json')
 const buildReportPath = path.join(__dirname, 'douyin-video-build-report.json')
@@ -358,6 +359,98 @@ function writeQualityReport({ exportReport, packageFiles, previewStatus, renderM
   }
 }
 
+function pad2(value) {
+  return String(value).padStart(2, '0')
+}
+
+function formatLocalTimestamp(date = new Date()) {
+  return [
+    date.getFullYear(),
+    '-',
+    pad2(date.getMonth() + 1),
+    '-',
+    pad2(date.getDate()),
+    '_',
+    pad2(date.getHours()),
+    '-',
+    pad2(date.getMinutes()),
+  ].join('')
+}
+
+function sanitizeFileName(value, fallback = '未命名比赛') {
+  const cleaned = String(value ?? '')
+    .trim()
+    .replace(/\s+vs\s+/gi, '_vs_')
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/\s+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '')
+
+  return cleaned || fallback
+}
+
+function uniqueDirectory(baseDir) {
+  if (!existsSync(baseDir)) return baseDir
+
+  for (let index = 2; index < 1000; index += 1) {
+    const candidate = `${baseDir}_${pad2(index)}`
+    if (!existsSync(candidate)) return candidate
+  }
+
+  throw new Error(`无法创建唯一输出目录：${baseDir}`)
+}
+
+function copyArtifact(sourcePath, targetDir, targetFileName) {
+  if (!existsSync(sourcePath)) {
+    throw new Error(`待复制文件不存在：${sourcePath}`)
+  }
+
+  const targetPath = path.join(targetDir, targetFileName)
+  copyFileSync(sourcePath, targetPath)
+  const targetInfo = fileInfo(targetPath)
+
+  return {
+    fileName: targetFileName,
+    sourcePath,
+    targetPath,
+    sizeBytes: targetInfo.sizeBytes,
+  }
+}
+
+function copyOutputsToDesktop(matchName) {
+  const safeMatchName = sanitizeFileName(matchName)
+  const outputDirName = `${formatLocalTimestamp()}_${safeMatchName}`
+  const desktopOutputDir = uniqueDirectory(path.join(desktopOutputRoot, outputDirName))
+
+  mkdirSync(desktopOutputDir, { recursive: true })
+
+  const copiedFiles = [
+    copyArtifact(finalVideoPath, desktopOutputDir, `${safeMatchName}.mp4`),
+    ...previewSpecs.map((preview) =>
+      copyArtifact(path.join(outputDir, preview.fileName), desktopOutputDir, preview.fileName),
+    ),
+    copyArtifact(qualityReportPath, desktopOutputDir, 'quality_report.txt'),
+  ]
+
+  const buildReportTargetPath = path.join(desktopOutputDir, 'douyin-video-build-report.json')
+
+  return {
+    buildReportTargetPath,
+    copiedFiles: [
+      ...copiedFiles,
+      {
+        fileName: 'douyin-video-build-report.json',
+        sourcePath: buildReportPath,
+        targetPath: buildReportTargetPath,
+        sizeBytes: 0,
+      },
+    ],
+    copiedToDesktop: true,
+    desktopOutputDir,
+    desktopVideoPath: path.join(desktopOutputDir, `${safeMatchName}.mp4`),
+  }
+}
+
 function writeBuildReport(report) {
   writeFileSync(buildReportPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8')
 }
@@ -366,6 +459,7 @@ function buildReport({
   command,
   exportReport,
   finalVideo,
+  desktopCopy,
   packageFiles,
   previewMatchName,
   previewStatus,
@@ -378,6 +472,7 @@ function buildReport({
   const previewFilesUpdated = previewStatus?.updated === true
   const ok =
     packageOk &&
+    desktopCopy?.copiedToDesktop === true &&
     finalVideo.exists &&
     previewFilesUpdated &&
     qualityReport.exists &&
@@ -392,6 +487,10 @@ function buildReport({
     matchKey: exportReport?.matchKey ?? null,
     exportReportPath,
     videoFactoryPath,
+    desktopOutputDir: desktopCopy?.desktopOutputDir ?? null,
+    desktopVideoPath: desktopCopy?.desktopVideoPath ?? null,
+    copiedToDesktop: desktopCopy?.copiedToDesktop ?? false,
+    copiedFiles: desktopCopy?.copiedFiles ?? [],
     finalVideoPath,
     finalVideoExists: finalVideo.exists,
     finalVideoSizeBytes: finalVideo.sizeBytes,
@@ -447,9 +546,11 @@ function main() {
     warnings.push(`export-video-package 使用了 fallback：${(exportReport.fallbackFields ?? []).join(', ')}`)
   }
 
+  const desktopCopy = copyOutputsToDesktop(qualityReportMeta.selectedMatch)
   const report = buildReport({
     command: userCommand,
     exportReport,
+    desktopCopy,
     finalVideo,
     packageFiles,
     previewMatchName: qualityReportMeta.selectedMatch,
@@ -460,10 +561,14 @@ function main() {
     warnings,
   })
   writeBuildReport(report)
+  copyFileSync(buildReportPath, desktopCopy.buildReportTargetPath)
 
   console.log(
     JSON.stringify(
       {
+        copiedToDesktop: report.copiedToDesktop,
+        desktopOutputDir: report.desktopOutputDir,
+        desktopVideoPath: report.desktopVideoPath,
         finalVideoPath,
         ok: report.ok,
         reportPath: buildReportPath,
@@ -474,6 +579,7 @@ function main() {
       2,
     ),
   )
+  console.log(`视频已生成：\n${report.desktopVideoPath}`)
 
   if (!report.ok) process.exit(1)
 }
