@@ -11,7 +11,11 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { generateTtsAudio } from './generate-tts-audio.mjs'
-import { writeSubtitleAss } from './generate-v3-scenes.mjs'
+import {
+  encodeStoryboardForUrl,
+  writeStoryboardSubtitleAss,
+  writeV5StoryboardFile,
+} from './generate-v5-storyboard.mjs'
 import { writeV5VoiceoverFiles } from './generate-v5-voiceover.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -274,11 +278,12 @@ function createDesktopOutputDir(matchName) {
   }
 }
 
-function buildCaptureUrl(matchTerm) {
+function buildCaptureUrl(matchTerm, storyboard) {
   const params = new URLSearchParams({
     capture: '1',
     match: matchTerm,
   })
+  if (storyboard) params.set('storyboard', encodeStoryboardForUrl(storyboard))
   return `http://127.0.0.1:5173/?${params.toString()}`
 }
 
@@ -379,6 +384,9 @@ function writeQualityReport({
   finalVideoInfo,
   meta,
   previewStatus,
+  storyboard,
+  storyboardPath,
+  storyboardSubtitle,
   ttsResult,
   voiceover,
 }) {
@@ -398,6 +406,13 @@ function writeQualityReport({
     `scene_flow_detected=${captureResult.sceneFlowDetected ? 'true' : 'false'}`,
     `auto_scroll_detected=${captureResult.autoScrollDetected ? 'true' : 'false'}`,
     `capture_looks_dynamic=${captureResult.captureLooksDynamic ? 'true' : 'false'}`,
+    `storyboard_path=${storyboardPath}`,
+    `storyboard_scene_count=${storyboard.scenes.length}`,
+    `storyboard_duration_seconds=${storyboard.totalDurationSeconds}`,
+    `voiceover_scene_aligned=${voiceover.voiceoverSceneAligned ? 'true' : 'false'}`,
+    `subtitle_scene_aligned=${storyboardSubtitle.subtitleSceneAligned ? 'true' : 'false'}`,
+    `capture_scene_aligned=${captureResult.captureSceneAligned ? 'true' : 'false'}`,
+    `capture_active_scene_final=${captureResult.finalActiveScene ?? 'unknown'}`,
     `voiceover_source=${voiceover.voiceoverSource}`,
     `voiceover_style=${voiceover.style}`,
     `voiceover_char_count=${voiceover.voiceoverCharCount}`,
@@ -428,6 +443,12 @@ function writeQualityReport({
     'preview_images:',
     ...previewLines,
     '',
+    'scene_timeline:',
+    ...storyboard.sceneTimeline.map(
+      (item) =>
+        `scene_${item.sceneIndex}: ${item.startTime}-${item.endTime}s, ${item.title}, focus=${item.screenFocus.join(' / ')}, voiceover=${item.voiceoverText}`,
+    ),
+    '',
     'obvious_anomalies:',
     previewStatus.updated
       ? 'No blocking technical anomaly found. V5 previews were regenerated from the current desktop mp4.'
@@ -449,8 +470,11 @@ function evaluateV5({
   finalVideoInfo,
   meta,
   previewStatus,
+  storyboard,
+  storyboardSubtitle,
   subtitlePath,
   ttsResult,
+  voiceover,
   voiceAudioPath,
 }) {
   const captureAvailable = Boolean(captureResult.captureModeEnabled)
@@ -467,6 +491,11 @@ function evaluateV5({
   )
   const riskNoteClear = Boolean(meta.risk_note)
   const durationOk = finalVideoInfo.durationSeconds >= 20 && finalVideoInfo.durationSeconds <= 35
+  const voiceoverSceneAligned = Boolean(voiceover?.voiceoverSceneAligned)
+  const subtitleSceneAligned = Boolean(storyboardSubtitle?.subtitleSceneAligned)
+  const captureSceneAligned = Boolean(captureResult.captureSceneAligned)
+  const hasEngineeringCopy = Boolean(captureResult.engineeringCopyDetected)
+  const hasSceneHold = Boolean(captureResult.sceneHoldDetected)
   const noObviousTechnicalIssue = Boolean(
     finalVideoInfo.width === 1080 &&
       finalVideoInfo.height === 1920 &&
@@ -485,25 +514,55 @@ function evaluateV5({
     duration20To35Seconds: scoreItem(durationOk, 5),
     noObviousTechnicalIssue: scoreItem(noObviousTechnicalIssue, 5),
   }
-  const contentScore = Object.values(breakdown).reduce((sum, value) => sum + value, 0)
+  const penalties = {
+    captureNoHold: hasSceneHold ? 0 : 10,
+    engineeringCopy: hasEngineeringCopy ? 10 : 0,
+    subtitleSceneMismatch: subtitleSceneAligned ? 0 : 15,
+    voiceoverSceneMismatch: voiceoverSceneAligned ? 0 : 30,
+  }
+  const baseScore = Object.values(breakdown).reduce((sum, value) => sum + value, 0)
+  const contentScore = Math.max(
+    baseScore - Object.values(penalties).reduce((sum, value) => sum + value, 0),
+    0,
+  )
   const warnings = []
+  const mismatchWarnings = []
   if (!captureAvailable) warnings.push('capture 页面未确认启用。')
   if (!captureRecorded) warnings.push('自动录屏未达到 20 秒。')
   if (!aiModelFeeling) warnings.push('capture 页面动态感检测不足。')
+  if (!voiceoverSceneAligned) mismatchWarnings.push('voiceoverSceneAligned=false')
+  if (!subtitleSceneAligned) mismatchWarnings.push('subtitleSceneAligned=false')
+  if (!captureSceneAligned) mismatchWarnings.push('captureSceneAligned=false')
+  if (!hasSceneHold) warnings.push('capture 页面未确认每个 scene 有停留。')
+  if (hasEngineeringCopy) warnings.push('capture 页面仍存在工程化文案。')
   if (!hasVoice) warnings.push('TTS 配音未成功生成。')
   if (!hasSubtitles) warnings.push('字幕文件缺失。')
   if (!durationOk) warnings.push(`视频时长 ${finalVideoInfo.durationSeconds.toFixed(2)} 秒不在 20~35 秒目标区间。`)
   if (!previewStatus.updated) warnings.push('preview 图未确认从当前 v5 mp4 刷新。')
   if (exportReport?.usedFallback !== false) warnings.push('export usedFallback 不是 false。')
-  const publishReadiness = contentScore >= 85 ? 'ready' : contentScore >= 70 ? 'review' : 'blocked'
+  const hasBlockingMismatch = !voiceoverSceneAligned || !subtitleSceneAligned || !captureSceneAligned
+  const hasMismatchWarning = mismatchWarnings.length > 0 || (voiceover?.warnings ?? []).includes('customVoiceoverMayNotMatchStoryboard')
+  const publishReadiness =
+    contentScore < 70
+      ? 'blocked'
+      : hasBlockingMismatch || hasMismatchWarning || contentScore < 85
+      ? 'review'
+      : 'ready'
 
   return {
     contentScore,
-    contentScoreBreakdown: breakdown,
+    contentScoreBreakdown: {
+      ...breakdown,
+      penalties,
+    },
     hasBurnedSubtitles: hasSubtitles,
     hasVoice,
+    mismatchWarnings,
     publishReadiness,
     warnings,
+    voiceoverSceneAligned,
+    subtitleSceneAligned,
+    captureSceneAligned,
   }
 }
 
@@ -534,14 +593,21 @@ function main() {
   const meta = readJson(packageMetaPath, {})
   const selectedMatchName = exportReport?.selectedMatchName ?? meta.match_name ?? '未命名比赛'
   const captureMatchTerm = options.captureMatchTerm || selectedMatchName
-  const captureUrl = buildCaptureUrl(captureMatchTerm)
   const { desktopOutputDir, safeMatchName } = createDesktopOutputDir(selectedMatchName)
   const desktopVideoPath = path.join(desktopOutputDir, `${safeMatchName}_v5.mp4`)
   const captureRawPath = path.join(desktopOutputDir, 'capture_raw.mp4')
+  const storyboardPath = path.join(desktopOutputDir, 'storyboard.json')
   const voiceoverPath = path.join(desktopOutputDir, 'voiceover.txt')
   const voiceAudioPath = path.join(desktopOutputDir, 'voice.mp3')
   const subtitlePath = path.join(desktopOutputDir, 'subtitles.ass')
   const copyTextPath = path.join(desktopOutputDir, 'copy.txt')
+  const { storyboard } = writeV5StoryboardFile({
+    exportReportPath,
+    metaPath: packageMetaPath,
+    outputPath: storyboardPath,
+    style: options.style,
+  })
+  const captureUrl = buildCaptureUrl(captureMatchTerm, storyboard)
 
   const captureOutput = runCapture(process.execPath, [
     recordScriptPath,
@@ -550,7 +616,7 @@ function main() {
     '--output',
     captureRawPath,
     '--duration',
-    '30',
+    String(storyboard.totalDurationSeconds),
   ])
   const captureResult = JSON.parse(captureOutput)
   const captureVideoInfo = probeVideo(captureRawPath)
@@ -560,6 +626,7 @@ function main() {
     customScriptPath: options.customScriptPath,
     metaPath: packageMetaPath,
     outputPath: voiceoverPath,
+    storyboardPath,
     style: options.style,
   })
 
@@ -575,10 +642,9 @@ function main() {
     ttsError = error?.message ?? String(error)
   }
 
-  writeSubtitleAss({
-    durationSeconds: captureVideoInfo.durationSeconds || 30,
+  const storyboardSubtitle = writeStoryboardSubtitleAss({
     outputPath: subtitlePath,
-    voiceoverText: voiceover.voiceoverText,
+    storyboard,
   })
 
   renderFinalVideo({
@@ -605,6 +671,9 @@ function main() {
     finalVideoInfo,
     meta,
     previewStatus,
+    storyboard,
+    storyboardPath,
+    storyboardSubtitle,
     ttsResult,
     voiceover,
   })
@@ -615,8 +684,11 @@ function main() {
     finalVideoInfo,
     meta,
     previewStatus,
+    storyboard,
+    storyboardSubtitle,
     subtitlePath,
     ttsResult,
+    voiceover,
     voiceAudioPath,
   })
 
@@ -625,6 +697,7 @@ function main() {
     desktopVideoPath,
     captureRawPath,
     voiceoverPath,
+    storyboardPath,
     subtitlePath,
     copyTextPath,
     qualityReportPath,
@@ -634,6 +707,7 @@ function main() {
   const copiedToDesktop = requiredDesktopFiles.every((filePath) => fileInfo(filePath).exists)
   const warnings = [
     ...quality.warnings,
+    ...quality.mismatchWarnings,
     ...(ttsError ? [`TTS 失败：${ttsError}`] : []),
     ...(voiceover.warnings ?? []),
   ]
@@ -664,14 +738,21 @@ function main() {
     hasAudio: finalVideoInfo.hasAudio,
     hasBurnedSubtitles: quality.hasBurnedSubtitles,
     matchKey: exportReport?.matchKey ?? null,
+    mismatchWarnings: quality.mismatchWarnings,
     ok,
     previewFiles: previewStatus.files,
     previewFilesUpdated: previewStatus.updated,
     publishReadiness: quality.publishReadiness,
     qualityReportPath,
     sceneFlowDetected: captureResult.sceneFlowDetected,
+    captureSceneAligned: quality.captureSceneAligned,
     selectedMatchId: exportReport?.selectedMatchId ?? null,
     selectedMatchName,
+    sceneTimeline: storyboard.sceneTimeline,
+    storyboardDurationSeconds: storyboard.totalDurationSeconds,
+    storyboardPath,
+    storyboardSceneCount: storyboard.scenes.length,
+    subtitleSceneAligned: quality.subtitleSceneAligned,
     subtitlePath,
     ttsEnabled: Boolean(ttsResult?.ttsEnabled),
     ttsEngine: ttsResult?.ttsEngine ?? 'fallback',
@@ -682,6 +763,7 @@ function main() {
     videoInfo: finalVideoInfo,
     voiceAudioPath: ttsResult?.ttsEnabled ? voiceAudioPath : null,
     voiceoverCharCount: voiceover.voiceoverCharCount,
+    voiceoverSceneAligned: quality.voiceoverSceneAligned,
     voiceoverPath,
     voiceoverSource: voiceover.voiceoverSource,
     voiceoverStyle: voiceover.style,
@@ -703,15 +785,20 @@ function main() {
     JSON.stringify(
       {
         captureModeEnabled: report.captureModeEnabled,
+        captureSceneAligned: report.captureSceneAligned,
         contentScore: report.contentScore,
         desktopOutputDir: report.desktopOutputDir,
         desktopVideoPath: report.desktopVideoPath,
+        mismatchWarnings: report.mismatchWarnings,
         ok: report.ok,
         publishReadiness: report.publishReadiness,
         selectedMatchName: report.selectedMatchName,
+        storyboardSceneCount: report.storyboardSceneCount,
+        subtitleSceneAligned: report.subtitleSceneAligned,
         ttsEnabled: report.ttsEnabled,
         usedFallback: report.usedFallback,
         videoDurationSeconds: report.videoDurationSeconds,
+        voiceoverSceneAligned: report.voiceoverSceneAligned,
         voiceoverSource: report.voiceoverSource,
       },
       null,

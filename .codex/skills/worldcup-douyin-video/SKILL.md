@@ -97,7 +97,9 @@ node .\scripts\build-douyin-video-v5.mjs --match "葡萄牙" --style sharp
 node .\scripts\build-douyin-video-v5.mjs --match "葡萄牙" --script ".\scripts\voiceover-custom.txt"
 ```
 
-V5 must open the `capture=1` page, record it with Playwright, generate `capture_raw.mp4`, `voiceover.txt`, `voice.mp3`, `subtitles.ass`, `copy.txt`, 4 preview images, `quality_report.txt`, `douyin-video-v5-report.json`, and a desktop mp4 in a `_v5_capture` folder. It must not publish to Douyin.
+V5 must open the `capture=1` page, record it with Playwright, generate `capture_raw.mp4`, `storyboard.json`, `voiceover.txt`, `voice.mp3`, `subtitles.ass`, `copy.txt`, 4 preview images, `quality_report.txt`, `douyin-video-v5-report.json`, and a desktop mp4 in a `_v5_capture` folder. It must not publish to Douyin.
+
+V5.1 must use one storyboard as the source of truth. The capture page, voiceover, subtitles, and report must all come from the same `storyboard.json`. Confirm `voiceoverSceneAligned=true`, `subtitleSceneAligned=true`, `captureSceneAligned=true`, and `mismatchWarnings=[]`.
 
 ## 标准流程
 
@@ -108,7 +110,7 @@ V5 must open the `capture=1` page, record it with Playwright, generate `capture_
 5. 批量时读取 `scripts\douyin-batch-report.json` 和桌面 `index.md`。
 6. v3 时读取 `scripts\douyin-video-v3-report.json`，确认 `ttsEnabled=true`、`hasBurnedSubtitles=true`、`sceneCount>=5`。
 7. v4 时读取 `scripts\douyin-video-v4-report.json`，确认 `voiceoverSource`、`materialMode`、`ttsEnabled=true`、`hasBurnedSubtitles=true`、`sceneCount>=7`。
-8. v5 时读取 `scripts\douyin-video-v5-report.json`，确认 `captureModeEnabled=true`、`autoScrollDetected=true`、`captureLooksDynamic=true`、`ttsEnabled=true`、`hasBurnedSubtitles=true`。
+8. v5 时读取 `scripts\douyin-video-v5-report.json`，确认 `captureModeEnabled=true`、`autoScrollDetected=true`、`captureLooksDynamic=true`、`ttsEnabled=true`、`hasBurnedSubtitles=true`、`voiceoverSceneAligned=true`、`subtitleSceneAligned=true`、`captureSceneAligned=true`。
 9. 检查每个桌面子目录是否包含:
    - `*.mp4`
    - `preview_01.jpg`
@@ -125,7 +127,7 @@ V5 must open the `capture=1` page, record it with Playwright, generate `capture_
    - `douyin-video-v3-report.json`
    - `douyin-video-v4-report.json`
    - `douyin-video-v5-report.json`
-11. v5 子目录还要检查 `capture_raw.mp4`。
+11. v5 子目录还要检查 `capture_raw.mp4` 和 `storyboard.json`。
 12. 必要时打开 preview 图或用 `ffmpeg -v error -i <mp4> -f null -` 检查黑屏、解码、声音异常。
 13. 最后回报结果；只有用户明确要求保存代码时才提交，除非当前任务授权自行提交。
 
@@ -213,6 +215,15 @@ V5 score is out of 100:
 
 For v5, `publishReadiness` should not be `blocked`. If Playwright is missing, install only `playwright` as a dev dependency; do not install unrelated tools or download GitHub projects.
 
+V5.1 penalties:
+
+- Voiceover and scene mismatch: deduct 30.
+- Subtitle and scene mismatch: deduct 15.
+- No clear scene hold: deduct 10.
+- Engineering copy such as `raw response`: deduct 10.
+
+If `voiceoverSceneAligned=false`, `subtitleSceneAligned=false`, or `captureSceneAligned=false`, `publishReadiness` cannot be `ready`.
+
 ## publishReadiness
 
 - `ready`: Content is technically ready; still recommend human review before publishing.
@@ -229,6 +240,7 @@ Never claim a video is ready if `publishReadiness=blocked`.
 - `final_douyin.mp4` exists.
 - Desktop mp4 exists.
 - For v5, `captureModeEnabled=true`, `sceneFlowDetected=true`, and `capture_raw.mp4` exists.
+- For v5.1, `storyboardSceneCount>=6`, `voiceoverSceneAligned=true`, `subtitleSceneAligned=true`, `captureSceneAligned=true`, and `mismatchWarnings=[]`.
 - `copy.txt` exists and contains the selected match name.
 - Preview images exist and match the selected match.
 - `quality_report.txt` has current `selected_match`.

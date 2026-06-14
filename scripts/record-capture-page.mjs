@@ -221,7 +221,12 @@ async function main() {
   let screenshotDiffRatio = 0
   let autoScrollDetected = false
   let captureModeEnabled = false
+  let captureSceneAligned = false
+  let engineeringCopyDetected = false
+  let finalActiveScene = null
+  let sceneHoldDetected = false
   let sceneFlowDetected = false
+  let storyboardSceneCount = 0
 
   try {
     browser = await chromium.launch({ headless: true })
@@ -243,8 +248,10 @@ async function main() {
     await page.goto(options.url, { waitUntil: 'networkidle', timeout: 60_000 })
     await page.waitForSelector('[data-capture-mode="true"]', { timeout: 15_000 })
     captureModeEnabled = await page.locator('[data-capture-mode="true"]').count().then(Boolean)
+    storyboardSceneCount = await page.locator('[data-storyboard-scene]').count()
     sceneFlowDetected =
-      (await page.locator('[data-capture-scene]').count()) >= 5 &&
+      storyboardSceneCount >= 6 &&
+      (await page.locator('[data-capture-scene]').count()) >= 6 &&
       (await page.locator('[data-flow="v5-capture"]').count()) === 1
 
     const before = await page.screenshot({ fullPage: false, type: 'png' })
@@ -253,6 +260,26 @@ async function main() {
     screenshotDiffRatio = compareBuffers(before, mid)
     await page.waitForTimeout(Math.max(options.durationSeconds * 1000 - 14_000, 6_000))
     autoScrollDetected = await page.evaluate(() => window.scrollY > 180)
+    const pageAudit = await page.evaluate(() => {
+      const root = document.querySelector('[data-capture-mode="true"]')
+      const text = document.body.innerText || ''
+      const activeScene = Number(root?.getAttribute('data-active-scene') || 0)
+      const sceneCount = Number(root?.getAttribute('data-storyboard-scene-count') || 0)
+      return {
+        activeScene,
+        engineeringCopyDetected: /raw response|provider error|api key|接口原文|错误原文/i.test(text),
+        sceneCount,
+        sceneHoldDetected: root?.getAttribute('data-scene-hold') === 'true',
+      }
+    })
+    finalActiveScene = pageAudit.activeScene || null
+    engineeringCopyDetected = pageAudit.engineeringCopyDetected
+    sceneHoldDetected = pageAudit.sceneHoldDetected
+    captureSceneAligned =
+      captureModeEnabled &&
+      sceneFlowDetected &&
+      pageAudit.sceneCount >= 6 &&
+      pageAudit.activeScene === pageAudit.sceneCount
 
     const video = page.video()
     await context.close()
@@ -271,13 +298,18 @@ async function main() {
   const durationSeconds = probeDuration(outputPath)
   const result = {
     autoScrollDetected,
+    captureSceneAligned,
     captureDurationSeconds: durationSeconds,
     captureLooksDynamic: screenshotDiffRatio > 0.02,
     captureModeEnabled,
     captureVideoPath: outputPath,
+    engineeringCopyDetected,
+    finalActiveScene,
     rawPlaywrightVideoPath: rawVideoPath,
+    sceneHoldDetected,
     sceneFlowDetected,
     screenshotDiffRatio,
+    storyboardSceneCount,
     url: options.url,
   }
   console.log(JSON.stringify(result, null, 2))

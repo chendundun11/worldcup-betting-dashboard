@@ -84,7 +84,7 @@ scripts\README-video-v4.md
 
 ## v5 网站录屏素材模式
 
-v5 是独立的新模式，不会替换 v4。它会打开 `capture=1` 专用页面，录制“本地 AI 模型正在分析比赛”的网页流程，再叠加口播、TTS 配音和烧录字幕。
+v5 是独立的新模式，不会替换 v4。它会打开 `capture=1` 专用页面，录制“本地 AI 模型正在分析比赛”的网页流程，再叠加口播、TTS 配音和烧录字幕。v5.1 起会先生成 `storyboard.json`，再由同一份 storyboard 驱动 capture 页面、口播、字幕和报告，避免口播与画面错位。
 
 默认 sharp 风格：
 
@@ -118,6 +118,15 @@ v5 详细说明见：
 ```text
 scripts\README-video-v5.md
 ```
+
+v5.1 验收重点：
+
+- `storyboard.json` 已生成。
+- `voiceoverSceneAligned=true`。
+- `subtitleSceneAligned=true`。
+- `captureSceneAligned=true`。
+- `mismatchWarnings=[]`。
+- 画面不出现 `raw response` 等工程化文案。
 
 ## 批量视频生成
 

@@ -11,6 +11,7 @@ function parseArgs(argv) {
     meta: '',
     output: '',
     script: '',
+    storyboard: '',
     style: 'sharp',
   }
 
@@ -22,6 +23,7 @@ function parseArgs(argv) {
         [
           'Usage:',
           '  node .\\scripts\\generate-v5-voiceover.mjs --meta <meta.json> --output <voiceover.txt> --copy <copy.txt> --style sharp',
+          '  node .\\scripts\\generate-v5-voiceover.mjs --storyboard <storyboard.json> --meta <meta.json> --output <voiceover.txt>',
           '  node .\\scripts\\generate-v5-voiceover.mjs --meta <meta.json> --output <voiceover.txt> --script <custom.txt>',
         ].join('\n'),
       )
@@ -48,6 +50,12 @@ function parseArgs(argv) {
 
     if (arg === '--script') {
       options.script = String(argv[index + 1] ?? '').trim()
+      index += 1
+      continue
+    }
+
+    if (arg === '--storyboard') {
+      options.storyboard = String(argv[index + 1] ?? '').trim()
       index += 1
       continue
     }
@@ -86,6 +94,13 @@ function cleanCustomScript(text) {
     .map((line) => line.trim())
     .filter(Boolean)
     .join('\n')
+}
+
+function splitCustomLines(text) {
+  return cleanCustomScript(text)
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
 }
 
 function normalizeScoreForSpeech(value) {
@@ -183,27 +198,41 @@ export function writeV5VoiceoverFiles({
   customScriptPath,
   metaPath,
   outputPath,
+  storyboardPath = '',
   style = 'sharp',
 }) {
   if (!existsSync(metaPath)) throw new Error(`找不到 meta.json：${metaPath}`)
   const meta = readJson(metaPath)
+  const storyboard = storyboardPath && existsSync(storyboardPath) ? readJson(storyboardPath) : null
+  const storyboardScenes = Array.isArray(storyboard?.scenes) ? storyboard.scenes : []
   const normalizedStyle = normalizeStyle(style)
   const warnings = []
-  let voiceoverSource = 'generated'
-  let voiceoverText = buildGeneratedVoiceover(meta, normalizedStyle)
+  let voiceoverSceneAligned = storyboardScenes.length >= 6
+  let voiceoverSource = storyboardScenes.length ? 'storyboard' : 'generated'
+  let voiceoverText = storyboardScenes.length
+    ? storyboardScenes.map((item) => item.voiceoverText).filter(Boolean).join('\n')
+    : buildGeneratedVoiceover(meta, normalizedStyle)
 
   if (customScriptPath) {
     if (existsSync(customScriptPath)) {
-      const customText = cleanCustomScript(readFileSync(customScriptPath, 'utf8'))
+      const customLines = splitCustomLines(readFileSync(customScriptPath, 'utf8'))
+      const customText = customLines.join('\n')
       if (customText) {
         voiceoverText = customText
         voiceoverSource = 'custom'
+        voiceoverSceneAligned =
+          storyboardScenes.length > 0 && customLines.length === storyboardScenes.length
+        if (!voiceoverSceneAligned) {
+          warnings.push('customVoiceoverMayNotMatchStoryboard')
+        }
       } else {
         voiceoverSource = 'fallback'
+        voiceoverSceneAligned = storyboardScenes.length >= 6
         warnings.push('自定义口播为空，已 fallback 到自动生成口播。')
       }
     } else {
       voiceoverSource = 'fallback'
+      voiceoverSceneAligned = storyboardScenes.length >= 6
       warnings.push(`找不到自定义口播文件，已 fallback 到自动生成口播：${customScriptPath}`)
     }
   }
@@ -227,8 +256,12 @@ export function writeV5VoiceoverFiles({
     customScriptPath: customScriptPath || null,
     estimatedVoiceoverSeconds,
     meta,
+    storyboardPath: storyboardPath || null,
+    storyboardSceneCount: storyboardScenes.length,
     style: normalizedStyle,
     voiceoverCharCount,
+    voiceoverSceneAligned,
+    voiceoverSceneCount: voiceoverText.split('\n').filter(Boolean).length,
     voiceoverPath: outputPath,
     voiceoverSource,
     voiceoverText,
@@ -248,6 +281,7 @@ if (isMainModule()) {
       customScriptPath: options.script,
       metaPath: options.meta,
       outputPath: options.output,
+      storyboardPath: options.storyboard,
       style: options.style,
     })
     console.log(JSON.stringify(result, null, 2))
