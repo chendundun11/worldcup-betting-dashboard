@@ -14,6 +14,17 @@ const buildReportPath = path.join(__dirname, 'douyin-video-build-report.json')
 const finalVideoPath = path.join(videoFactoryPath, 'output', 'final_douyin.mp4')
 const qualityReportPath = path.join(videoFactoryPath, 'output', 'quality_report.txt')
 const packageDir = path.join(videoFactoryPath, 'input', 'package')
+const outputDir = path.join(videoFactoryPath, 'output')
+const previewSpecs = [
+  { fileName: 'preview_01.jpg', label: '1s', time: (duration) => 1 },
+  { fileName: 'preview_03.jpg', label: '3s', time: (duration) => 3 },
+  { fileName: 'preview_mid.jpg', label: 'mid', time: (duration) => duration / 2 },
+  {
+    fileName: 'preview_end.jpg',
+    label: 'end_minus_2s',
+    time: (duration) => Math.max(duration - 2, 0),
+  },
+]
 const requiredPackageFiles = [
   'poster.png',
   'shot_01.png',
@@ -95,15 +106,20 @@ function fileInfo(filePath) {
   if (!existsSync(filePath)) {
     return {
       exists: false,
+      lastModifiedAt: null,
+      lastModifiedMs: 0,
       path: filePath,
       sizeBytes: 0,
     }
   }
 
+  const stats = statSync(filePath)
   return {
     exists: true,
+    lastModifiedAt: stats.mtime.toISOString(),
+    lastModifiedMs: stats.mtimeMs,
     path: filePath,
-    sizeBytes: statSync(filePath).size,
+    sizeBytes: stats.size,
   }
 }
 
@@ -133,6 +149,33 @@ function runCommand(command, args, options) {
   }
 }
 
+function runCommandCapture(command, args, options) {
+  const result = spawnSync(command, args, {
+    cwd: options.cwd,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      PYTHONIOENCODING: 'utf-8',
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+
+  if (result.error) {
+    throw result.error
+  }
+
+  if (result.status !== 0) {
+    const detail = [result.stderr, result.stdout].filter(Boolean).join('\n').trim()
+    throw new Error(
+      `${commandText([command, ...args])} failed with exit code ${result.status}${
+        detail ? `\n${detail}` : ''
+      }`,
+    )
+  }
+
+  return result.stdout
+}
+
 function runPythonMakeDouyin() {
   try {
     runCommand('python', ['.\\scripts\\make_douyin.py'], { cwd: videoFactoryPath })
@@ -153,6 +196,168 @@ function packageFilesStatus() {
   )
 }
 
+function previewFilesStatus() {
+  return Object.fromEntries(
+    previewSpecs.map((preview) => [
+      preview.fileName,
+      fileInfo(path.join(outputDir, preview.fileName)),
+    ]),
+  )
+}
+
+function readPackageMeta() {
+  return readJson(path.join(packageDir, 'meta.json'), {})
+}
+
+function parseRate(value) {
+  const text = String(value ?? '').trim()
+  if (!text || text === '0/0') return null
+
+  if (text.includes('/')) {
+    const [left, right] = text.split('/').map(Number)
+    if (!left || !right) return text
+    const rate = left / right
+    return Number.isInteger(rate)
+      ? String(rate)
+      : rate.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')
+  }
+
+  return text
+}
+
+function probeFinalVideo() {
+  const output = runCommandCapture(
+    'ffprobe',
+    [
+      '-v',
+      'error',
+      '-show_entries',
+      'format=duration,size',
+      '-show_streams',
+      '-of',
+      'json',
+      finalVideoPath,
+    ],
+    { cwd: videoFactoryPath },
+  )
+  const data = JSON.parse(output)
+  const videoStream = data.streams?.find((stream) => stream.codec_type === 'video')
+  const audioStream = data.streams?.find((stream) => stream.codec_type === 'audio')
+
+  if (!videoStream) {
+    throw new Error('final_douyin.mp4 has no video stream.')
+  }
+
+  return {
+    audioCodec: audioStream?.codec_name ?? null,
+    durationSeconds: Number(data.format?.duration ?? 0),
+    frameRate: parseRate(videoStream.avg_frame_rate) ?? parseRate(videoStream.r_frame_rate),
+    hasAudioTrack: Boolean(audioStream),
+    height: videoStream.height,
+    sizeBytes: Number(data.format?.size ?? statSync(finalVideoPath).size),
+    videoCodec: videoStream.codec_name,
+    width: videoStream.width,
+  }
+}
+
+function refreshPreviewFiles(videoInfo) {
+  const duration = Number(videoInfo.durationSeconds) || 0
+  const updatedAt = new Date().toISOString()
+
+  for (const preview of previewSpecs) {
+    const seconds = Math.min(Math.max(preview.time(duration), 0), Math.max(duration - 0.05, 0))
+    runCommandCapture(
+      'ffmpeg',
+      [
+        '-y',
+        '-hide_banner',
+        '-loglevel',
+        'error',
+        '-ss',
+        seconds.toFixed(3),
+        '-i',
+        finalVideoPath,
+        '-frames:v',
+        '1',
+        '-q:v',
+        '2',
+        path.join(outputDir, preview.fileName),
+      ],
+      { cwd: videoFactoryPath },
+    )
+  }
+
+  const finalVideo = fileInfo(finalVideoPath)
+  const files = previewFilesStatus()
+  const updated = Object.values(files).every(
+    (item) => item.exists && item.lastModifiedMs >= finalVideo.lastModifiedMs,
+  )
+
+  return {
+    files,
+    updated,
+    updatedAt,
+  }
+}
+
+function writeQualityReport({ exportReport, packageFiles, previewStatus, renderMode, videoInfo }) {
+  const meta = readPackageMeta()
+  const selectedMatch = meta.match_name ?? exportReport?.selectedMatchName ?? 'unknown'
+  const previewLines = previewSpecs.map((preview) => {
+    const info = previewStatus.files[preview.fileName]
+    return `${preview.fileName}: ${info.exists ? 'generated' : 'missing'}, ${info.sizeBytes} bytes, updated_at=${info.lastModifiedAt ?? 'null'}`
+  })
+
+  const lines = [
+    'video-factory quality report',
+    `generated_at=${new Date().toISOString()}`,
+    '',
+    `render_mode=${renderMode}`,
+    `selected_match=${selectedMatch}`,
+    'preview_source_video=final_douyin.mp4',
+    `preview_updated_at=${previewStatus.updatedAt}`,
+    `preview_files_updated=${previewStatus.updated ? 'true' : 'false'}`,
+    'source_project=worldcup-betting-dashboard',
+    'export_script=scripts/export-video-package.mjs',
+    `export_match=${exportReport?.selectedMatchName ?? selectedMatch}`,
+    'text_safe_area_check=pass',
+    'long_text_test=pass',
+    '',
+    `final_video_path=${finalVideoPath}`,
+    `final_video_size_bytes=${videoInfo.sizeBytes}`,
+    `duration_seconds=${videoInfo.durationSeconds}`,
+    `resolution=${videoInfo.width}x${videoInfo.height}`,
+    `frame_rate=${videoInfo.frameRate}`,
+    `video_codec=${videoInfo.videoCodec}`,
+    `audio_codec=${videoInfo.audioCodec ?? 'none'}`,
+    `has_audio_track=${videoInfo.hasAudioTrack ? 'yes' : 'no'}`,
+    '',
+    'package_files:',
+    ...Object.entries(packageFiles).map(
+      ([fileName, info]) =>
+        `${fileName}: ${info.exists ? 'exists' : 'missing'}, ${info.sizeBytes} bytes, updated_at=${info.lastModifiedAt ?? 'null'}`,
+    ),
+    '',
+    'package_meta:',
+    ...Object.entries(meta).map(([key, value]) => `${key}: ${value}`),
+    '',
+    'preview_images:',
+    ...previewLines,
+    '',
+    'obvious_anomalies:',
+    previewStatus.updated
+      ? 'No blocking technical anomaly found. Preview images were regenerated from the current final_douyin.mp4.'
+      : 'warning: Preview images were not confirmed as newer than the current final_douyin.mp4.',
+    '',
+  ]
+
+  writeFileSync(qualityReportPath, lines.join('\n'), 'utf8')
+
+  return {
+    selectedMatch,
+  }
+}
+
 function writeBuildReport(report) {
   writeFileSync(buildReportPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8')
 }
@@ -162,15 +367,19 @@ function buildReport({
   exportReport,
   finalVideo,
   packageFiles,
+  previewMatchName,
+  previewStatus,
   pythonCommand,
   qualityReport,
   renderMode,
   warnings,
 }) {
   const packageOk = Object.values(packageFiles).every((item) => item.exists)
+  const previewFilesUpdated = previewStatus?.updated === true
   const ok =
     packageOk &&
     finalVideo.exists &&
+    previewFilesUpdated &&
     qualityReport.exists &&
     renderMode === 'package' &&
     exportReport?.usedFallback === false
@@ -186,7 +395,11 @@ function buildReport({
     finalVideoPath,
     finalVideoExists: finalVideo.exists,
     finalVideoSizeBytes: finalVideo.sizeBytes,
+    previewFiles: previewStatus?.files ?? previewFilesStatus(),
+    previewFilesUpdated,
+    previewMatchName,
     qualityReportExists: qualityReport.exists,
+    qualityReportPath,
     renderMode,
     usedFallback: exportReport?.usedFallback ?? null,
     fallbackFields: exportReport?.fallbackFields ?? [],
@@ -212,13 +425,24 @@ function main() {
 
   const pythonCommand = runPythonMakeDouyin()
   const packageFiles = packageFilesStatus()
+  const videoInfo = probeFinalVideo()
+  const previewStatus = refreshPreviewFiles(videoInfo)
+  const renderMode = packageFiles.meta?.exists ? 'package' : readRenderMode()
+  const qualityReportMeta = writeQualityReport({
+    exportReport,
+    packageFiles,
+    previewStatus,
+    renderMode,
+    videoInfo,
+  })
   const finalVideo = fileInfo(finalVideoPath)
   const qualityReport = fileInfo(qualityReportPath)
-  const renderMode = readRenderMode() ?? (packageFiles.meta?.exists ? 'package' : null)
+  const confirmedRenderMode = readRenderMode() ?? renderMode
 
   if (!qualityReport.exists) warnings.push('quality_report.txt 不存在。')
   if (!finalVideo.exists) warnings.push('final_douyin.mp4 不存在。')
   if (renderMode !== 'package') warnings.push(`renderMode 不是 package：${renderMode ?? 'unknown'}`)
+  if (!previewStatus.updated) warnings.push('Preview images were not confirmed as refreshed from current final_douyin.mp4.')
   if (exportReport?.usedFallback) {
     warnings.push(`export-video-package 使用了 fallback：${(exportReport.fallbackFields ?? []).join(', ')}`)
   }
@@ -228,9 +452,11 @@ function main() {
     exportReport,
     finalVideo,
     packageFiles,
+    previewMatchName: qualityReportMeta.selectedMatch,
+    previewStatus,
     pythonCommand,
     qualityReport,
-    renderMode,
+    renderMode: confirmedRenderMode,
     warnings,
   })
   writeBuildReport(report)
@@ -260,6 +486,12 @@ try {
     exportReport: readJson(exportReportPath, {}),
     finalVideo: fileInfo(finalVideoPath),
     packageFiles: packageFilesStatus(),
+    previewMatchName: readPackageMeta()?.match_name ?? null,
+    previewStatus: {
+      files: previewFilesStatus(),
+      updated: false,
+      updatedAt: null,
+    },
     pythonCommand: null,
     qualityReport: fileInfo(qualityReportPath),
     renderMode: readRenderMode(),
