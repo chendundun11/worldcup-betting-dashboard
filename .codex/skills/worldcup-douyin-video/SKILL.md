@@ -10,6 +10,7 @@ description: Generate local Douyin-ready World Cup prediction videos from worldc
 Use this skill when the user asks to:
 
 - 根据比赛名或索引生成抖音短视频。
+- 根据比赛名或索引生成 v3 配音解说版抖音短视频。
 - 批量生成多场比赛短视频。
 - 生成后复制到桌面输出文件夹。
 - 生成或检查 `copy.txt`、preview 图、`quality_report.txt`、`douyin-video-build-report.json`、`douyin-batch-report.json`。
@@ -23,6 +24,7 @@ Use this skill when the user asks to:
 - 当前视频: `C:\Users\chend\Desktop\新建文件夹\video-factory\output\final_douyin.mp4`
 - 单条报告: `C:\Users\chend\Desktop\新建文件夹\worldcup-betting-dashboard\scripts\douyin-video-build-report.json`
 - 批量报告: `C:\Users\chend\Desktop\新建文件夹\worldcup-betting-dashboard\scripts\douyin-batch-report.json`
+- v3 报告: `C:\Users\chend\Desktop\新建文件夹\worldcup-betting-dashboard\scripts\douyin-video-v3-report.json`
 - 桌面索引: `C:\Users\chend\Desktop\世界杯短视频输出\index.md`
 
 ## 固定命令
@@ -55,6 +57,18 @@ node .\scripts\build-douyin-batch.mjs --index 0,1,2
 
 Batch builds must resolve matches before rendering and keep selected matches unique. If two terms hit the same match, skip the later duplicate term, write it to `skippedTerms` and `duplicateMatches`, and do not create another `ready` video for the same `selectedMatchName`.
 
+V3 voiceover build:
+
+```powershell
+node .\scripts\build-douyin-video-v3.mjs --match "葡萄牙"
+```
+
+```powershell
+node .\scripts\build-douyin-video-v3.mjs --index 0
+```
+
+V3 must generate `voiceover.txt`, `voice.mp3` when TTS succeeds, `subtitles.ass`, `copy.txt`, 4 preview images, `quality_report.txt`, `douyin-video-v3-report.json`, and a desktop mp4 in a `_v3_voice` folder.
+
 ## 标准流程
 
 1. 进入 `worldcup-betting-dashboard`。
@@ -62,7 +76,8 @@ Batch builds must resolve matches before rendering and keep selected matches uni
 3. 按用户指定的 `--match`、`--index`、`--matches` 或 `--limit` 运行脚本。
 4. 单条时读取 `scripts\douyin-video-build-report.json`。
 5. 批量时读取 `scripts\douyin-batch-report.json` 和桌面 `index.md`。
-6. 检查每个桌面子目录是否包含:
+6. v3 时读取 `scripts\douyin-video-v3-report.json`，确认 `ttsEnabled=true`、`hasBurnedSubtitles=true`、`sceneCount>=5`。
+7. 检查每个桌面子目录是否包含:
    - `*.mp4`
    - `preview_01.jpg`
    - `preview_03.jpg`
@@ -71,8 +86,13 @@ Batch builds must resolve matches before rendering and keep selected matches uni
    - `quality_report.txt`
    - `douyin-video-build-report.json`
    - `copy.txt`
-7. 必要时打开 preview 图或用 `ffmpeg -v error -i <mp4> -f null -` 检查黑屏、解码、声音异常。
-8. 最后回报结果；只有用户明确要求保存代码时才提交，除非当前任务授权自行提交。
+8. v3 子目录还要检查:
+   - `voiceover.txt`
+   - `voice.mp3`
+   - `subtitles.ass`
+   - `douyin-video-v3-report.json`
+9. 必要时打开 preview 图或用 `ffmpeg -v error -i <mp4> -f null -` 检查黑屏、解码、声音异常。
+10. 最后回报结果；只有用户明确要求保存代码时才提交，除非当前任务授权自行提交。
 
 ## copy.txt 规则
 
@@ -108,6 +128,23 @@ Use `contentScore` out of 100:
 - 无明显异常：5
 
 Prefer `contentScore >= 80`. If below 80, report it as needing review.
+
+## v3 contentScore 验收
+
+V3 score is also out of 100:
+
+- 有配音：20
+- 有字幕：15
+- 视频时长 15 到 25 秒：10
+- 比赛名清楚：10
+- 主推清楚：10
+- 比分清楚：10
+- 大小球清楚：5
+- 风险提示清楚：5
+- 画面不是静态单图：10
+- `usedFallback=false`：5
+
+For v3, `publishReadiness=ready` requires `contentScore>=85`, voiceover audio, and burned subtitles. If TTS fails, report `blocked`.
 
 ## publishReadiness
 
@@ -177,6 +214,7 @@ npm run build
 Commit only source scripts, docs, Skill files, and necessary `.gitignore` updates. Do not commit:
 
 - `mp4/jpg/png/mp3`
+- `voice.mp3`
 - `.env` or API keys
 - local report JSON files
 - desktop output files

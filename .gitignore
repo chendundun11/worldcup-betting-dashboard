@@ -18,6 +18,7 @@ dist-ssr
 scripts/video-package-export-report.json
 scripts/douyin-video-build-report.json
 scripts/douyin-batch-report.json
+scripts/douyin-video-v3-report.json
 
 # Editor directories and files
 .vscode/*

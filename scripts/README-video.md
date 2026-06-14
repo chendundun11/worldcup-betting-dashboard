@@ -24,6 +24,28 @@ node .\scripts\build-douyin-video.mjs
 
 单条命令会导出 `video-factory\input\package\` 素材包，生成 `video-factory\output\final_douyin.mp4`，刷新 preview 图和 `quality_report.txt`，再复制到桌面输出目录。
 
+## v3 配音解说版
+
+v3 是独立的新模式，不会替换 v2 Plus。它会生成中文配音、烧录字幕、7 个动态 scene、`voiceover.txt`、`voice.mp3`、`copy.txt` 和 v3 报告。
+
+按比赛关键词生成：
+
+```powershell
+node .\scripts\build-douyin-video-v3.mjs --match "葡萄牙"
+```
+
+按索引生成：
+
+```powershell
+node .\scripts\build-douyin-video-v3.mjs --index 0
+```
+
+v3 详细说明见：
+
+```text
+scripts\README-video-v3.md
+```
+
 ## 批量视频生成
 
 按多个比赛关键词生成：
@@ -107,6 +129,12 @@ C:\Users\chend\Desktop\世界杯短视频输出\index.md
 C:\Users\chend\Desktop\新建文件夹\worldcup-betting-dashboard\scripts\douyin-video-build-report.json
 ```
 
+v3 总报告：
+
+```text
+C:\Users\chend\Desktop\新建文件夹\worldcup-betting-dashboard\scripts\douyin-video-v3-report.json
+```
+
 批量总报告：
 
 ```text
@@ -155,6 +183,12 @@ C:\Users\chend\Desktop\新建文件夹\worldcup-betting-dashboard\scripts\douyin
 
 ```text
 使用 worldcup-douyin-video Skill，按比赛名“葡萄牙”生成抖音短视频，并回报桌面 mp4 路径。
+```
+
+v3 配音版说法：
+
+```text
+使用 worldcup-douyin-video Skill，按比赛名“葡萄牙”生成 v3 配音解说版抖音短视频，并回报配音、字幕、contentScore 和桌面 mp4 路径。
 ```
 
 批量说法：
