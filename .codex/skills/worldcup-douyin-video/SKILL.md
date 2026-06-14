@@ -12,6 +12,7 @@ Use this skill when the user asks to:
 - 根据比赛名或索引生成抖音短视频。
 - 根据比赛名或索引生成 v3 配音解说版抖音短视频。
 - 根据比赛名或索引生成 v4 素材库 + 可定制口播版抖音短视频。
+- 根据比赛名或索引生成 v5 网站录屏素材模式抖音短视频。
 - 批量生成多场比赛短视频。
 - 生成后复制到桌面输出文件夹。
 - 生成或检查 `copy.txt`、preview 图、`quality_report.txt`、`douyin-video-build-report.json`、`douyin-batch-report.json`。
@@ -27,7 +28,9 @@ Use this skill when the user asks to:
 - 批量报告: `C:\Users\chend\Desktop\新建文件夹\worldcup-betting-dashboard\scripts\douyin-batch-report.json`
 - v3 报告: `C:\Users\chend\Desktop\新建文件夹\worldcup-betting-dashboard\scripts\douyin-video-v3-report.json`
 - v4 报告: `C:\Users\chend\Desktop\新建文件夹\worldcup-betting-dashboard\scripts\douyin-video-v4-report.json`
+- v5 报告: `C:\Users\chend\Desktop\新建文件夹\worldcup-betting-dashboard\scripts\douyin-video-v5-report.json`
 - v4 素材库: `C:\Users\chend\Desktop\新建文件夹\video-factory\materials`
+- v5 capture 页面: `http://localhost:5173/?capture=1&match=葡萄牙`
 - 桌面索引: `C:\Users\chend\Desktop\世界杯短视频输出\index.md`
 
 ## 固定命令
@@ -84,6 +87,18 @@ node .\scripts\build-douyin-video-v4.mjs --match "葡萄牙" --script ".\scripts
 
 V4 must generate `voiceover.txt`, `voice.mp3`, `subtitles.ass`, `copy.txt`, 4 preview images, `quality_report.txt`, `douyin-video-v4-report.json`, and a desktop mp4 in a `_v4_voice` folder. If the local materials folder is empty, `materialMode` should be `fallback-v3` and the build should continue.
 
+V5 capture build:
+
+```powershell
+node .\scripts\build-douyin-video-v5.mjs --match "葡萄牙" --style sharp
+```
+
+```powershell
+node .\scripts\build-douyin-video-v5.mjs --match "葡萄牙" --script ".\scripts\voiceover-custom.txt"
+```
+
+V5 must open the `capture=1` page, record it with Playwright, generate `capture_raw.mp4`, `voiceover.txt`, `voice.mp3`, `subtitles.ass`, `copy.txt`, 4 preview images, `quality_report.txt`, `douyin-video-v5-report.json`, and a desktop mp4 in a `_v5_capture` folder. It must not publish to Douyin.
+
 ## 标准流程
 
 1. 进入 `worldcup-betting-dashboard`。
@@ -93,7 +108,8 @@ V4 must generate `voiceover.txt`, `voice.mp3`, `subtitles.ass`, `copy.txt`, 4 pr
 5. 批量时读取 `scripts\douyin-batch-report.json` 和桌面 `index.md`。
 6. v3 时读取 `scripts\douyin-video-v3-report.json`，确认 `ttsEnabled=true`、`hasBurnedSubtitles=true`、`sceneCount>=5`。
 7. v4 时读取 `scripts\douyin-video-v4-report.json`，确认 `voiceoverSource`、`materialMode`、`ttsEnabled=true`、`hasBurnedSubtitles=true`、`sceneCount>=7`。
-8. 检查每个桌面子目录是否包含:
+8. v5 时读取 `scripts\douyin-video-v5-report.json`，确认 `captureModeEnabled=true`、`autoScrollDetected=true`、`captureLooksDynamic=true`、`ttsEnabled=true`、`hasBurnedSubtitles=true`。
+9. 检查每个桌面子目录是否包含:
    - `*.mp4`
    - `preview_01.jpg`
    - `preview_03.jpg`
@@ -102,14 +118,16 @@ V4 must generate `voiceover.txt`, `voice.mp3`, `subtitles.ass`, `copy.txt`, 4 pr
    - `quality_report.txt`
    - `douyin-video-build-report.json`
    - `copy.txt`
-9. v3/v4 子目录还要检查:
+10. v3/v4/v5 子目录还要检查:
    - `voiceover.txt`
    - `voice.mp3`
    - `subtitles.ass`
    - `douyin-video-v3-report.json`
    - `douyin-video-v4-report.json`
-10. 必要时打开 preview 图或用 `ffmpeg -v error -i <mp4> -f null -` 检查黑屏、解码、声音异常。
-11. 最后回报结果；只有用户明确要求保存代码时才提交，除非当前任务授权自行提交。
+   - `douyin-video-v5-report.json`
+11. v5 子目录还要检查 `capture_raw.mp4`。
+12. 必要时打开 preview 图或用 `ffmpeg -v error -i <mp4> -f null -` 检查黑屏、解码、声音异常。
+13. 最后回报结果；只有用户明确要求保存代码时才提交，除非当前任务授权自行提交。
 
 ## copy.txt 规则
 
@@ -179,6 +197,22 @@ V4 score is out of 100:
 
 For v4, `publishReadiness` should not be `blocked`. If `materialMode=fallback-v3`, report it clearly but do not fail solely because the materials folder is empty.
 
+## v5 contentScore 验收
+
+V5 score is out of 100:
+
+- capture 页面可用：15
+- 自动录屏成功：15
+- 页面有明显 AI 模型运行感：15
+- 有配音：15
+- 有字幕：10
+- 比赛名、主推、比分、大小球清楚：15
+- 风险提示清楚：5
+- 视频时长 20 到 35 秒：5
+- 无明显黑屏、横向滚动或乱码：5
+
+For v5, `publishReadiness` should not be `blocked`. If Playwright is missing, install only `playwright` as a dev dependency; do not install unrelated tools or download GitHub projects.
+
 ## publishReadiness
 
 - `ready`: Content is technically ready; still recommend human review before publishing.
@@ -194,6 +228,7 @@ Never claim a video is ready if `publishReadiness=blocked`.
 - `copiedToDesktop=true`
 - `final_douyin.mp4` exists.
 - Desktop mp4 exists.
+- For v5, `captureModeEnabled=true`, `sceneFlowDetected=true`, and `capture_raw.mp4` exists.
 - `copy.txt` exists and contains the selected match name.
 - Preview images exist and match the selected match.
 - `quality_report.txt` has current `selected_match`.
@@ -248,6 +283,7 @@ Commit only source scripts, docs, Skill files, and necessary `.gitignore` update
 
 - `mp4/jpg/png/mp3`
 - `mov/wav`
+- `webm`
 - `voice.mp3`
 - `subtitles.ass`
 - `.env` or API keys

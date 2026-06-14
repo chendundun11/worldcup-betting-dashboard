@@ -82,6 +82,43 @@ v4 详细说明见：
 scripts\README-video-v4.md
 ```
 
+## v5 网站录屏素材模式
+
+v5 是独立的新模式，不会替换 v4。它会打开 `capture=1` 专用页面，录制“本地 AI 模型正在分析比赛”的网页流程，再叠加口播、TTS 配音和烧录字幕。
+
+默认 sharp 风格：
+
+```powershell
+node .\scripts\build-douyin-video-v5.mjs --match "葡萄牙"
+```
+
+指定风格：
+
+```powershell
+node .\scripts\build-douyin-video-v5.mjs --match "葡萄牙" --style record
+node .\scripts\build-douyin-video-v5.mjs --match "葡萄牙" --style sharp
+node .\scripts\build-douyin-video-v5.mjs --match "葡萄牙" --style explain
+```
+
+使用自定义口播：
+
+```powershell
+node .\scripts\build-douyin-video-v5.mjs --match "葡萄牙" --script ".\scripts\voiceover-custom.txt"
+```
+
+capture 页面：
+
+```text
+http://localhost:5173/?capture=1
+http://localhost:5173/?capture=1&match=葡萄牙
+```
+
+v5 详细说明见：
+
+```text
+scripts\README-video-v5.md
+```
+
 ## 批量视频生成
 
 按多个比赛关键词生成：
@@ -177,6 +214,12 @@ v4 总报告：
 C:\Users\chend\Desktop\新建文件夹\worldcup-betting-dashboard\scripts\douyin-video-v4-report.json
 ```
 
+v5 总报告：
+
+```text
+C:\Users\chend\Desktop\新建文件夹\worldcup-betting-dashboard\scripts\douyin-video-v5-report.json
+```
+
 批量总报告：
 
 ```text
@@ -237,6 +280,12 @@ v4 素材库 + 可定制口播说法：
 
 ```text
 使用 worldcup-douyin-video Skill，按比赛名“葡萄牙”生成 v4 短视频，使用 sharp 风格或指定 voiceover-custom.txt，并回报 materialMode、voiceoverSource、contentScore 和桌面 mp4 路径。
+```
+
+v5 网站录屏说法：
+
+```text
+使用 worldcup-douyin-video Skill，按比赛名“葡萄牙”生成 v5 网站录屏短视频，并回报 captureUrl、captureModeEnabled、contentScore 和桌面 mp4 路径。
 ```
 
 批量说法：

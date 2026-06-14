@@ -2764,7 +2764,237 @@ function isInternalV4RouteActive() {
   return window.location.hash === '#internal-v4' || params.get('internal') === 'v4'
 }
 
+function isCaptureModeActive() {
+  if (typeof window === 'undefined') return false
+
+  const params = new URLSearchParams(window.location.search)
+  return params.get('capture') === '1'
+}
+
+function getCaptureMatchTerm() {
+  if (typeof window === 'undefined') return ''
+
+  const params = new URLSearchParams(window.location.search)
+  return params.get('match')?.trim() ?? ''
+}
+
+function normalizeCaptureText(value) {
+  return String(value ?? '')
+    .toLowerCase()
+    .replace(/\s+/g, '')
+}
+
+function findCaptureMatchIndex(matches, matchTerm) {
+  if (!matches.length) return -1
+  const normalizedTerm = normalizeCaptureText(matchTerm)
+  if (!normalizedTerm) return 0
+
+  const exactIndex = matches.findIndex((match) => {
+    const matchName = normalizeCaptureText(`${match.homeTeam.name}vs${match.awayTeam.name}`)
+    const shortName = normalizeCaptureText(`${match.homeTeam.shortName}vs${match.awayTeam.shortName}`)
+    return matchName === normalizedTerm || shortName === normalizedTerm
+  })
+  if (exactIndex >= 0) return exactIndex
+
+  return matches.findIndex((match) => {
+    const haystack = normalizeCaptureText(
+      [
+        match.homeTeam.name,
+        match.awayTeam.name,
+        match.homeTeam.shortName,
+        match.awayTeam.shortName,
+        `${match.homeTeam.name}vs${match.awayTeam.name}`,
+        `${match.homeTeam.shortName}vs${match.awayTeam.shortName}`,
+      ].join('|'),
+    )
+    return haystack.includes(normalizedTerm)
+  })
+}
+
+function CaptureModeDashboard({
+  confidenceScore,
+  mainDirection,
+  marketSentiment,
+  match,
+  presentationRating,
+  publicDisplay,
+  riskItems,
+}) {
+  const finalCardRef = useRef(null)
+  const matchName = `${match.homeTeam.name} vs ${match.awayTeam.name}`
+  const scoreMain = publicDisplay.scoreReference.main
+  const scoreBackup = publicDisplay.scoreReference.backup
+  const riskText =
+    riskItems[0]?.text ??
+    '临场阵容、节奏和盘口变化仍需赛前二次确认。'
+  const steps = [
+    { label: '初始化模型', status: '完成' },
+    { label: '读取赛程数据', status: '完成' },
+    { label: '扫描球队状态', status: '完成' },
+    { label: '盘口变化追踪', status: '临场复核项' },
+    { label: '市场热度识别', status: marketSentiment.heat },
+    { label: '比分分布计算', status: '完成' },
+    { label: '大小球区间判断', status: '完成' },
+    { label: '冷门风险检测', status: presentationRating.riskLabel },
+    { label: '临场阵容复核', status: '赛前二次确认' },
+    { label: '天气与场地因子', status: '待复核' },
+    { label: '模型置信度校准', status: `${confidenceScore}/100` },
+  ]
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined
+
+    const checkpoints = [
+      { at: 600, top: 0 },
+      { at: 3_400, top: 420 },
+      { at: 8_200, top: 900 },
+      { at: 14_200, top: 1_920 },
+      { at: 20_200, top: 2_240 },
+      { at: 25_200, top: 2_260 },
+    ]
+    const timers = checkpoints.map((item) =>
+      window.setTimeout(() => {
+        window.scrollTo({ behavior: 'smooth', top: item.top })
+      }, item.at),
+    )
+    const finalTimer = window.setTimeout(() => {
+      finalCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 26_500)
+
+    return () => {
+      timers.forEach((timer) => window.clearTimeout(timer))
+      window.clearTimeout(finalTimer)
+    }
+  }, [])
+
+  return (
+    <main
+      className="capture-dashboard"
+      data-auto-scroll="enabled"
+      data-capture-mode="true"
+      data-flow="v5-capture"
+      data-match-name={matchName}
+    >
+      <div className="capture-scan-line" aria-hidden="true" />
+      <section className="capture-hero" data-capture-scene="init">
+        <div className="capture-system-chip">本地 AI 世界杯分析系统</div>
+        <p>今日模型运行中</p>
+        <h1>{matchName}</h1>
+        <div className="capture-hero-grid">
+          <span>赛程数据</span>
+          <strong>已载入</strong>
+          <span>临场因子</span>
+          <strong>待复核</strong>
+          <span>输出状态</span>
+          <strong>生成中</strong>
+        </div>
+      </section>
+
+      <section className="capture-step-panel" data-capture-scene="scan">
+        <div className="capture-section-title">
+          <span>MODEL PIPELINE</span>
+          <h2>模型运行状态</h2>
+        </div>
+        <div className="capture-step-list">
+          {steps.map((step, index) => (
+            <div
+              className="capture-step"
+              key={step.label}
+              style={{ '--delay': `${index * 0.24}s` }}
+            >
+              <i>{String(index + 1).padStart(2, '0')}</i>
+              <span>{step.label}</span>
+              <b>{step.status}</b>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="capture-matrix" data-capture-scene="signals">
+        <div className="capture-section-title">
+          <span>SIGNAL MATRIX</span>
+          <h2>球队状态 / 热度 / 比分分布</h2>
+        </div>
+        <div className="capture-bars" aria-label="动态数据条">
+          {['状态', '热度', '压制', '波动', '风险', '比分'].map((label, index) => (
+            <p key={label} style={{ '--value': `${54 + index * 7}%`, '--delay': `${index * 0.18}s` }}>
+              <span>{label}</span>
+              <i />
+              <b>{54 + index * 7}</b>
+            </p>
+          ))}
+        </div>
+        <div className="capture-data-grid">
+          <article>
+            <span>市场热度</span>
+            <strong>{marketSentiment.heat}</strong>
+            <small>热度只做观察，不追高</small>
+          </article>
+          <article>
+            <span>数据完整度</span>
+            <strong>公开展示层</strong>
+            <small>不展示 raw response</small>
+          </article>
+          <article>
+            <span>模型置信度</span>
+            <strong>{confidenceScore}/100</strong>
+            <small>{presentationRating.strategyLabel}</small>
+          </article>
+        </div>
+      </section>
+
+      <section className="capture-result-zone" data-capture-scene="result">
+        <div className="capture-section-title">
+          <span>RESULT BOARD</span>
+          <h2>本场输出结果</h2>
+        </div>
+        <div className="capture-result-card">
+          <span>主推方向</span>
+          <strong>{mainDirection}</strong>
+          <small>方向仅作赛前数据记录</small>
+        </div>
+        <div className="capture-score-row">
+          <article>
+            <span>比分 A</span>
+            <strong>{scoreMain}</strong>
+          </article>
+          <article>
+            <span>比分 B</span>
+            <strong>{scoreBackup}</strong>
+          </article>
+        </div>
+        <div className="capture-result-card secondary">
+          <span>大小球方向</span>
+          <strong>{formatGoalsDirectionForPresentation(publicDisplay.totalGoalsDirection)}</strong>
+          <small>围绕比分分布复核</small>
+        </div>
+      </section>
+
+      <section
+        className="capture-final-card"
+        data-capture-scene="final"
+        ref={finalCardRef}
+      >
+        <span>最终复核</span>
+        <h2>{matchName}</h2>
+        <strong>{mainDirection}</strong>
+        <p>
+          比分 {scoreMain} / {scoreBackup} ·{' '}
+          {formatGoalsDirectionForPresentation(publicDisplay.totalGoalsDirection)}
+        </p>
+        <div>
+          <b>风险提示</b>
+          <small>{riskText}</small>
+        </div>
+        <em>仅做数据记录与娱乐参考，不承诺命中，不诱导下注。</em>
+      </section>
+    </main>
+  )
+}
+
 function App() {
+  const isCaptureMode = isCaptureModeActive()
+  const captureMatchTerm = isCaptureMode ? getCaptureMatchTerm() : ''
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [analysisPhase, setAnalysisPhase] = useState('done')
   const [lastAnalyzedAt, setLastAnalyzedAt] = useState(() => new Date())
@@ -3028,6 +3258,13 @@ function App() {
     () => getFocusMatches(focusSourceMatches, betHistoryData.records, new Date(), 3),
     [focusSourceMatches],
   )
+  const captureSelectedIndex = useMemo(
+    () =>
+      isCaptureMode
+        ? findCaptureMatchIndex(normalizedMatches, captureMatchTerm)
+        : -1,
+    [captureMatchTerm, isCaptureMode, normalizedMatches],
+  )
 
   useEffect(() => {
     if (!normalizedMatches.length) return
@@ -3046,7 +3283,9 @@ function App() {
   }, [focusSelection?.index, hasUserSelectedMatch, normalizedMatches.length])
 
   const safeSelectedIndex =
-    selectedIndex >= 0 && selectedIndex < normalizedMatches.length
+    isCaptureMode && captureSelectedIndex >= 0
+      ? captureSelectedIndex
+      : selectedIndex >= 0 && selectedIndex < normalizedMatches.length
       ? selectedIndex
       : 0
   const activeMatch =
@@ -3066,7 +3305,7 @@ function App() {
     ? getBeijingDateGroupInfo(activeMatch.kickoff).dateKey
     : ''
 
-  if (isInternalV4Route) {
+  if (isInternalV4Route && !isCaptureMode) {
     return (
       <InternalCommandCenterV4
         activeMatch={activeMatch}
@@ -3216,6 +3455,20 @@ function App() {
   const pendingMarketCount = normalizedMatches.filter(
     (match) => !hasLocalOdds(match) || !hasWdlOdds(match.odds),
   ).length
+
+  if (isCaptureMode) {
+    return (
+      <CaptureModeDashboard
+        confidenceScore={selectedConfidence}
+        mainDirection={activeShareMainDirection}
+        marketSentiment={marketSentiment}
+        match={activeMatch}
+        presentationRating={selectedPresentationRating}
+        publicDisplay={activePublicDisplay}
+        riskItems={publicRiskReminders}
+      />
+    )
+  }
 
   function handleReanalyze() {
     if (isAnalyzing) return
