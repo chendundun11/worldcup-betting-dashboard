@@ -1,5 +1,7 @@
 import { chromium } from 'playwright'
 
+import { ONBOARDING_NOTICE_STORAGE_KEY } from '../src/services/onboardingNotice.js'
+
 const BASE_URL = process.env.DASHBOARD_URL ?? 'http://127.0.0.1:5177/'
 const VERBOSE = process.env.CHECK_BROWSER_VERBOSE === '1'
 
@@ -109,8 +111,9 @@ try {
 
     await page.locator('.onboarding-close-button').click()
     await page.waitForFunction(() => !document.querySelector('.onboarding-banner'))
-    const dismissedNotice = await page.evaluate(() =>
-      localStorage.getItem('worldcup-betting-dashboard:onboarding-notice-date'),
+    const dismissedNotice = await page.evaluate((storageKey) =>
+      localStorage.getItem(storageKey),
+    ONBOARDING_NOTICE_STORAGE_KEY,
     )
     assert(dismissedNotice, `${viewport.name}: onboarding dismissal must persist`)
 
