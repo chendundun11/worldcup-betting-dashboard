@@ -3590,6 +3590,7 @@ function App() {
             onClick={handleCloseOnboardingNotice}
             type="button"
           >
+            <X size={14} />
             {ONBOARDING_NOTICE_CLOSE_TEXT}
           </button>
         </section>
@@ -3936,6 +3937,7 @@ function App() {
               onClick={() => setShowAllSchedule((isVisible) => !isVisible)}
               type="button"
             >
+              <CalendarDays size={14} />
               {showAllSchedule ? '收起全部赛程' : '查看全部赛程'}
             </button>
           </div>

@@ -809,6 +809,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   min-height: 42px;
   border: 1px solid rgba(45, 212, 191, 0.34);
   color: #04120f;
