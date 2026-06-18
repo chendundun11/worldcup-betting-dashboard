@@ -8,6 +8,7 @@ import { SQUAD_INSIGHTS } from '../src/data/squadInsights.js'
 
 const BANKROLL = 10000
 const MAX_STAKE_PER_MATCH = 500
+const VERBOSE = process.env.CHECK_BET_ENGINE_VERBOSE === '1'
 const recommendLevelRank = {
   观望: 0,
   轻仓试探: 1,
@@ -977,7 +978,17 @@ if (boundarySamples.extreme.plan.betScore >= 85) {
   console.log('V1 极强分很少见，当前极强样例探测未达到 85。')
 }
 
-console.log(JSON.stringify(Object.fromEntries(plans.map(({ name, plan }) => [name, compact(plan)])), null, 2))
-console.log(JSON.stringify(Object.fromEntries(Object.values(boundarySamples).map(({ name, plan }) => [name, compact(plan)])), null, 2))
+if (VERBOSE) {
+  console.log(
+    JSON.stringify(Object.fromEntries(plans.map(({ name, plan }) => [name, compact(plan)])), null, 2),
+  )
+  console.log(
+    JSON.stringify(
+      Object.fromEntries(Object.values(boundarySamples).map(({ name, plan }) => [name, compact(plan)])),
+      null,
+      2,
+    ),
+  )
+}
 console.log('BetEngine V1 是静态规则验收，不代表真实盈利能力。')
-console.log('BetEngine V1 checks passed.')
+console.log('BetEngine V1 checks passed. Set CHECK_BET_ENGINE_VERBOSE=1 to print sample plans.')
