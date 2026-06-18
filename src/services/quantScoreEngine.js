@@ -372,7 +372,7 @@ function getRiskNotes(expected, candidates, options) {
   const notes = []
   if (expected.contextRisk >= 66) notes.push('情境风险偏高，比分候选需要保留波动保护。')
   if (expected.drawPressure >= 42) notes.push('平局压力较高，至少保留一个拉锯比分。')
-  if (Math.abs(expected.overUnderEdge) < 0.05) notes.push('大小球接近分界，进球方向不宜重仓。')
+  if (Math.abs(expected.overUnderEdge) < 0.05) notes.push('大小球接近分界，进球方向不宜加码。')
   if (options.gameType === '强队过热局') notes.push('热门过热，强队大胜候选只作保护路径。')
   if (!notes.length && candidates[0]) notes.push('候选分布稳定，优先采用最高评分比分。')
   return notes.slice(0, 3)
