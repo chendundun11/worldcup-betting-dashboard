@@ -22,10 +22,13 @@ This project is for data review and entertainment reference only. It does not pr
 ```bash
 npm install
 npm run dev
+npm run local:api
 npm run build
 npm run lint
 npm run check:quality
 ```
+
+For local development, run `npm run dev` and `npm run local:api` in parallel. Vite proxies `/api` to `http://localhost:3001`; without the local API server, the app falls back to mock data but the browser console will show proxy failures.
 
 Focused checks:
 
