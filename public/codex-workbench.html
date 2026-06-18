@@ -105,6 +105,24 @@
         line-height: 1;
       }
 
+      .meter {
+        height: 8px;
+        overflow: hidden;
+        border: 1px solid rgba(246, 213, 138, 0.24);
+        background: rgba(255, 255, 255, 0.06);
+      }
+
+      .meter span {
+        display: block;
+        width: 72%;
+        height: 100%;
+        background: linear-gradient(90deg, var(--cyan), var(--gold), var(--red));
+      }
+
+      .stamp {
+        color: #dbeafe;
+      }
+
       .grid {
         display: grid;
         grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -188,6 +206,8 @@
           <span class="eyebrow">PHASE 03</span>
           <strong>MOBILE DONE</strong>
           <p>已完成：手机横滑选赛恢复、320/390 截图复核、移动选赛烟测、V5 视觉守门。</p>
+          <div class="meter" aria-label="任务进度"><span></span></div>
+          <p class="stamp">当前状态：质量门通过，继续做多断点守门和最终审计。</p>
         </aside>
       </section>
 

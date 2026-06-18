@@ -19,6 +19,11 @@
 - `C:\Users\chend\AppData\Local\Temp\worldcup-redesign-v5\public-narrow-v5-pass3.png`
 - `C:\Users\chend\AppData\Local\Temp\worldcup-redesign-v5\workbench-v5-pass2.png`
 
+可复现截图命令：
+
+- `npm run capture:visual`
+- 默认输出到 `.codex/visual-audits/public-v5/`，该目录只做本地审计，不提交。
+
 验收结论：
 
 - 桌面首屏已从普通卡片后台改成三栏赛事指挥屏。
@@ -32,7 +37,7 @@
 
 - `npm run check:browser`
   - 跑公开页浏览器交互烟测。
-  - 跑 `scripts/check-public-v5-visual.mjs`，检查 V5 首屏、视觉资产、工作台链接、提示条位置、桌面/手机/窄屏横向溢出。
+  - 跑 `scripts/check-public-v5-visual.mjs`，检查 V5 首屏、视觉资产、工作台链接、提示条位置、320/360/390/768/1024/1440 多断点横向溢出和关键控件内部溢出。
 - `npm run check:quality`
   - 跑 lint、build、量化引擎、内部引擎、回归、API、文案和海报相关检查。
 

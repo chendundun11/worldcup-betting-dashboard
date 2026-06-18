@@ -23,6 +23,7 @@ scripts/douyin-video-v4-report.json
 scripts/douyin-video-v5-report.json
 scripts/capture-demo-report.json
 scripts/voiceover-custom.txt
+.codex/visual-audits/
 
 # Local video materials and generated media
 video-factory/materials/**

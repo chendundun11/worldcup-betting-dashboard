@@ -36,6 +36,7 @@ npm run check:regression
 npm run check:api
 npm run check:browser
 npm run check:visual
+npm run capture:visual
 node scripts/check-copy-guard.mjs
 npm audit
 ```
@@ -78,6 +79,8 @@ Run those from a clean worktree when working specifically on that area.
 `scripts/check-copy-guard.mjs` is part of `npm run check:quality`; it blocks legacy user-facing score wording from returning outside dedicated guard scripts.
 
 `npm run check:browser` is also intentionally separate because it requires a running dev or preview server. By default it checks `http://127.0.0.1:5177/`; override with `DASHBOARD_URL` when needed. It includes the interaction smoke test and the Public V5 visual guard.
+
+`npm run capture:visual` saves local Public V5 screenshots under `.codex/visual-audits/public-v5/` for manual review.
 
 Production preview smoke:
 

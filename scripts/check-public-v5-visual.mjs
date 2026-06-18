@@ -19,8 +19,11 @@ const browser = await chromium.launch({ headless: true })
 try {
   for (const viewport of [
     { name: 'desktop', width: 1440, height: 1200 },
-    { name: 'mobile', width: 390, height: 844 },
-    { name: 'narrow', width: 320, height: 740 },
+    { name: 'laptop', width: 1024, height: 900 },
+    { name: 'tablet', width: 768, height: 900 },
+    { name: 'mobile', width: 390, height: 844, expectMobileRail: true },
+    { name: 'compact', width: 360, height: 780, expectMobileRail: true },
+    { name: 'narrow', width: 320, height: 740, expectMobileRail: true },
   ]) {
     const page = await browser.newPage({ viewport })
     await page.goto(makeUrl('/'), { waitUntil: 'networkidle' })
@@ -39,6 +42,27 @@ try {
       const heroRect = hero?.getBoundingClientRect()
       const tailRect = tail?.getBoundingClientRect()
       const mainRect = main?.getBoundingClientRect()
+      const overflowSelectors = [
+        '.public-command-hero .hero-copy h1',
+        '.hero-command-metrics p',
+        '.tail-score-radar-card',
+        '.quant-score-public-card',
+        '.mobile-match-chip',
+        '.share-action-button',
+        '.schedule-toggle-button',
+        '.onboarding-close-button',
+      ]
+      const layoutIssues = overflowSelectors.flatMap((selector) =>
+        [...document.querySelectorAll(selector)]
+          .filter((element) => element.getClientRects().length > 0)
+          .filter((element) => element.scrollWidth - element.clientWidth > 2)
+          .map((element) => ({
+            selector,
+            clientWidth: element.clientWidth,
+            scrollWidth: element.scrollWidth,
+            text: String(element.innerText ?? '').slice(0, 80),
+          })),
+      )
 
       return {
         commandMetrics: document.querySelectorAll('.hero-command-metrics p').length,
@@ -47,6 +71,7 @@ try {
         heroBorderRadius: heroStyle?.borderRadius ?? '',
         heroHeight: heroRect?.height ?? 0,
         heroImageLoaded: Boolean(heroImage?.complete && heroImage?.naturalWidth > 0),
+        layoutIssues,
         mainTop: mainRect ? Math.round(mainRect.top + window.scrollY) : null,
         mobileRailDisplay: mobileRailStyle?.display ?? '',
         mobileRailItems: document.querySelectorAll('.mobile-match-chip').length,
@@ -70,7 +95,11 @@ try {
     assert(audit.tailTop < audit.mainTop, `${viewport.name}: high-goal signal board must stay before main content`)
     assert(audit.onboardingPosition !== 'fixed', `${viewport.name}: onboarding notice must not cover content`)
     assert(audit.overflowX === 0, `${viewport.name}: page must not have horizontal overflow`)
-    if (viewport.name !== 'desktop') {
+    assert(
+      audit.layoutIssues.length === 0,
+      `${viewport.name}: key controls must not overflow (${JSON.stringify(audit.layoutIssues)})`,
+    )
+    if (viewport.expectMobileRail) {
       assert(audit.mobileRailDisplay !== 'none', `${viewport.name}: mobile match rail must be visible`)
       assert(audit.mobileRailItems >= 2, `${viewport.name}: mobile match rail must include quick choices`)
     }
