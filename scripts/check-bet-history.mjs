@@ -190,7 +190,12 @@ assert(
   'Missing snapshot must not produce hit or miss values.',
 )
 
-assert(appText.includes('HistoryResultCard'), 'App must render a history result card.')
+assert(
+  appText.includes('RecentHistoryPanel') &&
+    appText.includes('history-result-panel') &&
+    appText.includes('history-result-score'),
+  'App must render the recent history result panel.',
+)
 assert(
   appText.includes('formatHistoryTotalGoalsResult') && appText.includes('未打出'),
   'App must display a clear total-goals miss label.',
