@@ -81,9 +81,9 @@ for (const match of matchData.matches.map((item) => enrichMatch(item, teamMap)))
 
 assert.equal(new Set(allPublicScores).size >= 7, true, 'Public candidate scores must stay diverse.')
 assert.equal(
-  allPublicScores.some((score) => scoreTotal(score) >= 3),
+  allPublicScores.some((score) => scoreTotal(score) >= 4),
   true,
-  'Public candidates must include higher-goal paths when the model supports them.',
+  'Public candidates must include 4+ goal tail paths when the model supports them.',
 )
 
 console.log('check-public-quant-ui: ok')

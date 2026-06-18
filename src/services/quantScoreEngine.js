@@ -317,9 +317,10 @@ function pickScores(candidates, options, expected) {
       expected.expectedTotal >= 2.35 &&
       expected.overUnderEdge >= -0.02)
   const needsExtremeGoalCover =
-    Math.abs(expected.directionEdge) >= 28 &&
-    expected.expectedTotal >= 2.85 &&
-    expected.overUnderEdge >= 0.1
+    expected.preferredOutcome !== 'draw' &&
+    Math.abs(expected.directionEdge) >= 34 &&
+    expected.expectedTotal >= 2.3 &&
+    expected.overUnderEdge >= -0.04
   const coverMinTotal = needsExtremeGoalCover ? 4 : Math.max(3, primary.total + 1)
   const higherGoalCover = needsHigherGoalCover
     ? candidates.find(

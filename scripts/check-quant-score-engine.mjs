@@ -151,5 +151,10 @@ for (const match of matchData.matches) {
 }
 
 assert.equal(new Set(datasetScores).size >= 5, true, 'dataset score output must not collapse to one template')
+assert.equal(
+  datasetScores.some((score) => total(score) >= 4),
+  true,
+  'dataset score output must include at least one 4+ goal tail path',
+)
 
 console.log('check-quant-score-engine: ok')
