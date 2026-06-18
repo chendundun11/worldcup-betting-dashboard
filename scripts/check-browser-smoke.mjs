@@ -107,6 +107,22 @@ try {
     assert(publicAudit.sensitive === false, `${viewport.name}: public page has sensitive copy`)
     assert(publicAudit.overflowX === 0, `${viewport.name}: public page has horizontal overflow`)
 
+    await page.locator('.onboarding-close-button').click()
+    await page.waitForFunction(() => !document.querySelector('.onboarding-banner'))
+    const dismissedNotice = await page.evaluate(() =>
+      localStorage.getItem('worldcup-betting-dashboard:onboarding-notice-date'),
+    )
+    assert(dismissedNotice, `${viewport.name}: onboarding dismissal must persist`)
+
+    const firstRadarCard = page.locator('.tail-score-radar-card').first()
+    const radarMatchName = await firstRadarCard.locator('p').innerText()
+    await firstRadarCard.click()
+    await page.waitForFunction(
+      (matchName) =>
+        document.querySelector('.quick-conclusion-card h2')?.innerText.includes(matchName),
+      radarMatchName,
+    )
+
     await page.goto(getInternalUrl(), { waitUntil: 'networkidle' })
     await page.waitForSelector('.internal-v4-detail-tabs', { timeout: 20000 })
     const internalAudit = await page.evaluate((oldTerms) => {
@@ -133,6 +149,9 @@ try {
       '\u8d26\u672c',
     ]) {
       assert(internalAudit.tabs.includes(tab), `${viewport.name}: internal tab missing ${tab}`)
+      await page.locator('.internal-v4-detail-tabs button').filter({ hasText: tab }).click()
+      const activeTab = await page.locator('.internal-v4-detail-tabs button.active').innerText()
+      assert(activeTab === tab, `${viewport.name}: internal tab ${tab} must become active`)
     }
     assert(internalAudit.oldCopy === false, `${viewport.name}: internal page has old score copy`)
     assert(internalAudit.hasCandidateLabels, `${viewport.name}: internal stake labels missing`)
