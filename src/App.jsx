@@ -1981,6 +1981,17 @@ function formatPublicScoreModelLine(publicDisplay) {
   return `xG ${model.expectedGoals.home} - ${model.expectedGoals.away} · 总期望 ${model.expectedGoals.total} · ${model.totalGoalsText}`
 }
 
+function getPublicScoreCandidateTotal(candidate) {
+  if (Number.isFinite(candidate?.total)) return candidate.total
+  return parseScoreValue(candidate?.score)?.total ?? 0
+}
+
+function getPublicHighGoalCandidate(publicDisplay) {
+  return getPublicScoreCandidates(publicDisplay).find(
+    (candidate) => getPublicScoreCandidateTotal(candidate) >= 4,
+  )
+}
+
 function shouldShowUpsetScore(match) {
   return getMatchType(match).id === 'upsetWatch'
 }
@@ -3133,6 +3144,37 @@ function App() {
     () => getFocusMatches(focusSourceMatches, betHistoryData.records, new Date(), 3),
     [focusSourceMatches],
   )
+  const tailScoreRadarItems = useMemo(
+    () =>
+      normalizedMatches
+        .map((match, index) => {
+          const publicDisplay = getPublicMatchDisplay(match)
+          const candidate = getPublicHighGoalCandidate(publicDisplay)
+
+          if (!candidate) return null
+
+          return {
+            candidate,
+            confidenceScore:
+              confidenceScoreByMatchKey.get(match.uiKey) ??
+              getDisplayConfidenceScore(match, null),
+            index,
+            match,
+            modelLine: formatPublicScoreModelLine(publicDisplay),
+            scoreReference: publicDisplay.scoreReference,
+            total: getPublicScoreCandidateTotal(candidate),
+          }
+        })
+        .filter(Boolean)
+        .sort(
+          (left, right) =>
+            right.total - left.total ||
+            right.confidenceScore - left.confidenceScore ||
+            left.index - right.index,
+        )
+        .slice(0, 4),
+    [confidenceScoreByMatchKey, normalizedMatches],
+  )
   const captureSelectedIndex = useMemo(
     () =>
       isCaptureMode
@@ -3789,6 +3831,46 @@ function App() {
         )}
       </section>
 
+      {tailScoreRadarItems.length ? (
+        <section className="tail-score-radar-panel" aria-label="高比分尾部雷达">
+          <div className="section-title tail-score-radar-title">
+            <span>高比分尾部雷达</span>
+            <h2>4+ 进球路径</h2>
+            <p>只展示公开量化候选，不展示金额或后台记录。</p>
+          </div>
+
+          <div className="tail-score-radar-grid">
+            {tailScoreRadarItems.map((item) => {
+              const outcomeLabel =
+                publicOutcomeLabels[item.candidate.outcome] ?? '比分路径'
+
+              return (
+                <button
+                  className="tail-score-radar-card"
+                  data-score={item.candidate.score}
+                  key={`tail-score-${item.match.uiKey}-${item.candidate.score}`}
+                  onClick={() => handleSelectMatch(item.index)}
+                  type="button"
+                >
+                  <span>{item.total}+球尾部</span>
+                  <strong>{item.candidate.score}</strong>
+                  <small>
+                    #{item.candidate.rank} · {outcomeLabel}
+                  </small>
+                  <p>
+                    {item.match.homeTeam.name} vs {item.match.awayTeam.name}
+                  </p>
+                  <em>
+                    候选 {item.scoreReference.main} / 备选 {item.scoreReference.backup}
+                  </em>
+                  <b>{item.modelLine}</b>
+                </button>
+              )
+            })}
+          </div>
+        </section>
+      ) : null}
+
       <section className="main-layout">
         <aside className="match-list-panel">
           <div className="section-title schedule-title-row">
@@ -3884,10 +3966,10 @@ function App() {
                             </div>
                             <div className="match-card-detail">
                               <span>
-                                主推：<strong>{scoreReference.main}</strong>
+                                候选：<strong>{scoreReference.main}</strong>
                               </span>
                               <span>
-                                辅推：<strong>{scoreReference.backup}</strong>
+                                备选：<strong>{scoreReference.backup}</strong>
                               </span>
                               <span>
                                 进球：<strong>{goalsDirection}</strong>

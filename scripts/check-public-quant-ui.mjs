@@ -23,11 +23,12 @@ const appCss = readFileSync('src/App.css', 'utf8')
 const matchData = JSON.parse(readFileSync('src/data/matches.json', 'utf8'))
 const teamData = JSON.parse(readFileSync('src/data/teams.json', 'utf8'))
 const teamMap = new Map(teamData.teams.map((team) => [team.id, team]))
-const forbiddenPublicCopy = /主推比分|辅推比分|主推\s*\/\s*辅推|备用比分/
+const forbiddenPublicCopy = /主推比分|辅推比分|主推\s*\/\s*辅推|备用比分|主推：|辅推：/
 const sensitivePublicModelFields =
   /stake|bankroll|profit|ledger|pendingExposure|settledProfit|内部资金|模拟资金|本场投入|账本/i
 
 assert(appText.includes('quant-score-public-panel'), 'Public page must render quant score panel.')
+assert(appText.includes('tail-score-radar-panel'), 'Public page must render high-goal tail radar.')
 assert(appText.includes('data-score={candidate.score}'), 'Public score cards must expose data-score.')
 assert(appText.includes('aria-label={`第${candidate.rank}候选比分'), 'Public score cards need clear aria labels.')
 assert(appText.includes('公开方向保持谨慎'), 'Cautious public copy must explain score candidates.')
