@@ -30,6 +30,7 @@ import {
 } from '../internal/v4/internalLedgerV4.js'
 import {
   DEFAULT_PLAN_SCOPE_V5,
+  PLAN_SCOPE_V5,
   PLAN_SCOPE_OPTIONS_V5,
   getPlanScopeLabelV5,
   isFormalPlanScopeV5,
@@ -230,11 +231,37 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
   const [oddsDrafts, setOddsDrafts] = useState({})
   const [startupSyncComplete, setStartupSyncComplete] = useState(false)
   const [detailTab, setDetailTab] = useState('execute')
+  const [autoPreviewFallbackUsed, setAutoPreviewFallbackUsed] = useState(false)
 
   useEffect(() => {
     const timer = window.setTimeout(() => setStartupSyncComplete(true), 4200)
     return () => window.clearTimeout(timer)
   }, [])
+
+  useEffect(() => {
+    if (autoPreviewFallbackUsed || !matches.length || !isFormalPlanScopeV5(planScope)) return undefined
+
+    const scopedMatches = selectMatchesByPlanScopeV5(matches, planScope, { ledger })
+    const previewMatches = selectMatchesByPlanScopeV5(matches, PLAN_SCOPE_V5.allPreview, {
+      ledger,
+    })
+
+    if (scopedMatches.length || !previewMatches.length) return undefined
+
+    const fallbackTimer = window.setTimeout(() => {
+      setAutoPreviewFallbackUsed(true)
+      setPlanScope(PLAN_SCOPE_V5.allPreview)
+      setFilter('all')
+      setHomeScore('')
+      setAwayScore('')
+      setEditingOddsKey(null)
+      setDetailTab('execute')
+      setSelectedRecordId(getRecordIdV4(previewMatches[0]))
+      setNotice(`${getPlanScopeLabelV5(planScope)}暂无比赛，已自动打开全赛程预览。`)
+    }, 0)
+
+    return () => window.clearTimeout(fallbackTimer)
+  }, [autoPreviewFallbackUsed, ledger, matches, planScope])
 
   useEffect(() => {
     if (!matches.length) return undefined
@@ -358,6 +385,7 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
     setAwayScore('')
     setEditingOddsKey(null)
     setDetailTab('execute')
+    setAutoPreviewFallbackUsed(true)
     return savedScope
   }
 

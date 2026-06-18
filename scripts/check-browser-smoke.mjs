@@ -139,6 +139,18 @@ try {
 
     await page.goto(getInternalUrl(), { waitUntil: 'networkidle' })
     await page.waitForSelector('.internal-v4-detail-tabs', { timeout: 20000 })
+    await page.waitForTimeout(800)
+    const internalScopeAudit = await page.evaluate(() => {
+      const bodyText = document.body.innerText
+      return {
+        hasEmptyScopeMessage: bodyText.includes('当前计划范围没有比赛'),
+        hasPreviewData: bodyText.includes('全赛程预览 ·') || bodyText.includes('全赛程预览\n8 场'),
+      }
+    })
+    assert(
+      !internalScopeAudit.hasEmptyScopeMessage || !internalScopeAudit.hasPreviewData,
+      `${viewport.name}: internal default scope should not stay empty when preview data exists`,
+    )
     const hasInternalStakeLabels = await page.evaluate(() => {
       const bodyText = document.body.innerText
       return bodyText.includes('候选波胆') && bodyText.includes('保护波胆')
