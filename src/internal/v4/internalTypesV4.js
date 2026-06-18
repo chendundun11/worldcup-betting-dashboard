@@ -86,8 +86,8 @@ export const STAKE_ITEM_KEYS_V4 = [
 
 export const STAKE_ITEM_LABELS_V4 = {
   mainDirection: '主方向',
-  primaryScore: '主推波胆',
-  secondaryScore: '备用波胆',
+  primaryScore: '候选波胆',
+  secondaryScore: '保护波胆',
   overUnder: '大小球',
 }
 
