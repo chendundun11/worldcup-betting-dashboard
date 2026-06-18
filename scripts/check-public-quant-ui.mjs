@@ -24,7 +24,7 @@ const matchData = JSON.parse(readFileSync('src/data/matches.json', 'utf8'))
 const teamData = JSON.parse(readFileSync('src/data/teams.json', 'utf8'))
 const teamMap = new Map(teamData.teams.map((team) => [team.id, team]))
 const forbiddenPublicCopy =
-  /主推比分|辅推比分|主推\s*\/\s*辅推|备用比分|首选比分|主推：|辅推：/
+  /主推比分|辅推比分|主推方向|主推\s*\/\s*辅推|备用比分|首选比分|主推：|辅推：/
 const sensitivePublicModelFields =
   /stake|bankroll|profit|ledger|pendingExposure|settledProfit|内部资金|模拟资金|本场投入|账本/i
 
