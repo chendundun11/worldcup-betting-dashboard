@@ -5,6 +5,7 @@ const ORIGINAL_ENV = {
   SNAPSHOT_WRITE_ENABLED: process.env.SNAPSHOT_WRITE_ENABLED,
   SNAPSHOT_WRITE_TOKEN: process.env.SNAPSHOT_WRITE_TOKEN,
 }
+const VERBOSE = process.env.CHECK_API_VERBOSE === '1'
 
 function assert(condition, message) {
   if (!condition) throw new Error(message)
@@ -113,7 +114,7 @@ function clone(value) {
 
 async function runTest(name, test) {
   await test()
-  console.log(`ok - ${name}`)
+  if (VERBOSE) console.log(`ok - ${name}`)
 }
 
 try {

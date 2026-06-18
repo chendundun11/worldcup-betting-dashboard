@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 
 const migrationPath = 'db/migrations/001_analysis_snapshots.sql'
+const VERBOSE = process.env.CHECK_DB_VERBOSE === '1'
 
 function assert(condition, message) {
   if (!condition) throw new Error(message)
@@ -33,22 +34,24 @@ for (const [label, pattern] of [
   assert(!pattern.test(sql), `migration 不应包含 ${label}`)
 }
 
-console.log(
-  JSON.stringify(
-    {
-      migrationPath,
-      table: 'analysis_snapshots',
-      checks: [
-        'create table',
-        'snapshot jsonb columns',
-        'no insert',
-        'no database connection',
-        'no Supabase-only features',
-        'no drop table',
-      ],
-    },
-    null,
-    2,
-  ),
-)
+if (VERBOSE) {
+  console.log(
+    JSON.stringify(
+      {
+        migrationPath,
+        table: 'analysis_snapshots',
+        checks: [
+          'create table',
+          'snapshot jsonb columns',
+          'no insert',
+          'no database connection',
+          'no Supabase-only features',
+          'no drop table',
+        ],
+      },
+      null,
+      2,
+    ),
+  )
+}
 console.log('DB migration checks passed.')
