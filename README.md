@@ -34,6 +34,7 @@ npm run check:quant
 npm run check:internal
 npm run check:regression
 npm run check:api
+npm run check:browser
 ```
 
 Verbose debugging:
@@ -70,6 +71,8 @@ Some scripts are intentionally not part of `check:quality` because they are chan
 - `scripts/check-team-form-api.mjs`
 
 Run those from a clean worktree when working specifically on that area.
+
+`npm run check:browser` is also intentionally separate because it requires a running dev or preview server. By default it checks `http://127.0.0.1:5177/`; override with `DASHBOARD_URL` when needed.
 
 ## Safety Notes
 
