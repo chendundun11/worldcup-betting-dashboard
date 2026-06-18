@@ -405,7 +405,7 @@ export function buildQuantScoreModel(match, options = {}) {
     totalGoalsText,
     overUnder,
     expectedGoals: expected,
-    distribution: candidates.slice(0, 8).map((candidate, index) => ({
+    distribution: candidates.slice(0, 12).map((candidate, index) => ({
       rank: index + 1,
       score: candidate.score,
       total: candidate.total,

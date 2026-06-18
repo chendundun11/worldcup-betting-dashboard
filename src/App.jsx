@@ -1986,10 +1986,11 @@ function getPublicScoreCandidateTotal(candidate) {
   return parseScoreValue(candidate?.score)?.total ?? 0
 }
 
-function getPublicHighGoalCandidate(publicDisplay) {
-  return getPublicScoreCandidates(publicDisplay).find(
-    (candidate) => getPublicScoreCandidateTotal(candidate) >= 4,
-  )
+function getPublicHighGoalCandidates(publicDisplay) {
+  const modelCandidates = publicDisplay?.scoreModel?.candidates ?? []
+  const candidates = modelCandidates.length ? modelCandidates : getPublicScoreCandidates(publicDisplay)
+
+  return candidates.filter((candidate) => getPublicScoreCandidateTotal(candidate) >= 4)
 }
 
 function shouldShowUpsetScore(match) {
@@ -3145,15 +3146,13 @@ function App() {
     [focusSourceMatches],
   )
   const tailScoreRadarItems = useMemo(
-    () =>
-      normalizedMatches
-        .map((match, index) => {
+    () => {
+      const radarPool = normalizedMatches
+        .flatMap((match, index) => {
           const publicDisplay = getPublicMatchDisplay(match)
-          const candidate = getPublicHighGoalCandidate(publicDisplay)
+          const candidates = getPublicHighGoalCandidates(publicDisplay)
 
-          if (!candidate) return null
-
-          return {
+          return candidates.map((candidate) => ({
             candidate,
             confidenceScore:
               confidenceScoreByMatchKey.get(match.uiKey) ??
@@ -3163,16 +3162,37 @@ function App() {
             modelLine: formatPublicScoreModelLine(publicDisplay),
             scoreReference: publicDisplay.scoreReference,
             total: getPublicScoreCandidateTotal(candidate),
-          }
+          }))
         })
-        .filter(Boolean)
         .sort(
           (left, right) =>
             right.total - left.total ||
             right.confidenceScore - left.confidenceScore ||
+            (right.candidate.rating ?? 0) - (left.candidate.rating ?? 0) ||
             left.index - right.index,
         )
-        .slice(0, 4),
+      const selected = []
+      const duplicateFallback = []
+      const usedMatches = new Set()
+      const usedScores = new Set()
+
+      for (const item of radarPool) {
+        const matchKey = item.match.uiKey ?? item.index
+        const scoreKey = item.candidate.score
+
+        if (!usedMatches.has(matchKey) && !usedScores.has(scoreKey)) {
+          selected.push(item)
+          usedMatches.add(matchKey)
+          usedScores.add(scoreKey)
+        } else {
+          duplicateFallback.push(item)
+        }
+
+        if (selected.length >= 4) break
+      }
+
+      return [...selected, ...duplicateFallback].slice(0, 4)
+    },
     [confidenceScoreByMatchKey, normalizedMatches],
   )
   const captureSelectedIndex = useMemo(

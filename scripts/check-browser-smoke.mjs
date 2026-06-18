@@ -39,6 +39,13 @@ function hasAny(text, terms) {
   return terms.some((term) => normalized.includes(String(term).toLowerCase()))
 }
 
+function scoreTotal(score) {
+  return String(score)
+    .split('-')
+    .map((part) => Number(part))
+    .reduce((sum, value) => sum + (Number.isFinite(value) ? value : 0), 0)
+}
+
 function getInternalUrl() {
   const url = new URL(BASE_URL)
   url.hash = 'internal-v4'
@@ -84,8 +91,15 @@ try {
       },
     )
 
-    assert(publicAudit.tailScores.includes('4-0'), `${viewport.name}: public radar must show 4-0`)
-    assert(publicAudit.hasFourNil, `${viewport.name}: public page must include 4-0`)
+    assert(publicAudit.tailScores.length >= 3, `${viewport.name}: public radar must show enough cards`)
+    assert(
+      publicAudit.tailScores.every((score) => scoreTotal(score) >= 4),
+      `${viewport.name}: public radar must only show 4+ goal scores`,
+    )
+    assert(
+      new Set(publicAudit.tailScores).size >= 3,
+      `${viewport.name}: public radar must show diverse high-goal scores`,
+    )
     assert(publicAudit.hasOnboardingBanner, `${viewport.name}: onboarding banner must render`)
     assert(!publicAudit.hasOnboardingOverlay, `${viewport.name}: onboarding must not be a full overlay`)
     assert(publicAudit.tailTop < publicAudit.mainTop, `${viewport.name}: radar must stay above main`)

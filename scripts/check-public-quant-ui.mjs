@@ -47,6 +47,7 @@ assert(
 )
 
 const allPublicScores = []
+const allHighGoalScores = []
 
 for (const match of matchData.matches.map((item) => enrichMatch(item, teamMap))) {
   const plan = buildBetPlan(match, { bankroll: 0, maxStakePerMatch: 0 })
@@ -87,6 +88,11 @@ for (const match of matchData.matches.map((item) => enrichMatch(item, teamMap)))
   }
 
   allPublicScores.push(...publicModel.candidates.map((candidate) => candidate.score))
+  allHighGoalScores.push(
+    ...publicModel.candidates
+      .filter((candidate) => scoreTotal(candidate.score) >= 4)
+      .map((candidate) => candidate.score),
+  )
 }
 
 assert.equal(new Set(allPublicScores).size >= 7, true, 'Public candidate scores must stay diverse.')
@@ -94,6 +100,11 @@ assert.equal(
   allPublicScores.some((score) => scoreTotal(score) >= 4),
   true,
   'Public candidates must include 4+ goal tail paths when the model supports them.',
+)
+assert.equal(
+  new Set(allHighGoalScores).size >= 2,
+  true,
+  'Public high-goal tail paths must include at least two score shapes.',
 )
 
 console.log('check-public-quant-ui: ok')

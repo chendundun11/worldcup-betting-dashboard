@@ -1659,7 +1659,7 @@ function buildPublicScoreModelSummary(model) {
       (candidate, index, candidates) =>
         candidates.findIndex((item) => item.score === candidate.score) === index,
     )
-    .slice(0, 4)
+    .slice(0, 10)
     .map((candidate, index) => {
       const rankedCandidate = candidatesByScore.get(candidate.score) ?? candidate
       const parsedCandidate = parseScoreCandidate(rankedCandidate.score)
