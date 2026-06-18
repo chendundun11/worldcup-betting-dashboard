@@ -1207,3 +1207,195 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Internal V5 premium command skin. */
+.internal-v4-shell {
+  background:
+    linear-gradient(rgba(246, 213, 138, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(94, 234, 212, 0.028) 1px, transparent 1px),
+    radial-gradient(circle at 8% 0%, rgba(246, 213, 138, 0.13), transparent 30%),
+    radial-gradient(circle at 92% 12%, rgba(94, 234, 212, 0.12), transparent 28%),
+    linear-gradient(135deg, #030405, #0b0d10 52%, #030405);
+  background-size:
+    42px 42px,
+    42px 42px,
+    auto,
+    auto,
+    auto;
+}
+
+.internal-v4-title-block,
+.internal-v4-scope-bar,
+.internal-v4-action-group,
+.internal-v4-danger-zone,
+.internal-v4-loading,
+.internal-v4-command-summary article,
+.internal-v4-metrics-drawer,
+.internal-v4-metric,
+.internal-v4-sidebar,
+.internal-v4-detail,
+.internal-v4-recent,
+.internal-v4-empty,
+.internal-v4-scan,
+.internal-v4-scan-drawer,
+.internal-v4-command-card div,
+.internal-v4-detail-tabs,
+.internal-v4-dimension-grid p,
+.internal-v4-recent article,
+.internal-v4-empty-line {
+  border-radius: 0;
+  border-color: rgba(246, 213, 138, 0.16);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.015)),
+    rgba(8, 10, 13, 0.88);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.24);
+}
+
+.internal-v4-title-block {
+  position: relative;
+  overflow: hidden;
+  border-color: rgba(246, 213, 138, 0.24);
+}
+
+.internal-v4-title-block::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  content: '';
+  background: linear-gradient(90deg, #f6d58a, #5eead4, #fb7185);
+}
+
+.internal-v4-eyebrow,
+.internal-v4-panel-head span,
+.internal-v4-section-title span,
+.internal-v4-loading span,
+.internal-v4-scope-bar > span,
+.internal-v4-scope-bar small {
+  color: #5eead4;
+  letter-spacing: 0.12em;
+}
+
+.internal-v4-topbar h1 {
+  color: #f8fafc;
+  font-family: "DIN Alternate", "Bahnschrift", "Microsoft YaHei UI", sans-serif;
+  font-size: clamp(42px, 4.4vw, 72px);
+  letter-spacing: 0;
+}
+
+.internal-v4-topbar p,
+.internal-v4-detail-head p,
+.internal-v4-scan span,
+.internal-v4-match-list button span,
+.internal-v4-match-list button small,
+.internal-v4-detail-head span,
+.internal-v4-footer small {
+  color: #cbd5e1;
+}
+
+.internal-v4-action-deck button,
+.internal-v4-scope-bar button,
+.internal-v4-filter button,
+.internal-v4-match-list button,
+.internal-v4-detail-tabs button,
+.internal-v4-settle-form button,
+.internal-v4-odds-actions button,
+.internal-v4-odds-edit button {
+  border-radius: 0;
+  border-color: rgba(246, 213, 138, 0.18);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.internal-v4-action-deck button:hover,
+.internal-v4-scope-bar button:hover,
+.internal-v4-filter button:hover,
+.internal-v4-match-list button:hover,
+.internal-v4-detail-tabs button:hover,
+.internal-v4-settle-form button:hover,
+.internal-v4-odds-actions button:hover,
+.internal-v4-odds-edit button:hover {
+  border-color: rgba(94, 234, 212, 0.62);
+}
+
+.internal-v4-scope-bar button.active,
+.internal-v4-filter button.active,
+.internal-v4-match-list button.active,
+.internal-v4-detail-tabs button.active {
+  border-color: rgba(94, 234, 212, 0.68);
+  background:
+    linear-gradient(180deg, rgba(94, 234, 212, 0.18), rgba(246, 213, 138, 0.06)),
+    rgba(255, 255, 255, 0.04);
+  color: #f8fafc;
+}
+
+.internal-v4-action-group.primary button:first-of-type,
+.internal-v4-settle-form button {
+  border-color: rgba(94, 234, 212, 0.44);
+  background:
+    linear-gradient(135deg, rgba(94, 234, 212, 0.22), rgba(246, 213, 138, 0.08)),
+    rgba(255, 255, 255, 0.04);
+}
+
+.internal-v4-command-summary strong,
+.internal-v4-command-card strong,
+.internal-v4-detail-head h2,
+.internal-v4-panel-head h2,
+.internal-v4-section-title h3,
+.internal-v4-match-list button strong {
+  color: #f8fafc;
+}
+
+.internal-v4-command-summary article,
+.internal-v4-command-card div {
+  border-color: rgba(94, 234, 212, 0.18);
+}
+
+.internal-v4-command-summary article:first-child,
+.internal-v4-command-card div:first-child {
+  border-color: rgba(246, 213, 138, 0.26);
+  background:
+    linear-gradient(180deg, rgba(246, 213, 138, 0.12), rgba(94, 234, 212, 0.05)),
+    rgba(8, 10, 13, 0.88);
+}
+
+.internal-v4-record-state,
+.internal-v4-panel-head strong,
+.internal-v4-section-title > span {
+  border-radius: 0;
+  color: #f6d58a;
+  background: rgba(246, 213, 138, 0.08);
+}
+
+.internal-v4-match-list button {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.internal-v4-match-list button.active {
+  box-shadow: inset 4px 0 0 rgba(94, 234, 212, 0.72);
+}
+
+.internal-v4-detail-tabs {
+  gap: 1px;
+  padding: 1px;
+  background: rgba(246, 213, 138, 0.16);
+}
+
+.internal-v4-detail-tabs button {
+  border: 0;
+  background: rgba(8, 10, 13, 0.94);
+}
+
+.internal-v4-detail-tabs button.active {
+  background:
+    linear-gradient(180deg, rgba(94, 234, 212, 0.18), rgba(246, 213, 138, 0.05)),
+    rgba(8, 10, 13, 0.94);
+}
+
+.internal-v4-section {
+  border-top-color: rgba(246, 213, 138, 0.14);
+}
+
+.internal-v4-danger-zone summary::before {
+  border-radius: 0;
+}
