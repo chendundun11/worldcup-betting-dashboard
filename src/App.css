@@ -5876,6 +5876,34 @@
     font-size: 38px;
   }
 
+  .public-command-hero .mobile-match-rail {
+    display: grid;
+    gap: 8px;
+    padding: 0 18px 18px;
+  }
+
+  .public-command-hero .mobile-match-rail > span {
+    color: rgba(248, 250, 252, 0.62);
+    font-size: 11px;
+    font-weight: 1000;
+    letter-spacing: 0.14em;
+  }
+
+  .public-command-hero .mobile-match-chip {
+    flex-basis: 158px;
+    min-height: 90px;
+    border-radius: 0;
+    border-color: rgba(246, 213, 138, 0.18);
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .public-command-hero .mobile-match-chip.active {
+    border-color: rgba(94, 234, 212, 0.58);
+    background:
+      linear-gradient(180deg, rgba(94, 234, 212, 0.13), rgba(246, 213, 138, 0.04)),
+      rgba(255, 255, 255, 0.04);
+  }
+
   .tail-score-radar-panel {
     display: grid;
     padding: 12px;

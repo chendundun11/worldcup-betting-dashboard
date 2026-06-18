@@ -117,6 +117,17 @@ try {
     )
     assert(dismissedNotice, `${viewport.name}: onboarding dismissal must persist`)
 
+    if (viewport.name === 'mobile') {
+      const secondMobileMatch = page.locator('.mobile-match-chip').nth(1)
+      const mobileMatchName = await secondMobileMatch.locator('strong').innerText()
+      await secondMobileMatch.click()
+      await page.waitForFunction(
+        (matchName) =>
+          document.querySelector('.quick-conclusion-card h2')?.innerText.includes(matchName),
+        mobileMatchName,
+      )
+    }
+
     const firstRadarCard = page.locator('.tail-score-radar-card').first()
     const radarMatchName = await firstRadarCard.locator('p').innerText()
     await firstRadarCard.click()

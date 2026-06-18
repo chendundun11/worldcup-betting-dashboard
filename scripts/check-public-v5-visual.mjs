@@ -34,6 +34,8 @@ try {
       const heroStyle = hero ? getComputedStyle(hero) : null
       const onboardingStyle = onboarding ? getComputedStyle(onboarding) : null
       const tailStyle = tail ? getComputedStyle(tail) : null
+      const mobileRail = document.querySelector('.mobile-match-rail')
+      const mobileRailStyle = mobileRail ? getComputedStyle(mobileRail) : null
       const heroRect = hero?.getBoundingClientRect()
       const tailRect = tail?.getBoundingClientRect()
       const mainRect = main?.getBoundingClientRect()
@@ -46,6 +48,8 @@ try {
         heroHeight: heroRect?.height ?? 0,
         heroImageLoaded: Boolean(heroImage?.complete && heroImage?.naturalWidth > 0),
         mainTop: mainRect ? Math.round(mainRect.top + window.scrollY) : null,
+        mobileRailDisplay: mobileRailStyle?.display ?? '',
+        mobileRailItems: document.querySelectorAll('.mobile-match-chip').length,
         onboardingPosition: onboardingStyle?.position ?? '',
         onboardingTop: onboarding
           ? Math.round(onboarding.getBoundingClientRect().top + window.scrollY)
@@ -66,6 +70,10 @@ try {
     assert(audit.tailTop < audit.mainTop, `${viewport.name}: high-goal signal board must stay before main content`)
     assert(audit.onboardingPosition !== 'fixed', `${viewport.name}: onboarding notice must not cover content`)
     assert(audit.overflowX === 0, `${viewport.name}: page must not have horizontal overflow`)
+    if (viewport.name !== 'desktop') {
+      assert(audit.mobileRailDisplay !== 'none', `${viewport.name}: mobile match rail must be visible`)
+      assert(audit.mobileRailItems >= 2, `${viewport.name}: mobile match rail must include quick choices`)
+    }
     assert(
       /^0px/.test(audit.heroBorderRadius) && /^0px/.test(audit.tailBorderRadius),
       `${viewport.name}: V5 command surfaces should use squared premium panels`,
