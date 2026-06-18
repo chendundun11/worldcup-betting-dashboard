@@ -64,3 +64,9 @@
 内部页浏览器烟测现在会在默认 24 小时时间窗无比赛时切到「全赛程预览」，这是为了避免日期推进后误判内部候选/保护波胆缺失。
 
 内部 V5 页面本身也会在默认正式范围无比赛、但全赛程有数据时自动打开「全赛程预览」，避免用户进入内部引擎后看到空列表。
+
+## Long-Run Addendum
+
+- The local API now returns local match data with HTTP 200 when the upstream provider is missing, rate-limited, invalid, or unavailable. This prevents recoverable provider failures from surfacing as browser console noise during visual soaks.
+- `scripts/check-runtime-soak.mjs` now logs `soak-progress` after every route/viewport check and `soak-wait` before delayed iterations, so long unattended runs are easier to audit from the log file.
+- Current visible workbench state is `PHASE 06 / LONG SOAK`: external and internal UI replacement is complete; the active task is long-run stability review.

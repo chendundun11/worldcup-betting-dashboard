@@ -28,7 +28,7 @@ npm run lint
 npm run check:quality
 ```
 
-For local development, run `npm run dev` and `npm run local:api` in parallel. Vite proxies `/api` to `http://localhost:3001`; without the local API server, the app falls back to mock data but the browser console will show proxy failures.
+For local development, run `npm run dev` and `npm run local:api` in parallel. Vite proxies `/api` to `http://localhost:3001`; without the local API server, the app falls back to mock data but the browser console will show proxy failures. When the local API server is running, `/api/matches` returns a local match snapshot with HTTP 200 if the upstream provider is missing, rate-limited, invalid, or unavailable, so long visual soaks do not fail on recoverable provider noise.
 
 Focused checks:
 
@@ -86,7 +86,7 @@ Run those from a clean worktree when working specifically on that area.
 
 `npm run capture:visual` saves local Public/Internal V5 screenshots under `.codex/visual-audits/public-v5/` for manual review.
 
-`npm run check:soak` opens the public page, internal V5 page, and design workbench on desktop/mobile viewports and fails on console warnings/errors or horizontal overflow. For a longer run:
+`npm run check:soak` opens the public page, internal V5 page, and design workbench on desktop/mobile viewports and fails on console warnings/errors or horizontal overflow. It logs `soak-progress` after each route/viewport check and `soak-wait` before delayed iterations. For a longer run:
 
 ```bash
 SOAK_ITERATIONS=4 SOAK_DELAY_MS=900000 npm run check:soak
