@@ -3653,7 +3653,7 @@ function App() {
                 <strong>{activeShareMainDirection}</strong>
               </p>
               <p className="daily-ai-score-highlight">
-                <span>首选比分</span>
+                <span>候选比分</span>
                 <strong>{spotlightPublicDisplay.scoreReference.main}</strong>
               </p>
             </div>
