@@ -14,6 +14,14 @@ function makeUrl(pathname = '/') {
   return url.toString()
 }
 
+function makeInternalUrl() {
+  const url = new URL(BASE_URL)
+  url.pathname = '/'
+  url.search = ''
+  url.hash = 'internal-v4'
+  return url.toString()
+}
+
 const browser = await chromium.launch({ headless: true })
 
 try {
@@ -112,6 +120,94 @@ try {
     await page.close()
   }
 
+  for (const viewport of [
+    { name: 'internal-desktop', width: 1440, height: 1200 },
+    { name: 'internal-mobile', width: 390, height: 844 },
+    { name: 'internal-narrow', width: 320, height: 740 },
+  ]) {
+    const page = await browser.newPage({ viewport })
+    await page.goto(makeInternalUrl(), { waitUntil: 'domcontentloaded' })
+    await page.waitForSelector('.internal-v4-detail-tabs', { timeout: 20000 })
+    await page.waitForTimeout(600)
+
+    const audit = await page.evaluate(() => {
+      const shell = document.querySelector('.internal-v4-shell')
+      const title = document.querySelector('.internal-v4-title-block')
+      const tabs = document.querySelector('.internal-v4-detail-tabs')
+      const summaryCards = document.querySelectorAll('.internal-v4-command-summary article')
+      const commandCards = document.querySelectorAll('.internal-v4-command-card div')
+      const matchButtons = document.querySelectorAll('.internal-v4-match-list button')
+      const shellStyle = shell ? getComputedStyle(shell) : null
+      const titleStyle = title ? getComputedStyle(title) : null
+      const tabsStyle = tabs ? getComputedStyle(tabs) : null
+      const overflowSelectors = [
+        '.internal-v4-title-block',
+        '.internal-v4-scope-bar button',
+        '.internal-v4-action-deck button',
+        '.internal-v4-filter button',
+        '.internal-v4-match-list button',
+        '.internal-v4-command-card div',
+        '.internal-v4-detail-tabs button',
+      ]
+      const layoutIssues = overflowSelectors.flatMap((selector) =>
+        [...document.querySelectorAll(selector)]
+          .filter((element) => element.getClientRects().length > 0)
+          .filter((element) => element.scrollWidth - element.clientWidth > 3)
+          .map((element) => ({
+            selector,
+            clientWidth: element.clientWidth,
+            scrollWidth: element.scrollWidth,
+            text: String(element.innerText ?? '').slice(0, 80),
+          })),
+      )
+      const selectedMatchName = document.querySelector('.internal-v4-detail-head h2')?.innerText ?? ''
+      const bodyText = document.body.innerText
+
+      return {
+        activeTabs: document.querySelectorAll('.internal-v4-detail-tabs button.active').length,
+        commandCards: commandCards.length,
+        hasAutoPreview:
+          bodyText.includes('全赛程预览') &&
+          matchButtons.length > 0 &&
+          !bodyText.includes('当前计划范围没有比赛'),
+        hasShell: Boolean(shell),
+        hasTitle: bodyText.includes('V5 内部资金引擎'),
+        layoutIssues,
+        matchButtons: matchButtons.length,
+        overflowX: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        selectedMatchName,
+        shellBackground: shellStyle?.backgroundImage ?? '',
+        summaryCards: summaryCards.length,
+        tabsBorderRadius: tabsStyle?.borderRadius ?? '',
+        titleBorderRadius: titleStyle?.borderRadius ?? '',
+      }
+    })
+
+    assert(audit.hasShell, `${viewport.name}: internal shell must render`)
+    assert(audit.hasTitle, `${viewport.name}: internal title must render`)
+    assert(audit.hasAutoPreview, `${viewport.name}: internal page must show a non-empty plan scope`)
+    assert(audit.summaryCards >= 4, `${viewport.name}: internal summary cards missing`)
+    assert(audit.commandCards >= 4, `${viewport.name}: internal command cards missing`)
+    assert(audit.matchButtons >= 3, `${viewport.name}: internal match queue must show matches`)
+    assert(audit.selectedMatchName !== '未选择比赛', `${viewport.name}: internal page must select a match`)
+    assert(audit.activeTabs === 1, `${viewport.name}: exactly one internal tab must be active`)
+    assert(audit.overflowX === 0, `${viewport.name}: internal page must not overflow horizontally`)
+    assert(
+      audit.layoutIssues.length === 0,
+      `${viewport.name}: internal controls must not overflow (${JSON.stringify(audit.layoutIssues)})`,
+    )
+    assert(
+      audit.shellBackground.includes('linear-gradient'),
+      `${viewport.name}: internal shell must use the premium command background`,
+    )
+    assert(
+      /^0px/.test(audit.titleBorderRadius) && /^0px/.test(audit.tabsBorderRadius),
+      `${viewport.name}: internal command panels should use squared premium panels`,
+    )
+
+    await page.close()
+  }
+
   const workbench = await browser.newPage({ viewport: { width: 1280, height: 900 } })
   await workbench.goto(makeUrl('/codex-workbench.html'), { waitUntil: 'domcontentloaded' })
   const workbenchAudit = await workbench.evaluate(() => ({
@@ -129,7 +225,7 @@ try {
   )
   await workbench.close()
 
-  console.log('Public V5 visual checks passed.')
+  console.log('Public and internal V5 visual checks passed.')
 } finally {
   await browser.close()
 }

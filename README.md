@@ -83,7 +83,7 @@ Run those from a clean worktree when working specifically on that area.
 
 `npm run check:browser` is also intentionally separate because it requires a running dev or preview server. By default it checks `http://127.0.0.1:5177/`; override with `DASHBOARD_URL` when needed. It includes the interaction smoke test and the Public V5 visual guard.
 
-`npm run capture:visual` saves local Public V5 screenshots under `.codex/visual-audits/public-v5/` for manual review.
+`npm run capture:visual` saves local Public/Internal V5 screenshots under `.codex/visual-audits/public-v5/` for manual review.
 
 Production preview smoke:
 

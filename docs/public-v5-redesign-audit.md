@@ -22,7 +22,7 @@
 可复现截图命令：
 
 - `npm run capture:visual`
-- 默认输出到 `.codex/visual-audits/public-v5/`，该目录只做本地审计，不提交。
+- 默认输出到 `.codex/visual-audits/public-v5/`，包含公开页、内部 V5 和工作台截图；该目录只做本地审计，不提交。
 
 验收结论：
 
@@ -38,7 +38,8 @@
 
 - `npm run check:browser`
   - 跑公开页浏览器交互烟测。
-  - 跑 `scripts/check-public-v5-visual.mjs`，检查 V5 首屏、视觉资产、工作台链接、提示条位置、320/360/390/768/1024/1440 多断点横向溢出和关键控件内部溢出。
+  - 跑 `scripts/check-public-v5-visual.mjs`，检查公开 V5 首屏、视觉资产、工作台链接、提示条位置、320/360/390/768/1024/1440 多断点横向溢出和关键控件内部溢出。
+  - 同时检查内部 V5 桌面/手机/320 窄屏：执行台皮肤、非空比赛范围、当前比赛、tab 状态、关键控件溢出和横向溢出。
 - `npm run check:quality`
   - 跑 lint、build、量化引擎、内部引擎、回归、API、文案和海报相关检查。
 
@@ -49,6 +50,7 @@
 - `src/index.css`
 - `public/codex-workbench.html`
 - `scripts/check-public-v5-visual.mjs`
+- `scripts/capture-public-v5-screenshots.mjs`
 - `scripts/check-browser-smoke.mjs`
 - `package.json`
 
