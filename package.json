@@ -12,7 +12,8 @@
     "check:internal": "node scripts/check-internal-v4-ui-contract.mjs && node scripts/check-internal-v4-engine.mjs && node scripts/check-internal-v4-stake.mjs && node scripts/check-internal-v4-settlement.mjs",
     "check:regression": "node scripts/check-display-confidence.mjs && node scripts/check-bet-history.mjs && node scripts/check-manual-lineups.mjs && node scripts/check-internal-v5-providers.mjs && node scripts/check-v3-internal.mjs && node scripts/check-v3-settlement.mjs && node scripts/check-onboarding-notice.mjs",
     "check:api": "node scripts/check-snapshot-api.mjs && node scripts/check-snapshot-api-behavior.mjs && node scripts/check-db-migration.mjs",
-    "check:browser": "node scripts/check-browser-smoke.mjs",
+    "check:visual": "node scripts/check-public-v5-visual.mjs",
+    "check:browser": "node scripts/check-browser-smoke.mjs && npm run check:visual",
     "check:quality": "npm run lint && npm run build && npm run check:quant && npm run check:internal && npm run check:regression && npm run check:api && node scripts/check-copy-guard.mjs && node scripts/check-poster-presentation.mjs && node scripts/check-share-poster.mjs && node scripts/check-ai-analysis.mjs && node scripts/check-snapshot-payload.mjs && node scripts/check-snapshot-row-mapper.mjs && node scripts/check-internal-v5-plan-scope.mjs && node scripts/check-match-focus.mjs",
     "preview": "vite preview"
   },

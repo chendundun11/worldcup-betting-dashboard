@@ -21,6 +21,7 @@ import { getManualLineupForMatch } from './data/manualLineups.js'
 import { SQUAD_INSIGHTS } from './data/squadInsights'
 import { TEAM_PROFILES } from './data/teamProfiles'
 import teamsData from './data/teams.json'
+import heroSignalImage from './assets/hero.png'
 import { requestAiAnalysis } from './services/aiAnalysisApi.js'
 import { buildAiAnalysisPayload } from './services/aiAnalysisPayload.js'
 import {
@@ -3594,20 +3595,50 @@ function App() {
         </section>
       ) : null}
 
-      <section className="hero-card">
+      <section className="hero-card public-command-hero">
         <div className="hero-copy">
           <div className="eyebrow">
             <Activity size={16} />
-            AI 赛前分析 · 当前重点
+            WORLD CUP SIGNAL ROOM
           </div>
-          <h1>{activeMatch.homeTeam.name} vs {activeMatch.awayTeam.name}</h1>
-          <p>{formatKickoff(activeMatch.kickoff)} · 数据源状态 / 临场需复核</p>
+          <h1>
+            <span>{activeMatch.homeTeam.name}</span>
+            <i>vs</i>
+            <span>{activeMatch.awayTeam.name}</span>
+          </h1>
+          <p>{formatKickoff(activeMatch.kickoff)} · 公开量化指挥屏 · 临场需复核</p>
           <p className="hero-plain-note">
-            先给赛前结论，再给量化比分候选；临场阵容和盘口变化需要复核。
+            先看主方向，再看比分路径、4+ 进球雷达和风险复核点。
           </p>
+          <div className="hero-command-metrics" aria-label="当前比赛信号">
+            <p>
+              <span>模型方向</span>
+              <strong>{activeShareMainDirection}</strong>
+            </p>
+            <p>
+              <span>进球方向</span>
+              <strong>{activeShareGoalsDirection}</strong>
+            </p>
+            <p>
+              <span>临场策略</span>
+              <strong>{selectedPresentationRating.strategyLabel}</strong>
+            </p>
+          </div>
+        </div>
+
+        <div className="hero-visual-board" aria-hidden="true">
+          <img src={heroSignalImage} alt="" />
+          <div className="hero-visual-score">
+            <span>TOP SCORE</span>
+            <strong>{activeScoreCandidates[0]?.score ?? activePrimaryScore}</strong>
+          </div>
+          <div className="hero-visual-tape">
+            <b>{selectedPresentationRating.riskLabel}</b>
+            <b>{activeMatchType.label}</b>
+          </div>
         </div>
         <div className="hero-pick hero-match-summary">
-          <span>先看结论</span>
+          <span>AI 指挥台结论</span>
           <strong>{activeShareMainDirection}</strong>
           <p>
             候选比分 {activePrimaryScore} · 备选比分 {activeSecondaryScore} ·{' '}
@@ -3871,6 +3902,7 @@ function App() {
                   data-score={item.candidate.score}
                   key={`tail-score-${item.match.uiKey}-${item.candidate.score}`}
                   onClick={() => handleSelectMatch(item.index)}
+                  style={{ '--tail-heat': `${Math.min(100, 48 + item.total * 9)}%` }}
                   type="button"
                 >
                   <span>{item.total}+球尾部</span>
@@ -4166,6 +4198,9 @@ function App() {
               {activeScoreCandidates.map((candidate) => {
                 const total = candidate.total ?? parseScoreValue(candidate.score)?.total ?? '-'
                 const outcomeLabel = publicOutcomeLabels[candidate.outcome] ?? '比分路径'
+                const meterValue = Number.isFinite(candidate.rating)
+                  ? Math.max(18, Math.min(100, Math.round(candidate.rating)))
+                  : 58
 
                 return (
                   <article
@@ -4179,12 +4214,14 @@ function App() {
                     data-score={candidate.score}
                     data-total={total}
                     key={`public-score-${candidate.rank}-${candidate.score}`}
+                    style={{ '--score-meter': `${meterValue}%` }}
                   >
                     <span className="quant-score-public-rank">#{candidate.rank}</span>
                     <strong className="quant-score-public-score">{candidate.score}</strong>
                     <small className="quant-score-public-meta">
                       {total}球 · {outcomeLabel}
                     </small>
+                    <i className="quant-score-public-meter" aria-hidden="true" />
                   </article>
                 )
               })}

@@ -128,6 +128,22 @@ try {
 
     await page.goto(getInternalUrl(), { waitUntil: 'networkidle' })
     await page.waitForSelector('.internal-v4-detail-tabs', { timeout: 20000 })
+    const hasInternalStakeLabels = await page.evaluate(() => {
+      const bodyText = document.body.innerText
+      return bodyText.includes('候选波胆') && bodyText.includes('保护波胆')
+    })
+    if (!hasInternalStakeLabels) {
+      const allScheduleButton = page.locator('button').filter({ hasText: '全赛程预览' }).first()
+      if (await allScheduleButton.count()) {
+        await allScheduleButton.click()
+        await page
+          .waitForFunction(() => {
+            const bodyText = document.body.innerText
+            return bodyText.includes('候选波胆') && bodyText.includes('保护波胆')
+          }, null, { timeout: 5000 })
+          .catch(() => {})
+      }
+    }
     const internalAudit = await page.evaluate((oldTerms) => {
       const hasAny = (text, terms) =>
         terms.some((term) => text.toLowerCase().includes(term.toLowerCase()))
