@@ -45,6 +45,7 @@
 - `npm run check:soak`
   - 打开公开页、内部 V5 和设计工作台的桌面/手机视图。
   - 检查运行时 console warning/error 和横向溢出，支持 `SOAK_ITERATIONS` / `SOAK_DELAY_MS` 做长时间观察。
+  - 当前长跑已执行 `SOAK_ITERATIONS=2 SOAK_DELAY_MS=900000 npm run check:soak`，两轮均为 0 console warning/error、0 横向溢出。
 
 新增/调整的关键文件：
 
