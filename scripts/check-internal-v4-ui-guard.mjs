@@ -52,8 +52,8 @@ for (const text of [
   '规则解释链条',
   '模拟资金分配',
   '主方向',
-  '主推波胆',
-  '备用波胆',
+  '候选波胆',
+  '保护波胆',
   '大小球',
   '赔率来源',
   '潜在盈利',
@@ -81,7 +81,17 @@ for (const text of [
   assert.ok(combinedInternalSource.includes(text), `internal UI must include: ${text}`)
 }
 
-for (const text of ['模型主方向概率', '剔除', '不进主推池', '稳赚', '必中', '保证命中', '内幕']) {
+for (const text of [
+  '模型主方向概率',
+  '剔除',
+  '不进主推池',
+  '主推波胆',
+  '备用波胆',
+  '稳赚',
+  '必中',
+  '保证命中',
+  '内幕',
+]) {
   assert.equal(combinedInternalSource.includes(text), false, `internal source must not include: ${text}`)
 }
 
