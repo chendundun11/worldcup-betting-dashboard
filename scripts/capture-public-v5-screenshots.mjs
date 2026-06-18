@@ -31,7 +31,10 @@ const browser = await chromium.launch({ headless: true })
 try {
   for (const [filename, viewport, pathname] of targets) {
     const page = await browser.newPage({ viewport })
-    await page.goto(makeUrl(pathname), { waitUntil: 'networkidle' })
+    await page.goto(makeUrl(pathname), { waitUntil: 'domcontentloaded' })
+    if (pathname === '/') {
+      await page.waitForSelector('.public-command-hero', { timeout: 20000 })
+    }
     await page.screenshot({ path: join(OUT_DIR, filename), fullPage: true })
     await page.close()
   }

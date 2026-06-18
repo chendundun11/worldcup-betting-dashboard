@@ -26,7 +26,8 @@ try {
     { name: 'narrow', width: 320, height: 740, expectMobileRail: true },
   ]) {
     const page = await browser.newPage({ viewport })
-    await page.goto(makeUrl('/'), { waitUntil: 'networkidle' })
+    await page.goto(makeUrl('/'), { waitUntil: 'domcontentloaded' })
+    await page.waitForSelector('.public-command-hero', { timeout: 20000 })
 
     const audit = await page.evaluate(() => {
       const hero = document.querySelector('.public-command-hero')
@@ -112,7 +113,7 @@ try {
   }
 
   const workbench = await browser.newPage({ viewport: { width: 1280, height: 900 } })
-  await workbench.goto(makeUrl('/codex-workbench.html'), { waitUntil: 'networkidle' })
+  await workbench.goto(makeUrl('/codex-workbench.html'), { waitUntil: 'domcontentloaded' })
   const workbenchAudit = await workbench.evaluate(() => ({
     links: [...document.querySelectorAll('a')].map((link) => link.getAttribute('href')),
     text: document.body.innerText,

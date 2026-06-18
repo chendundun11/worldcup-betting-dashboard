@@ -64,7 +64,8 @@ try {
   ]) {
     const page = await browser.newPage({ viewport })
 
-    await page.goto(BASE_URL, { waitUntil: 'networkidle' })
+    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' })
+    await page.waitForSelector('.public-command-hero', { timeout: 20000 })
     const publicAudit = await page.evaluate(
       ({ oldTerms, sensitiveTerms }) => {
         const hasAny = (text, terms) =>
@@ -137,7 +138,7 @@ try {
       radarMatchName,
     )
 
-    await page.goto(getInternalUrl(), { waitUntil: 'networkidle' })
+    await page.goto(getInternalUrl(), { waitUntil: 'domcontentloaded' })
     await page.waitForSelector('.internal-v4-detail-tabs', { timeout: 20000 })
     await page.waitForTimeout(800)
     const internalScopeAudit = await page.evaluate(() => {
