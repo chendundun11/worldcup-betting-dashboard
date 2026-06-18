@@ -114,7 +114,7 @@
 
       .meter span {
         display: block;
-        width: 92%;
+        width: 96%;
         height: 100%;
         background: linear-gradient(90deg, var(--cyan), var(--gold), var(--red));
       }
@@ -193,9 +193,9 @@
       <section class="hero">
         <div class="intro panel">
           <span class="eyebrow">CODEX LIVE WORKBENCH</span>
-          <h1>外部公开页重做中</h1>
+          <h1>重做完成，稳定性审计中</h1>
           <p>
-            当前路线：公开页视觉整体换代，首屏改成赛事指挥屏，高比分雷达做成信号板，移动端单独验收。用户不需要做决策，我会边做边审计。
+            当前路线：公开页和内部引擎视觉已完成换代，本地 API 已补上限流降级保护。现在进入四小时窗口内的长跑审计，持续复查服务、控制台噪声、移动端溢出和质量门。
           </p>
           <div class="link-row">
             <a href="/">查看公开页</a>
@@ -203,11 +203,11 @@
           </div>
         </div>
         <aside class="status panel">
-          <span class="eyebrow">PHASE 05</span>
-          <strong>SOAK PASS</strong>
-          <p>已完成：外部/内部 V5、移动选赛、截图工具、内部兜底、15 分钟间隔 soak 守门。</p>
+          <span class="eyebrow" data-phase>PHASE 06</span>
+          <strong>LONG SOAK</strong>
+          <p>已完成：外部/内部 V5、移动选赛、截图工具、内部兜底、API 降级、15 分钟间隔 soak 守门。</p>
           <div class="meter" aria-label="任务进度"><span></span></div>
-          <p class="stamp">当前状态：继续保持长跑，周期复查服务、console、移动溢出和质量门。</p>
+          <p class="stamp">当前状态：继续长跑到四小时以上，周期复查服务、console、移动溢出和质量门。</p>
         </aside>
       </section>
 
@@ -229,8 +229,8 @@
         </article>
         <article class="panel warn">
           <span>NOW</span>
-          <h2>质量守门</h2>
-          <p>继续跑 lint、browser smoke、quality、audit，并用截图从用户视角复核。</p>
+          <h2>长跑守门</h2>
+          <p>继续跑 quality、browser smoke、visual、soak 和 audit，并用截图从用户视角复核。</p>
         </article>
       </section>
     </main>
