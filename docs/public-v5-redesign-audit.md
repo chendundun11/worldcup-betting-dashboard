@@ -69,4 +69,4 @@
 
 - The local API now returns local match data with HTTP 200 when the upstream provider is missing, rate-limited, invalid, or unavailable. This prevents recoverable provider failures from surfacing as browser console noise during visual soaks.
 - `scripts/check-runtime-soak.mjs` now logs `soak-progress` after every route/viewport check and `soak-wait` before delayed iterations, so long unattended runs are easier to audit from the log file.
-- Current visible workbench state is `PHASE 06 / LONG SOAK`: external and internal UI replacement is complete; the active task is long-run stability review.
+- Current visible workbench state is `PHASE 07 / COMPLETE`: external and internal UI replacement is complete; the 5-iteration long soak has passed.

@@ -215,8 +215,8 @@ try {
     text: document.body.innerText,
   }))
   assert(
-    workbenchAudit.text.includes('稳定性审计中') && workbenchAudit.text.includes('PHASE 06'),
-    'design workbench must describe the current long-soak audit phase',
+    workbenchAudit.text.includes('长跑通过') && workbenchAudit.text.includes('PHASE 07'),
+    'design workbench must describe the completed long-soak phase',
   )
   assert(workbenchAudit.links.includes('/'), 'design workbench must link back to the public page')
   assert(
