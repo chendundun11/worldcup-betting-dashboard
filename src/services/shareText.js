@@ -56,7 +56,7 @@ export function formatShareLineupStatus(status) {
 export function formatShareScores(scorePredictions) {
   const { primaryScore, secondaryScore } = formatShareScorePair(scorePredictions)
 
-  return `主推比分：${primaryScore}｜备用比分：${secondaryScore}`
+  return `候选比分：${primaryScore}｜备选比分：${secondaryScore}`
 }
 
 export function formatShareScorePair(scorePredictions) {

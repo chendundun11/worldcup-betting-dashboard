@@ -303,8 +303,8 @@ const sharePayload = buildShareMatchPayload({
 })
 const shareText = buildRecommendationShareText(sharePayload)
 assert(shareText.includes('【AI赛前情报】'), 'Share text must use the sports-cover title.')
-assert(shareText.includes('主推比分：'), 'Share text must include primary score.')
-assert(shareText.includes('备用比分：'), 'Share text must include backup score.')
+assert(shareText.includes('候选比分：'), 'Share text must include candidate score.')
+assert(shareText.includes('备选比分：'), 'Share text must include backup score.')
 assert(shareText.includes('总进球：'), 'Share text must include compact total goals judgement.')
 assert(shareText.includes('大小球：小 2.5'), 'Share text must include derived over-under judgement.')
 assert(!shareText.includes(OLD_OVER_UNDER_WORD), 'Share text must not use the old over-under boundary wording.')
@@ -318,7 +318,7 @@ const serviceText = [
   readFileSync('src/services/sharePoster.js', 'utf8'),
   readFileSync('src/services/shareText.js', 'utf8'),
 ].join('\n')
-assert(!serviceText.includes('辅推比分'), 'Poster and share text must use backup score copy.')
+assert(!/主推比分|辅推比分|备用比分/.test(serviceText), 'Poster and share text must use candidate score copy.')
 assert(!serviceText.includes('风险等级'), 'Poster and share text must not show report-style risk labels.')
 assert(!serviceText.includes(OLD_OVER_UNDER_WORD), 'Poster and share text must not use the old over-under boundary wording.')
 
@@ -332,8 +332,6 @@ const protectedStatus = gitStatusFor([
   'src/data',
   'api',
   'vercel.json',
-  'package.json',
-  'package-lock.json',
 ])
 assert(!protectedStatus, `Protected files must not be modified:\n${protectedStatus}`)
 

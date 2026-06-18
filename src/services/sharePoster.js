@@ -619,8 +619,8 @@ function drawScoreboard(ctx, poster) {
   ctx.stroke()
 
   const cells = [
-    ['主推比分', poster.primaryScoreValue, SAFE_X + CONTENT_WIDTH / 4, y + 16, '#ffffff', 42],
-    ['备用比分', poster.secondaryScoreValue, SAFE_X + (CONTENT_WIDTH * 3) / 4, y + 16, '#dbeafe', 42],
+    ['候选比分', poster.primaryScoreValue, SAFE_X + CONTENT_WIDTH / 4, y + 16, '#ffffff', 42],
+    ['备选比分', poster.secondaryScoreValue, SAFE_X + (CONTENT_WIDTH * 3) / 4, y + 16, '#dbeafe', 42],
     ['总进球', poster.totalGoalsValue, SAFE_X + CONTENT_WIDTH / 4, y + 84, '#5eead4', 40],
     ['大小球', poster.overUnderValue, SAFE_X + (CONTENT_WIDTH * 3) / 4, y + 84, '#fbbf24', 40],
   ]

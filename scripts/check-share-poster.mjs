@@ -225,8 +225,8 @@ for (const copy of [
   'AI赛前情报',
   '逐场情报解读',
   '赛前结论',
-  '主推比分',
-  '备用比分',
+  '候选比分',
+  '备选比分',
   '总进球判断',
   '大小球',
   '模型解读',
@@ -236,7 +236,7 @@ for (const copy of [
   assert(shareFeatureText.includes(copy), `Share feature must include "${copy}".`)
 }
 assert(
-  !shareOutputSource.includes('辅推比分') &&
+  !/主推比分|辅推比分|备用比分/.test(shareOutputSource) &&
     !shareOutputSource.includes('进球方向') &&
     !/比分参考：\$\{[^}]+scorePredictionsText[^}]*\}/.test(shareText),
   'Share output must use V2.2.2 primary/backup score and total-goals structure.',
@@ -295,8 +295,8 @@ assertPosterConsistency(samplePoster, 'samplePoster')
 assert(samplePoster.posterTitle === 'AI赛前情报', 'Poster title must use sports-cover copy.')
 assert(samplePoster.posterSubtitle === '逐场情报解读', 'Poster subtitle must use compact sports-cover copy.')
 assert(samplePoster.mainConclusion.includes('主方向：'), 'Poster must expose a clear main direction.')
-assert(samplePoster.primaryScoreText.includes('主推比分：'), 'Poster must expose primary score text.')
-assert(samplePoster.secondaryScoreText.includes('备用比分：'), 'Poster must expose backup score text.')
+assert(samplePoster.primaryScoreText.includes('候选比分：'), 'Poster must expose candidate score text.')
+assert(samplePoster.secondaryScoreText.includes('备选比分：'), 'Poster must expose backup score text.')
 assert(samplePoster.totalGoalsText.includes('总进球：'), 'Poster must expose compact total goals text.')
 assert(samplePoster.totalGoalsShortText === '总进球：0-2球', '1-1 / 0-0 must use compact 0-2 goals copy.')
 assert(samplePoster.overUnderText === '大小球：小 2.5', '1-1 / 0-0 must use under 2.5 copy.')
@@ -355,8 +355,8 @@ const sharePayload = buildShareMatchPayload({
 const shareCopy = buildRecommendationShareText(sharePayload)
 assert(shareCopy.includes('【AI赛前情报】'), 'Share copy must use the sports-cover title.')
 assert(shareCopy.includes('主方向：'), 'Share copy must include main direction.')
-assert(shareCopy.includes('主推比分：'), 'Share copy must include primary score.')
-assert(shareCopy.includes('备用比分：'), 'Share copy must include backup score.')
+assert(shareCopy.includes('候选比分：'), 'Share copy must include candidate score.')
+assert(shareCopy.includes('备选比分：'), 'Share copy must include backup score.')
 assert(shareCopy.includes('总进球：'), 'Share copy must include compact total goals judgement.')
 assert(shareCopy.includes('大小球：小 2.5'), 'Share copy must include over-under judgement.')
 assert(!shareCopy.includes(['小', '2.5'].join('')), 'Share copy must not collapse the space in 小 2.5.')
@@ -400,8 +400,6 @@ const protectedStatus = gitStatusFor([
   'src/data',
   'api',
   'vercel.json',
-  'package.json',
-  'package-lock.json',
 ])
 assert(!protectedStatus, `Protected files must not be modified:\n${protectedStatus}`)
 

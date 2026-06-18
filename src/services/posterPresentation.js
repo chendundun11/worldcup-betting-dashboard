@@ -622,7 +622,7 @@ export function buildPosterPresentation({
     posterKicker: '结合球队状态、首发预期、比赛节奏与市场变化的赛前综合判断',
     posterSubtitle: '逐场情报解读',
     posterTitle: 'AI赛前情报',
-    primaryScoreText: `主推比分：${scorePair.primaryScore}`,
+    primaryScoreText: `候选比分：${scorePair.primaryScore}`,
     primaryScoreValue: scorePair.primaryScore,
     rawPrediction: {
       scorePredictions,
@@ -630,7 +630,7 @@ export function buildPosterPresentation({
       summary,
     },
     rawScore: rating.rawScore,
-    secondaryScoreText: `备用比分：${scorePair.secondaryScore}`,
+    secondaryScoreText: `备选比分：${scorePair.secondaryScore}`,
     secondaryScoreValue: scorePair.secondaryScore,
     statusText: getStatusText(statusTags),
     supportConclusion: `补充判断：${direction.supportValue}`,
