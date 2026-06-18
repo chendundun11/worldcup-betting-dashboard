@@ -507,7 +507,7 @@ def draw_match_block(draw, meta, y):
 def draw_prediction_cards(draw, meta, y):
     card_w = (CONTENT_WIDTH - 32) // 2
     cards = [
-        ("主推方向", meta["main_pick"], SAFE, (94, 234, 212, 240)),
+        ("主方向", meta["main_pick"], SAFE, (94, 234, 212, 240)),
         ("大小球", meta["total_goals"], SAFE + card_w + 32, (251, 191, 36, 240)),
         ("比分一", meta["score_1"], SAFE, (216, 180, 254, 240)),
         ("比分二", meta["score_2"], SAFE + card_w + 32, (147, 197, 253, 240)),

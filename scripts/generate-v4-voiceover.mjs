@@ -166,7 +166,7 @@ function buildCopyText(meta, style) {
 
   return [
     '【短版】',
-    `本地搭了个 AI 世界杯预测系统，每天记录几场。${matchName}：主推 ${mainPick}，比分 ${score1} / ${score2}，大小球 ${totalGoals}。仅供娱乐参考。`,
+    `本地搭了个 AI 世界杯预测系统，每天记录几场。${matchName}：主方向 ${mainPick}，比分 ${score1} / ${score2}，大小球 ${totalGoals}。仅供娱乐参考。`,
     '',
     '【正常版】',
     `今天用 v4 配音版重新跑一场 ${matchName}。风格：${style}。模型方向暂时偏 ${mainPick}，比分参考 ${score1} / ${score2}，大小球按 ${totalGoals}。风险点：${riskNote}。不承诺命中，不诱导下注，只做数据记录与娱乐参考。`,

@@ -436,7 +436,7 @@ function generateDouyinCopy(meta) {
     `本地搭了个 AI 世界杯预测系统，今天记录：${matchName}。方向看 ${mainPick}，比分参考 ${score1} / ${score2}，大小球 ${totalGoals}。${footer}。`,
     '',
     '【正常版】',
-    `本地 AI 分析系统今天跑到 ${matchName}，模型给到的主推方向是 ${mainPick}，比分先记录 ${score1} / ${score2}，大小球方向看 ${totalGoals}。风险点：${riskNote}。不承诺命中，不诱导下注，只做数据记录与娱乐参考。`,
+    `本地 AI 分析系统今天跑到 ${matchName}，模型给到的主方向是 ${mainPick}，比分先记录 ${score1} / ${score2}，大小球方向看 ${totalGoals}。风险点：${riskNote}。不承诺命中，不诱导下注，只做数据记录与娱乐参考。`,
     '',
     '【口语版】',
     `今天继续拿本地 AI 系统跑一场世界杯预测：${matchName}。这场先记 ${mainPick}，比分我会盯 ${score1} 和 ${score2}，大小球看 ${totalGoals}。不过 ${riskNote}，所以还是当成每日观察样本，${footer}。`,

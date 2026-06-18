@@ -2587,11 +2587,11 @@ function CaptureModeDashboard({
     {
       key: 'pick',
       sceneIndex: 3,
-      title: '主推方向',
+      title: '主方向',
       duration: 5,
       startTime: 8,
       endTime: 13,
-      screenFocus: ['主推方向', '方向强度', '模型置信度'],
+      screenFocus: ['主方向', '方向强度', '模型置信度'],
       voiceoverText: `模型方向暂时更偏${displayMainDirection.replace(/胜$/, '')}，但不是说一定稳。`,
     },
     {
@@ -2753,7 +2753,7 @@ function CaptureModeDashboard({
       >
         {sceneHeader(sceneByKey.pick, 'MAIN PICK')}
         <div className="capture-result-card primary">
-          <span>主推方向</span>
+          <span>主方向</span>
           <strong>{displayMainDirection}</strong>
           <small>方向仅作赛前数据记录，需要临场复核</small>
         </div>

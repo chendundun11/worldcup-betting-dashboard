@@ -108,7 +108,7 @@ export function buildCopyText(meta) {
 
   return [
     '【短版】',
-    `本地搭了个 AI 世界杯预测系统，每天记录几场。今天看 ${matchName}：主推 ${mainPick}，比分参考 ${score1} / ${score2}，大小球 ${totalGoals}。仅供娱乐参考。`,
+    `本地搭了个 AI 世界杯预测系统，每天记录几场。今天看 ${matchName}：主方向 ${mainPick}，比分参考 ${score1} / ${score2}，大小球 ${totalGoals}。仅供娱乐参考。`,
     '',
     '【正常版】',
     `今天继续用本地 AI 系统跑世界杯预测，记录一场 ${matchName}。模型方向暂时偏 ${mainPick}，比分先看 ${score1} / ${score2}，大小球按 ${totalGoals}。风险点：${riskNote}。不承诺命中，不诱导下注，只做数据记录与娱乐参考。`,

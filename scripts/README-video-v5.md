@@ -41,7 +41,7 @@ capture 页面会自动展示：
 
 - Scene 1：开头钩子
 - Scene 2：模型扫描
-- Scene 3：主推方向
+- Scene 3：主方向
 - Scene 4：比分预测
 - Scene 5：大小球
 - Scene 6：风险复核

@@ -70,14 +70,14 @@ function makeRecord(overrides = {}) {
         },
         {
           key: 'primaryScore',
-          label: '主推比分投入',
+          label: '候选比分投入',
           pick: '2-0',
           stake: 50,
           odds: 7.5,
         },
         {
           key: 'secondaryScore',
-          label: '备用比分投入',
+          label: '保护比分投入',
           pick: '2-1',
           stake: 20,
           odds: 8.5,

@@ -182,7 +182,7 @@ function buildCopyText(meta, style) {
 
   return [
     '【短版】',
-    `用本地 AI 分析页面录了一条 ${matchName}。主推 ${mainPick}，比分 ${score1} / ${score2}，大小球 ${totalGoals}。仅供娱乐参考。`,
+    `用本地 AI 分析页面录了一条 ${matchName}。主方向 ${mainPick}，比分 ${score1} / ${score2}，大小球 ${totalGoals}。仅供娱乐参考。`,
     '',
     '【正常版】',
     `今天用 v5 网站录屏模式跑 ${matchName}。风格：${style}。页面会扫球队状态、盘口变化、市场热度、比分分布和风险复核点。当前方向偏 ${mainPick}，比分参考 ${score1} / ${score2}，大小球 ${totalGoals}。风险点：${riskNote}。不承诺命中，不诱导下注，只做数据记录与娱乐参考。`,

@@ -260,8 +260,8 @@ function makeSceneSpecs(meta, exportReport, materials, outputDir, durationSecond
     {
       accent: 'green',
       fileName: 'scene_03_pick.png',
-      kicker: '主推方向',
-      lines: [`主推：${meta.main_pick}`, '方向强度：中高', '临场仍需复核'],
+      kicker: '主方向',
+      lines: [`主方向：${meta.main_pick}`, '方向强度：中高', '临场仍需复核'],
       materialUsage: 'analysis',
       title: '核心方向',
     },

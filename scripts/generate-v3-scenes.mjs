@@ -211,7 +211,7 @@ function makeSceneSpecs(meta, exportReport, durationSeconds) {
       duration: baseDurations[2] * scale,
       fileName: 'scene_03_pick.png',
       kicker: '方向判断',
-      lines: [`主推：${meta.main_pick}`, '方向强度：中高', '风险等级：需复核'],
+      lines: [`主方向：${meta.main_pick}`, '方向强度：中高', '风险等级：需复核'],
       title: '模型主方向',
     },
     {

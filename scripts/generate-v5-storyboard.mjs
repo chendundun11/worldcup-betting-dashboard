@@ -169,11 +169,11 @@ export function buildV5Storyboard({ exportReport = {}, meta, style = 'sharp' }) 
     scene(
       3,
       'pick',
-      '主推方向',
+      '主方向',
       5,
-      ['主推方向', '方向强度', confidenceLabel],
+      ['主方向', '方向强度', confidenceLabel],
       `模型方向暂时更偏${directionSpeech}，但不是说一定稳。`,
-      { label: '主推方向', value: mainPick },
+      { label: '主方向', value: mainPick },
     ),
     scene(
       4,
