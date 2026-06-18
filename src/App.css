@@ -12,6 +12,7 @@
 .metric-card,
 .match-list-panel,
 .daily-ai-spotlight,
+.quant-score-public-panel,
 .core-card,
 .ai-flow-panel,
 .market-sentiment-card,
@@ -536,6 +537,37 @@
   color: var(--text-strong);
 }
 
+.daily-ai-score-candidates {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.daily-ai-score-candidates p {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid rgba(251, 191, 36, 0.16);
+  border-radius: 16px;
+  background: rgba(251, 191, 36, 0.07);
+}
+
+.daily-ai-score-candidates strong {
+  color: var(--text-strong);
+  font-family: var(--number);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.daily-ai-score-candidates small {
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.35;
+}
+
 .daily-ai-facts {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -637,7 +669,7 @@
   font-family: var(--display);
   font-size: 28px;
   line-height: 1;
-  letter-spacing: -0.05em;
+  letter-spacing: 0;
 }
 
 .simple-match-list {
@@ -968,56 +1000,56 @@
 }
 
 .compact-risk-line-panel {
-  order: 3;
-}
-
-.mobile-focus-list-panel {
-  order: 4;
-}
-
-.v1-priority-panel {
   order: 5;
 }
 
-.lineup-placeholder-panel {
+.mobile-focus-list-panel {
   order: 6;
 }
 
-.public-data-status-panel {
+.v1-priority-panel {
   order: 7;
 }
 
-.pregame-checklist-panel {
+.lineup-placeholder-panel {
   order: 8;
 }
 
-.history-result-panel {
+.public-data-status-panel {
   order: 9;
 }
 
-.team-status-panel {
+.pregame-checklist-panel {
   order: 10;
 }
 
-.squad-insight-panel {
+.history-result-panel {
   order: 11;
 }
 
-.detail-panel {
+.team-status-panel {
   order: 12;
 }
 
-.ai-flow-panel {
+.squad-insight-panel {
   order: 13;
 }
 
-.ai-insight-grid {
+.detail-panel {
   order: 14;
+}
+
+.ai-flow-panel {
+  order: 15;
+}
+
+.ai-insight-grid {
+  order: 16;
 }
 
 .internal-engine-toggle-row,
 .internal-engine-panel {
-  order: 15;
+  order: 17;
 }
 
 .core-card,
@@ -1068,7 +1100,7 @@
   font-family: var(--display);
   font-size: clamp(36px, 5vw, 66px);
   line-height: 0.98;
-  letter-spacing: -0.06em;
+  letter-spacing: 0;
 }
 
 .quick-kickoff-time {
@@ -1142,7 +1174,7 @@
   font-family: var(--display);
   font-size: clamp(42px, 6vw, 78px);
   line-height: 1;
-  letter-spacing: -0.06em;
+  letter-spacing: 0;
 }
 
 .quick-recommendation p {
@@ -1271,9 +1303,99 @@
   font-weight: 900;
 }
 
+.quant-score-public-panel {
+  display: grid;
+  order: 3;
+  gap: 14px;
+  padding: 20px;
+  border-radius: 24px;
+  border-color: rgba(251, 191, 36, 0.18);
+  background:
+    linear-gradient(135deg, rgba(251, 191, 36, 0.1), rgba(45, 212, 191, 0.06)),
+    rgba(7, 12, 23, 0.88);
+}
+
+.quant-score-public-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.quant-score-public-head p {
+  max-width: 520px;
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.55;
+  text-align: right;
+}
+
+.quant-score-public-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.quant-score-public-card {
+  display: grid;
+  min-width: 0;
+  min-height: 112px;
+  align-content: space-between;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 18px;
+  background: rgba(2, 6, 14, 0.28);
+}
+
+.quant-score-public-card.primary {
+  border-color: rgba(74, 222, 128, 0.32);
+  background: rgba(74, 222, 128, 0.08);
+}
+
+.quant-score-public-card span {
+  color: var(--gold);
+  font-size: 12px;
+  font-weight: 1000;
+}
+
+.quant-score-public-card strong {
+  color: var(--text-strong);
+  font-family: var(--number);
+  font-size: clamp(30px, 3.5vw, 46px);
+  line-height: 1;
+}
+
+.quant-score-public-card small {
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.4;
+}
+
+.quant-score-public-notes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.quant-score-public-notes span {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 999px;
+  color: var(--text-soft);
+  background: rgba(2, 6, 14, 0.24);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.35;
+}
+
 .share-actions-panel,
 .share-toast {
-  order: 3;
+  order: 4;
 }
 
 .share-actions-panel {
@@ -1556,7 +1678,7 @@
   font-size: clamp(26px, 3vw, 42px);
   font-weight: 900;
   line-height: 1;
-  letter-spacing: -0.05em;
+  letter-spacing: 0;
 }
 
 .quick-judgement-block {
@@ -2501,7 +2623,7 @@
   color: var(--text-strong);
   font-family: var(--display);
   font-size: 24px;
-  letter-spacing: -0.04em;
+  letter-spacing: 0;
 }
 
 .detail-table,
@@ -2529,6 +2651,34 @@
 .revaluation-row {
   grid-template-columns: repeat(4, minmax(90px, 0.8fr)) minmax(180px, 1.8fr);
   min-width: 0;
+}
+
+.hero-score-rail {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.hero-score-rail b {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  padding: 9px 10px;
+  border: 1px solid rgba(251, 191, 36, 0.18);
+  border-radius: 14px;
+  color: var(--text-strong);
+  background: rgba(251, 191, 36, 0.08);
+  font-family: var(--number);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.hero-score-rail b span {
+  color: var(--gold);
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: 1000;
+  letter-spacing: 0;
 }
 
 .detail-head,
@@ -3131,7 +3281,9 @@
 @media (max-width: 860px) {
   .overview-grid,
   .featured-match-grid,
+  .daily-ai-score-candidates,
   .daily-ai-facts,
+  .quant-score-public-grid,
   .quick-meta-grid,
   .ai-flow-steps,
   .ai-insight-grid,
@@ -3148,6 +3300,15 @@
 
   .daily-ai-primary-grid {
     grid-template-columns: 1fr;
+  }
+
+  .quant-score-public-head {
+    display: grid;
+  }
+
+  .quant-score-public-head p {
+    max-width: none;
+    text-align: left;
   }
 }
 
@@ -3170,6 +3331,7 @@
   .daily-ai-spotlight,
   .quick-conclusion-card,
   .core-picks-panel,
+  .quant-score-public-panel,
   .share-actions-panel,
   .compact-risk-line-panel,
   .mobile-focus-list-panel,
@@ -3195,6 +3357,7 @@
   .daily-ai-spotlight,
   .quick-conclusion-card,
   .core-picks-panel,
+  .quant-score-public-panel,
   .share-actions-panel,
   .compact-risk-line-panel,
   .mobile-focus-list-panel,
@@ -3252,6 +3415,15 @@
   .hero-pick {
     min-height: 110px;
     padding: 14px;
+  }
+
+  .hero-score-rail {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .hero-score-rail b {
+    padding: 8px;
+    font-size: 16px;
   }
 
   .hero-status-row span,
@@ -3343,6 +3515,11 @@
   .daily-ai-score-highlight strong {
     font-size: 30px;
     line-height: 1.06;
+  }
+
+  .daily-ai-score-candidates,
+  .quant-score-public-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .daily-ai-facts {
@@ -3567,7 +3744,9 @@
   }
 
   .main-layout {
-    display: block;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
     margin-top: 0;
   }
 
@@ -3742,6 +3921,41 @@
     font-size: clamp(32px, 10vw, 42px);
   }
 
+  .quant-score-public-panel {
+    gap: 10px;
+    padding: 13px;
+    border-radius: 16px;
+  }
+
+  .quant-score-public-head {
+    gap: 8px;
+  }
+
+  .quant-score-public-head p {
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .quant-score-public-card {
+    min-height: 96px;
+    padding: 11px;
+    border-radius: 15px;
+  }
+
+  .quant-score-public-card strong {
+    font-size: clamp(28px, 10vw, 40px);
+  }
+
+  .quant-score-public-notes {
+    gap: 6px;
+  }
+
+  .quant-score-public-notes span {
+    width: 100%;
+    border-radius: 13px;
+    font-size: 11px;
+  }
+
   .share-actions-panel {
     gap: 8px;
     padding: 10px;
@@ -3795,7 +4009,7 @@
   .mobile-lineup-data-panel .section-title h2 {
     margin-top: 4px;
     font-size: 22px;
-    letter-spacing: -0.03em;
+    letter-spacing: 0;
   }
 
   .v1-play-grid {
@@ -3856,24 +4070,28 @@
     order: 2;
   }
 
-  .compact-risk-line-panel {
+  .quant-score-public-panel {
     order: 3;
   }
 
-  .mobile-focus-list-panel {
+  .compact-risk-line-panel {
     order: 4;
   }
 
-  .mobile-lineup-data-panel {
+  .mobile-focus-list-panel {
     order: 5;
   }
 
-  .history-result-panel {
+  .mobile-lineup-data-panel {
     order: 6;
   }
 
-  .pregame-checklist-panel {
+  .history-result-panel {
     order: 7;
+  }
+
+  .pregame-checklist-panel {
+    order: 8;
   }
 
   .compact-risk-checklist {

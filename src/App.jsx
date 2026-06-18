@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Activity,
   BarChart3,
@@ -6,14 +6,12 @@ import {
   Check,
   Clock3,
   Copy,
-  Crosshair,
   Download,
   Gauge,
   Image as ImageIcon,
   Loader2,
   ShieldAlert,
   Target,
-  TrendingUp,
   WalletCards,
   X,
 } from 'lucide-react'
@@ -25,11 +23,6 @@ import { TEAM_PROFILES } from './data/teamProfiles'
 import teamsData from './data/teams.json'
 import { requestAiAnalysis } from './services/aiAnalysisApi.js'
 import { buildAiAnalysisPayload } from './services/aiAnalysisPayload.js'
-import {
-  copyPosterImage,
-  createSharePosterPng,
-  downloadSharePoster,
-} from './services/sharePoster.js'
 import {
   buildRecommendationShareText,
   buildShareMatchPayload,
@@ -61,12 +54,17 @@ import {
   formatSettlementHit,
   settlePredictionSnapshot,
 } from './services/predictionSettlement.js'
-import InternalCommandCenterV4 from './components/InternalCommandCenterV4.jsx'
 import {
   applyFinishedMatchAdjustments,
   applyFinishedMatchAdjustmentsBefore,
 } from './utils/teamRevaluation'
 import './App.css'
+
+const InternalCommandCenterV4 = lazy(() => import('./components/InternalCommandCenterV4.jsx'))
+
+function loadSharePosterTools() {
+  return import('./services/sharePoster.js')
+}
 
 const outcomes = ['home', 'draw', 'away']
 
@@ -238,190 +236,6 @@ const analysisPhaseConfig = {
     message: '本地解释正在整理展示文案...',
     activeStep: 4,
   },
-}
-
-const internalMarketLabels = {
-  '1X2': '胜平负方向',
-  totalGoals: '大小球方向',
-  score: '比分参考',
-  upset: '冷门观察',
-}
-
-const internalDataQualityLabels = {
-  odds: '赔率快照',
-  marketMovement: '盘口变化历史',
-  injuries: '伤停信息',
-  expectedLineups: '预计首发',
-  teamProfile: '球队资料',
-  oddsUpdatedAt: '赔率更新时间',
-  handicapStructured: '让球结构化',
-  snapshotPersistence: '快照持久化',
-  resultSettlement: '赛果结算',
-  modelProbability: '模型概率',
-  oddsConfidence: '赔率置信度',
-  lineupCertainty: '首发确定性',
-  rotationRisk: '轮换风险',
-  injuryDataQuality: '伤停数据质量',
-}
-
-const internalDataQualityStatusLabels = {
-  localSnapshot: '本地快照',
-  missing: '缺失',
-  partial: '部分',
-  estimated: '估算',
-  unavailable: '不可用',
-  available: '可用',
-  high: '高',
-  medium: '中',
-  low: '低',
-  unknown: '待确认',
-}
-
-const internalScoreBreakdownLabels = {
-  valueEdge: '赔率价值',
-  directionClarity: '方向清晰度',
-  strengthGap: '实力差距',
-  recentAttackDefense: '近期攻防',
-  marketStability: '盘口稳定度',
-  upsetElasticity: '冷门弹性',
-  heatPenalty: '热度扣分',
-  infoPenalty: '信息缺口扣分',
-}
-
-const internalRiskFlagLabels = {
-  favoriteTooLow: '热门价格偏低',
-  overPriceThin: '大球价格支撑不足',
-  handicapRisk: '让球方向存在风险',
-  scoreVolatile: '比分波动较高',
-  upsetRisk: '冷门扰动风险',
-  underHasSupport: '小球方向有一定支撑',
-  drawHasProtection: '平局保护明显',
-}
-
-const internalLimitationLabels = {
-  missingOneXTwoOdds: '缺少胜平负赔率',
-  missingModelProbability: '缺少模型概率',
-  missingTotalGoalsModel: '缺少大小球模型概率',
-  missingTotalGoalsOdds: '缺少大小球赔率',
-  missingMarketMovementHistory: '缺少盘口变化历史',
-  realInjuriesMissing: '真实伤停缺失',
-  expectedLineupsMissing: '预计首发缺失',
-  marketMovementHistoryMissing: '盘口变化历史缺失',
-  oddsUpdatedAtMissing: '赔率更新时间缺失',
-  handicapStructuredMissing: '让球结构未结构化',
-  snapshotPersistenceMissing: '快照未持久化',
-  resultSettlementMissing: '赛果未结算',
-  oddsConfidenceLow: '赔率置信度偏低',
-  injuryDataQualityMissing: '伤停数据质量缺失',
-  injuryDataQualityPartial: '伤停数据仅部分可用',
-  lineupCertaintyLow: '首发确定性偏低',
-  rotationRiskReviewRequired: '轮换情况需复核',
-  teamVolatilityHigh: '球队波动偏高',
-  teamUpsetRiskReview: '冷门扰动需观察',
-}
-
-function getInternalMarketLabel(market) {
-  return internalMarketLabels[market] ?? market ?? '-'
-}
-
-function getInternalDataQualityLabel(key) {
-  return internalDataQualityLabels[key] ?? key
-}
-
-function getInternalDataQualityStatus(value) {
-  return internalDataQualityStatusLabels[value] ?? String(value)
-}
-
-function getInternalScoreBreakdownLabel(key) {
-  return internalScoreBreakdownLabels[key] ?? key
-}
-
-function getInternalRiskFlagLabel(flag) {
-  return internalRiskFlagLabels[flag] ?? flag
-}
-
-function formatInternalRiskText(text) {
-  return Object.entries(internalRiskFlagLabels).reduce(
-    (currentText, [key, label]) => currentText.split(key).join(label),
-    String(text ?? ''),
-  )
-}
-
-function getInternalLimitationLabel(limitation) {
-  if (String(limitation).startsWith('valueFlag:')) {
-    const flag = String(limitation).replace('valueFlag:', '')
-    return `盘口风险：${getInternalRiskFlagLabel(flag)}`
-  }
-
-  return internalLimitationLabels[limitation] ?? formatInternalRiskText(limitation)
-}
-
-function getInternalLimitationSummaries(limitations = []) {
-  const summaries = Array.from(
-    new Set(limitations.map((limitation) => getInternalLimitationLabel(limitation))),
-  )
-  const visibleSummaries = summaries.slice(0, 5)
-  const hiddenCount = Math.max(summaries.length - visibleSummaries.length, 0)
-
-  return hiddenCount
-    ? [...visibleSummaries, `另有 ${hiddenCount} 项数据限制待补。`]
-    : visibleSummaries
-}
-
-function getInternalLayerStatusSummary(teams, key) {
-  const values = Array.from(
-    new Set(
-      teams
-        .map((team) => team?.[key])
-        .filter(Boolean)
-        .map((value) => getInternalDataQualityStatus(value)),
-    ),
-  )
-
-  return values.length ? values.join(' / ') : '-'
-}
-
-function getInternalLightDataLayerSummary(plan) {
-  const lightDataLayer = plan?.internalAnalysis?.lightDataLayer
-  if (!lightDataLayer) return []
-
-  const teams = Object.values(lightDataLayer.teams ?? {})
-  const valueFlags = lightDataLayer.localOdds?.valueFlags ?? []
-  const maxUpsetRisk = Math.max(
-    0,
-    ...teams.map((team) => Number(team?.upsetRisk)).filter(Number.isFinite),
-  )
-
-  return [
-    {
-      label: '赔率置信度',
-      value: getInternalDataQualityStatus(
-        lightDataLayer.localOdds?.oddsConfidence ?? 'missing',
-      ),
-    },
-    {
-      label: '阵容确定性',
-      value: getInternalLayerStatusSummary(teams, 'lineupCertainty'),
-    },
-    {
-      label: '轮换风险',
-      value: getInternalLayerStatusSummary(teams, 'rotationRisk'),
-    },
-    {
-      label: '伤停数据质量',
-      value: getInternalLayerStatusSummary(teams, 'injuryDataQuality'),
-    },
-    {
-      label: '盘口风险标签',
-      value: valueFlags.length
-        ? valueFlags.map((flag) => getInternalRiskFlagLabel(flag)).join(' / ')
-        : '暂无明显盘口风险标签',
-    },
-    {
-      label: '冷门扰动提示',
-      value: maxUpsetRisk >= 55 ? '存在冷门扰动，仅观察' : '暂无明显冷门扰动',
-    },
-  ]
 }
 
 const teamMetrics = [
@@ -714,71 +528,6 @@ function formatHistoryTotalGoalsResult(settlement, snapshot) {
   }
 
   return formatSettlementHit(settlement.totalGoalsHit)
-}
-
-function HistoryResultCard({ match }) {
-  const record = match.historyRecord
-  const finalResult = match.historicalResult
-
-  if (!record || !finalResult) return null
-
-  const settlement =
-    match.historicalSettlement ??
-    settlePredictionSnapshot(record.predictionSnapshot, finalResult)
-  const finalScore =
-    settlement.finalScore ?? finalResult.finalScore ?? `${finalResult.homeGoals}-${finalResult.awayGoals}`
-  const homeName = getDisplayTeamName(finalResult.homeTeam ?? match.homeTeam.name)
-  const awayName = getDisplayTeamName(finalResult.awayTeam ?? match.awayTeam.name)
-  const scoreLabel =
-    settlement.scoreHit && settlement.matchedScore
-      ? `命中 ${settlement.matchedScore}`
-      : formatSettlementHit(settlement.scoreHit)
-  const missingSnapshot =
-    settlement.settlementStatus === 'missing_prediction_snapshot'
-
-  return (
-    <section className="history-result-panel" aria-label="历史记录与赛后命中">
-      <div className="section-title compact-title">
-        <span>历史记录</span>
-        <h2>赛后命中记录</h2>
-        <p>只用赛前快照做结算，不用赛果反向改推荐。</p>
-      </div>
-
-      <div className="history-result-score">
-        <span>实际赛果</span>
-        <strong>
-          {homeName} {finalScore} {awayName}
-        </strong>
-        <small>{finalResult.resultSourceLabel || '本地赛果记录'}</small>
-      </div>
-
-      <div className="history-snapshot-row">
-        <span>赛前推荐</span>
-        <strong>{formatHistorySnapshot(record.predictionSnapshot)}</strong>
-      </div>
-
-      <div className="history-hit-grid">
-        <p>
-          <span>主方向</span>
-          <strong>{formatSettlementHit(settlement.mainPickHit)}</strong>
-        </p>
-        <p>
-          <span>大小球</span>
-          <strong>{formatHistoryTotalGoalsResult(settlement, record.predictionSnapshot)}</strong>
-        </p>
-        <p>
-          <span>比分</span>
-          <strong>{scoreLabel}</strong>
-        </p>
-      </div>
-
-      {missingSnapshot ? (
-        <p className="history-result-note">
-          暂无可信赛前预测快照，本场只展示赛果，不补填命中结果。
-        </p>
-      ) : null}
-    </section>
-  )
 }
 
 function getHistoryEntryDateMs(item) {
@@ -1111,14 +860,6 @@ function hasWdlOdds(odds) {
 
 function hasLocalOdds(match) {
   return Boolean(match.localOdds)
-}
-
-function formatOddsValue(value) {
-  return getNumberValue(value).toFixed(2)
-}
-
-function getMarketStatus(match) {
-  return hasLocalOdds(match) ? '已有本地赔率' : '等待盘口确认'
 }
 
 function getTeamDisplaySeed(match, side) {
@@ -1507,7 +1248,7 @@ function generateScoreLeans(homeTeam, awayTeam, model, totalGoalsModel, risk) {
   const awayAttackEdge = awayTeam.attackRating - homeTeam.defenseRating
   const overLean = totalGoalsModel.over25Probability >= 0.54
   const underLean = totalGoalsModel.under25Probability >= 0.54
-  let scorePool = []
+  let scorePool
 
   if (primaryOutcome === 'draw') {
     scorePool = overLean ? ['1-1', '2-2', '0-0'] : ['1-1', '0-0', '2-2']
@@ -1819,27 +1560,6 @@ function getPrimaryDirectionDisplay(match) {
   return getOutcomeDirectionLabel(match.recommendation.direction)
 }
 
-function getRecommendationStrength(match) {
-  if (!hasWdlOdds(match.odds)) return '观察为主'
-
-  const matchType = getMatchType(match)
-
-  if (matchType.id === 'caution') return '观察为主'
-  if (matchType.id === 'balanced' || matchType.id === 'upsetWatch') {
-    return '谨慎参考'
-  }
-  if (
-    matchType.id === 'strongFavorite' &&
-    match.recommendation.direction !== 'noBet'
-  ) {
-    const oddsSnapshot = getLocalOddsSnapshot(match)
-    return oddsSnapshot?.favoriteOdd <= 1.7 ? '稳健参考' : '中等参考'
-  }
-  if (match.totalGoals.recommendation.direction !== 'noBet') return '中等参考'
-
-  return '观察为主'
-}
-
 function getStrengthGap(match) {
   return match.homeTeam.teamStrength - match.awayTeam.teamStrength
 }
@@ -1854,19 +1574,6 @@ function getWdlDirectionByStrength(match) {
 
   if (strengthGap >= 4 || powerDiff >= 3) return '主队不败'
   if (strengthGap <= -4 || powerDiff <= -3) return '客队不败'
-  return '平局防范'
-}
-
-function getLocalOddsWdlDirection(localOddsEntry) {
-  const homeWin = getNumberValue(localOddsEntry.homeWin)
-  const draw = getNumberValue(localOddsEntry.draw)
-  const awayWin = getNumberValue(localOddsEntry.awayWin)
-  const teamsAreClose = Math.abs(homeWin - awayWin) <= 0.35
-  const drawIsLow = draw <= Math.min(homeWin, awayWin) + 1.15
-
-  if (teamsAreClose || drawIsLow) return '平局防范'
-  if (homeWin < awayWin) return '主队不败'
-  if (awayWin < homeWin) return '客队不败'
   return '平局防范'
 }
 
@@ -2037,7 +1744,43 @@ function applyTeamStatusScoreTilt(match, pair, favoriteDirection) {
   return pair
 }
 
-function getScoreReferencePair(match) {
+function getPlanScoreReferencePair(plan) {
+  const scores = (plan?.scorePicks ?? [])
+    .map((pick) => String(pick?.score ?? '').trim())
+    .filter((score) => /^\d+-\d+$/.test(score))
+  const uniqueScores = Array.from(new Set(scores))
+
+  if (!uniqueScores.length) return null
+
+  return {
+    main: uniqueScores[0],
+    backup: uniqueScores[1] ?? (uniqueScores[0] === '1-1' ? '0-0' : '1-1'),
+  }
+}
+
+function buildDisplayPlan(match, plan = null) {
+  return (
+    plan ??
+    buildBetPlan(match, {
+      bankroll: 0,
+      maxStakePerMatch: 0,
+    })
+  )
+}
+
+function hasQuantScoreModel(plan) {
+  return (
+    plan?.publicScoreModel?.version === 'quant-score-v1' ||
+    (plan?.scorePicks ?? []).some((pick) => pick?.scoreModel === 'quant-score-v1')
+  )
+}
+
+function getScoreReferencePair(match, plan = null) {
+  const displayPlan = buildDisplayPlan(match, plan)
+  const planPair = getPlanScoreReferencePair(displayPlan)
+
+  if (planPair) return planPair
+
   const matchType = getMatchType(match)
   const oddsSnapshot = getLocalOddsSnapshot(match)
   const totalGoalsLean = getTotalGoalsLean(match)
@@ -2169,7 +1912,9 @@ function shouldCorrectDisplayScore(score, primaryOutcome, isMainScore = false) {
   return outcome !== 'draw'
 }
 
-function alignScoreReferenceWithPrimary(match, scoreReference) {
+function alignScoreReferenceWithPrimary(match, scoreReference, plan = null) {
+  if (hasQuantScoreModel(plan)) return scoreReference
+
   const primaryOutcome = getPublicPrimaryOutcome(match)
   const totalBand = getScoreTotalBand(scoreReference.main)
   const shouldUseFallback =
@@ -2188,20 +1933,52 @@ function getDisplayTotalGoalsDirection(scoreReference) {
   return '2-3球区间'
 }
 
-function getPublicMatchDisplay(match) {
+function getPublicMatchDisplay(match, plan = null) {
+  const displayPlan = buildDisplayPlan(match, plan)
   const scoreReference = alignScoreReferenceWithPrimary(
     match,
-    getScoreReferencePair(match),
+    getScoreReferencePair(match, displayPlan),
+    displayPlan,
   )
 
   return {
     scoreReference,
     totalGoalsDirection: getDisplayTotalGoalsDirection(scoreReference),
+    scoreModel: displayPlan.publicScoreModel ?? null,
   }
 }
 
-function hasScoutedTeam(match) {
-  return Boolean(match.homeTeam.confederation || match.awayTeam.confederation)
+const publicOutcomeLabels = {
+  home: '主队路径',
+  draw: '平局路径',
+  away: '客队路径',
+}
+
+function getPublicScoreCandidates(publicDisplay) {
+  const modelCandidates = publicDisplay?.scoreModel?.candidates ?? []
+  if (modelCandidates.length) return modelCandidates.slice(0, 4)
+
+  const fallbackScores = [
+    publicDisplay?.scoreReference?.main,
+    publicDisplay?.scoreReference?.backup,
+  ].filter(Boolean)
+
+  return fallbackScores.map((score, index) => ({
+    rank: index + 1,
+    score,
+    total: parseScoreValue(score)?.total ?? null,
+    outcome: getScoreOutcome(score),
+    rating: null,
+  }))
+}
+
+function formatPublicScoreModelLine(publicDisplay) {
+  const model = publicDisplay?.scoreModel
+  if (!model?.expectedGoals) {
+    return '公开比分候选来自赛前规则整理，临场首发和盘口变化需要复核。'
+  }
+
+  return `xG ${model.expectedGoals.home} - ${model.expectedGoals.away} · 总期望 ${model.expectedGoals.total} · ${model.totalGoalsText}`
 }
 
 function shouldShowUpsetScore(match) {
@@ -2269,10 +2046,6 @@ function getDisplayConfidenceScore(match, plan) {
   return getDisplayConfidence(rawScore)
 }
 
-function formatConfidenceScore(score) {
-  return `${Math.round(clamp(Number(score) || 0, 0, 100))}/100`
-}
-
 function getConfidenceTier(score) {
   return getDisplayConfidenceTier(score)
 }
@@ -2306,65 +2079,6 @@ function getBeginnerPrimaryDisplay(match) {
   return getPrimaryDirectionDisplay(match)
 }
 
-function getFeaturedMatchScore(match, index) {
-  const strength = getRecommendationStrength(match)
-  const matchType = getMatchType(match)
-  const strengthWeight = {
-    稳健参考: 34,
-    中等参考: 28,
-    谨慎参考: 16,
-    观察为主: 0,
-  }[strength] ?? 0
-  const typeWeight = {
-    strongFavorite: 22,
-    balanced: 14,
-    upsetWatch: 12,
-    caution: 0,
-  }[matchType.id] ?? 0
-
-  return (
-    (hasLocalOdds(match) ? 120 : 0) +
-    (strength !== '观察为主' ? 36 : 0) +
-    getAiConfidence(match) * 1.2 +
-    strengthWeight +
-    typeWeight -
-    index * 0.25
-  )
-}
-
-function getFeaturedMatches(matches) {
-  if (!matches.length) return []
-
-  const featuredItems = matches.map((match, index) => ({
-      match,
-      sourceIndex: index,
-      score: getFeaturedMatchScore(match, index),
-    }))
-    .sort((current, next) => next.score - current.score)
-
-  const featuredMatches = featuredItems.slice(0, 3)
-  const firstLocalOddsMatch = featuredItems.find((item) =>
-    hasLocalOdds(item.match),
-  )
-
-  if (
-    firstLocalOddsMatch &&
-    !featuredMatches.some(
-      (item) => item.sourceIndex === firstLocalOddsMatch.sourceIndex,
-    )
-  ) {
-    return [firstLocalOddsMatch, ...featuredMatches.slice(0, 2)]
-  }
-
-  return featuredMatches
-}
-
-function getSignalStrength(confidence) {
-  if (confidence >= 80) return '强'
-  if (confidence >= 70) return '中'
-  return '弱'
-}
-
 function getFlowStepStatus(index, analysisPhase) {
   const activeStep = analysisPhaseConfig[analysisPhase].activeStep
   if (analysisPhase === 'done') return 'done'
@@ -2389,17 +2103,13 @@ function buildMarketSentiment(match) {
     draw: '平局关注升温',
     away: '客胜偏热',
   }
-  let hint = '热度可参考，但不要追高。'
-
-  if (isSkipPrimary(match)) {
-    hint = '盘口价值不足，等待更好机会。'
-  } else if (hotDirection === match.recommendation.direction) {
-    hint = match.risk.tone === 'low' ? '可中等参考，不追高。' : '不建议追热放大波动。'
-  } else if (match.totalGoals.recommendation.direction !== 'noBet') {
-    hint = `${match.totalGoals.recommendation.label}比胜平负更清晰。`
-  } else {
-    hint = '热度与建议不完全一致，控制参与强度。'
-  }
+  const hint = isSkipPrimary(match)
+    ? '盘口价值不足，等待更好机会。'
+    : hotDirection === match.recommendation.direction
+      ? match.risk.tone === 'low' ? '可中等参考，不追高。' : '不建议追热放大波动。'
+      : match.totalGoals.recommendation.direction !== 'noBet'
+        ? `${match.totalGoals.recommendation.label}比胜平负更清晰。`
+        : '热度与建议不完全一致，控制参与强度。'
 
   return {
     heat: heatLabels[hotDirection],
@@ -2415,14 +2125,6 @@ function buildAnalysisTimeline(lastAnalyzedAt) {
     { time: formatClock(new Date(baseTime - 25_000)), text: '本地解释完成' },
     { time: formatClock(lastAnalyzedAt), text: '输出当前建议' },
   ]
-}
-
-function getMatchStageText(match) {
-  return [
-    match.stage,
-    match.group,
-    statusConfig[match.status]?.label,
-  ].filter(Boolean).join(' / ') || '赛前阶段'
 }
 
 function buildJudgementLine(match) {
@@ -2532,7 +2234,7 @@ function buildRiskReminders(match, marketSentiment, publicDisplay, plan) {
       text:
         !hasWdlOdds(match.odds)
           ? NO_ODDS_REASON
-          : `当前主推比分 ${publicDisplay.scoreReference.main}、辅推比分 ${publicDisplay.scoreReference.backup} 和进球方向都需要临场复核。`,
+          : `当前候选比分 ${publicDisplay.scoreReference.main}、备选比分 ${publicDisplay.scoreReference.backup} 和进球方向都需要临场复核。`,
     },
   ]
 }
@@ -2636,7 +2338,7 @@ function buildBeginnerNotes(match) {
     return [
       `胜平负方向：${getWdlDirection(match)}。`,
       `进球方向：${formatGoalsDirectionForPresentation(publicDisplay.totalGoalsDirection)}。`,
-      `主推比分：${publicDisplay.scoreReference.main}；辅推比分：${publicDisplay.scoreReference.backup}。`,
+      `候选比分：${publicDisplay.scoreReference.main}；备选比分：${publicDisplay.scoreReference.backup}。`,
       NO_ODDS_REASON,
     ]
   }
@@ -2688,11 +2390,6 @@ function getReviewText(match) {
   if (match.settlement.hit) return '方向命中，按计划结算。'
   if (match.settlement.hit === false) return '方向未中，下次更谨慎。'
   return '赛前观望，不强行出手。'
-}
-
-function formatDataSource(meta) {
-  if (meta?.dataSource === 'real') return '真实API'
-  return '本地模拟'
 }
 
 function buildSpotlightCopyText(match, publicDisplay, confidenceScore) {
@@ -2929,7 +2626,7 @@ function CaptureModeDashboard({
       screenFocus: ['每天记录几场', '仅供娱乐参考'],
       voiceoverText: '这条只做数据记录和娱乐参考，每天继续跑几场。',
     },
-  ], [displayMainDirection, matchName, riskText, scoreBackup, scoreMain, totalGoalsDisplay])
+  ], [displayMainDirection, matchName, scoreBackup, scoreMain, totalGoalsDisplay])
   const scenes = useMemo(
     () => (storyboard?.scenes?.length >= 6 ? storyboard.scenes : fallbackScenes),
     [fallbackScenes, storyboard],
@@ -3182,7 +2879,9 @@ function App() {
   const [spotlightCopyStatus, setSpotlightCopyStatus] = useState('idle')
   const [expandedDateKeys, setExpandedDateKeys] = useState({})
   const [showAllSchedule, setShowAllSchedule] = useState(false)
-  const [showOnboardingNotice, setShowOnboardingNotice] = useState(false)
+  const [showOnboardingNotice, setShowOnboardingNotice] = useState(() =>
+    shouldShowOnboardingNotice(),
+  )
   const [hasUserSelectedMatch, setHasUserSelectedMatch] = useState(false)
   const [showLineupDetails, setShowLineupDetails] = useState(false)
   const [shareCopyStatus, setShareCopyStatus] = useState('idle')
@@ -3218,10 +2917,6 @@ function App() {
     },
     [],
   )
-
-  useEffect(() => {
-    setShowOnboardingNotice(shouldShowOnboardingNotice())
-  }, [])
 
   useEffect(() => {
     const syncInternalRoute = () => {
@@ -3446,28 +3141,19 @@ function App() {
     [captureMatchTerm, isCaptureMode, normalizedMatches],
   )
 
-  useEffect(() => {
-    if (!normalizedMatches.length) return
-
-    setSelectedIndex((prevIndex) => {
-      if (!hasUserSelectedMatch && Number.isInteger(focusSelection?.index)) {
-        return focusSelection.index
-      }
-
-      if (prevIndex >= 0 && prevIndex < normalizedMatches.length) {
-        return prevIndex
-      }
-
-      return Number.isInteger(focusSelection?.index) ? focusSelection.index : 0
-    })
-  }, [focusSelection?.index, hasUserSelectedMatch, normalizedMatches.length])
-
+  const focusSelectedIndex = Number.isInteger(focusSelection?.index)
+    ? focusSelection.index
+    : 0
+  const userSelectedIndex =
+    selectedIndex >= 0 && selectedIndex < normalizedMatches.length
+      ? selectedIndex
+      : focusSelectedIndex
   const safeSelectedIndex =
     isCaptureMode && captureSelectedIndex >= 0
       ? captureSelectedIndex
-      : selectedIndex >= 0 && selectedIndex < normalizedMatches.length
-      ? selectedIndex
-      : 0
+      : hasUserSelectedMatch
+        ? userSelectedIndex
+        : focusSelectedIndex
   const activeMatch =
     normalizedMatches[safeSelectedIndex] ||
     null
@@ -3487,10 +3173,24 @@ function App() {
 
   if (isInternalV4Route && !isCaptureMode) {
     return (
-      <InternalCommandCenterV4
-        activeMatch={activeMatch}
-        matches={normalizedMatches}
-      />
+      <Suspense
+        fallback={
+          <main className="rookie-dashboard">
+            <section className="hero-card">
+              <div className="hero-copy">
+                <div className="eyebrow">Internal V4</div>
+                <h1>内部控制台加载中</h1>
+                <p>正在载入执行台、分析链、审计和账本。</p>
+              </div>
+            </section>
+          </main>
+        }
+      >
+        <InternalCommandCenterV4
+          activeMatch={activeMatch}
+          matches={normalizedMatches}
+        />
+      </Suspense>
     )
   }
 
@@ -3571,10 +3271,20 @@ function App() {
   const homeSquadInsight = getSquadInsight(activeMatch, 'home')
   const awaySquadInsight = getSquadInsight(activeMatch, 'away')
   const activeMatchType = getMatchType(activeMatch)
-  const activePublicDisplay = getPublicMatchDisplay(activeMatch)
+  const activePublicDisplay = getPublicMatchDisplay(activeMatch, publicDataStatusPlan)
   const activeShareMainDirection = getShareMainDirection(activeMatch)
   const activePrimaryScore = activePublicDisplay.scoreReference.main
   const activeSecondaryScore = activePublicDisplay.scoreReference.backup
+  const activeScoreCandidates = getPublicScoreCandidates(activePublicDisplay)
+  const activeScoreModelLine = formatPublicScoreModelLine(activePublicDisplay)
+  const activeScoreModelNotes =
+    [
+      isSkipPrimary(activeMatch) &&
+        '公开方向保持谨慎，比分只代表赛前路径排序，不等于最终方向。',
+      ...(activePublicDisplay.scoreModel?.notes?.length
+        ? activePublicDisplay.scoreModel.notes
+        : ['比分候选会随首发、红牌伤退和盘口变化重新排序。']),
+    ].filter(Boolean)
   const activeShareGoalsDirection = formatGoalsDirectionForPresentation(
     activePublicDisplay.totalGoalsDirection,
   )
@@ -3596,8 +3306,11 @@ function App() {
   const compactDataStatusItems = getCompactDataStatusItems(publicDataStatusItems)
   const spotlightMatch = activeMatch
   const spotlightPublicDisplay = spotlightMatch
-    ? getPublicMatchDisplay(spotlightMatch)
+    ? getPublicMatchDisplay(spotlightMatch, publicDataStatusPlan)
     : null
+  const spotlightScoreCandidates = spotlightPublicDisplay
+    ? getPublicScoreCandidates(spotlightPublicDisplay)
+    : []
   const spotlightCopyText =
     spotlightMatch && spotlightPublicDisplay
       ? buildSpotlightCopyText(
@@ -3720,6 +3433,7 @@ function App() {
     setPosterCopyStatus('idle')
 
     try {
+      const { createSharePosterPng } = await loadSharePosterTools()
       const poster = await createSharePosterPng(shareMatchPayload)
       setPosterPreview(poster)
       setPosterStatus('ready')
@@ -3729,10 +3443,11 @@ function App() {
     }
   }
 
-  function handleDownloadPoster() {
+  async function handleDownloadPoster() {
     if (!posterPreview) return
 
     try {
+      const { downloadSharePoster } = await loadSharePosterTools()
       downloadSharePoster(posterPreview, shareMatchPayload)
       showShareNotice('海报 PNG 已开始下载')
     } catch {
@@ -3744,6 +3459,7 @@ function App() {
     if (!posterPreview) return
 
     setPosterCopyStatus('copying')
+    const { copyPosterImage } = await loadSharePosterTools()
     const result = await copyPosterImage(posterPreview)
     setPosterCopyStatus(
       result.ok ? 'copied' : result.reason === 'unsupported' ? 'unsupported' : 'failed',
@@ -3819,20 +3535,19 @@ function App() {
         <div className="hero-copy">
           <div className="eyebrow">
             <Activity size={16} />
-            AI 赛前分析
+            AI 赛前分析 · 当前重点
           </div>
-          <h1>当前重点</h1>
-          <p>数据源状态 / 临场需复核</p>
-          <p>{activeMatch.homeTeam.name} vs {activeMatch.awayTeam.name}</p>
+          <h1>{activeMatch.homeTeam.name} vs {activeMatch.awayTeam.name}</h1>
+          <p>{formatKickoff(activeMatch.kickoff)} · 数据源状态 / 临场需复核</p>
           <p className="hero-plain-note">
-            基于盘口、球队状态与风险规则生成，临场阵容和盘口变化需要复核。
+            先给赛前结论，再给量化比分候选；临场阵容和盘口变化需要复核。
           </p>
         </div>
         <div className="hero-pick hero-match-summary">
           <span>先看结论</span>
           <strong>{activeShareMainDirection}</strong>
           <p>
-            主推比分 {activePrimaryScore} · 辅推比分 {activeSecondaryScore} ·{' '}
+            候选比分 {activePrimaryScore} · 备选比分 {activeSecondaryScore} ·{' '}
             {activeShareGoalsDirection}
           </p>
           <div className="hero-system-tags" aria-label="系统状态摘要">
@@ -3842,6 +3557,14 @@ function App() {
                 : `风险等级 ${selectedPresentationRating.riskLabel}`}
             </b>
             <b>策略 {selectedPresentationRating.strategyLabel}</b>
+          </div>
+          <div className="hero-score-rail" aria-label="量化比分候选">
+            {activeScoreCandidates.slice(0, 3).map((candidate) => (
+              <b key={`hero-score-${candidate.rank}-${candidate.score}`}>
+                <span>#{candidate.rank}</span>
+                {candidate.score}
+              </b>
+            ))}
           </div>
         </div>
         <div className="mobile-match-rail" aria-label="手机端快速选择比赛">
@@ -3874,7 +3597,7 @@ function App() {
       {spotlightMatch && spotlightPublicDisplay ? (
         <section className="daily-ai-spotlight" aria-label="赛前重点参考卡">
           <div className="daily-ai-copy">
-            <span>AI赛前情报</span>
+            <span>量化赛前摘要</span>
             <h2>
               {spotlightMatch.homeTeam.name} vs {spotlightMatch.awayTeam.name}
             </h2>
@@ -3885,16 +3608,28 @@ function App() {
             <div className="daily-ai-primary-grid">
               <p className="daily-ai-direction">
                 <span>主方向</span>
-                <strong>{shareMatchPayload.posterPresentation.mainDirectionValue}</strong>
+                <strong>{activeShareMainDirection}</strong>
               </p>
               <p className="daily-ai-score-highlight">
-                <span>主推比分</span>
+                <span>首选比分</span>
                 <strong>{spotlightPublicDisplay.scoreReference.main}</strong>
               </p>
             </div>
+            <div className="daily-ai-score-candidates" aria-label="公开比分候选">
+              {spotlightScoreCandidates.map((candidate) => (
+                <p key={`spotlight-score-${candidate.rank}-${candidate.score}`}>
+                  <span>#{candidate.rank}</span>
+                  <strong>{candidate.score}</strong>
+                  <small>
+                    {candidate.total ?? parseScoreValue(candidate.score)?.total ?? '-'}球 ·{' '}
+                    {publicOutcomeLabels[candidate.outcome] ?? '比分路径'}
+                  </small>
+                </p>
+              ))}
+            </div>
             <div className="daily-ai-facts">
               <p>
-                <span>备用比分</span>
+                <span>备选比分</span>
                 <strong>{shareMatchPayload.posterPresentation.secondaryScoreValue}</strong>
               </p>
               <p>
@@ -3923,7 +3658,7 @@ function App() {
               </p>
             </div>
             <small>
-              当前为赛前初盘参考，临场阵容、盘口变化和市场热度可能影响最终方向。
+              {formatPublicScoreModelLine(spotlightPublicDisplay)}
             </small>
             <button
               className={
@@ -4033,11 +3768,11 @@ function App() {
                       </strong>
                     </p>
                     <p>
-                      <span>主推比分</span>
+                      <span>候选比分</span>
                       <strong>{scoreReference.main}</strong>
                     </p>
                     <p className="featured-card-muted">
-                      <span>辅推比分</span>
+                      <span>备选比分</span>
                       <strong>{scoreReference.backup}</strong>
                     </p>
                     <p className="featured-card-muted">
@@ -4302,11 +4037,11 @@ function App() {
               </strong>
             </article>
             <article className="core-pick-card">
-              <span>主推比分</span>
+              <span>候选比分</span>
               <strong>{activePrimaryScore}</strong>
             </article>
             <article className="core-pick-card">
-              <span>辅推比分</span>
+              <span>备选比分</span>
               <strong>{activeSecondaryScore}</strong>
             </article>
             <article className="core-pick-card">
@@ -4314,6 +4049,40 @@ function App() {
               <strong>{activeShareGoalsDirection}</strong>
               <small>{getTotalGoalsStrength(activeMatch)}</small>
             </article>
+          </section>
+
+          <section className="quant-score-public-panel" aria-label="量化比分候选">
+            <div className="quant-score-public-head">
+              <div className="section-title compact-title">
+                <span>量化比分候选</span>
+                <h2>多路径排序</h2>
+              </div>
+              <p>{activeScoreModelLine}</p>
+            </div>
+            <div className="quant-score-public-grid">
+              {activeScoreCandidates.map((candidate) => (
+                <article
+                  className={
+                    candidate.rank === 1
+                      ? 'quant-score-public-card primary'
+                      : 'quant-score-public-card'
+                  }
+                  key={`public-score-${candidate.rank}-${candidate.score}`}
+                >
+                  <span>#{candidate.rank}</span>
+                  <strong>{candidate.score}</strong>
+                  <small>
+                    {candidate.total ?? parseScoreValue(candidate.score)?.total ?? '-'}球 ·{' '}
+                    {publicOutcomeLabels[candidate.outcome] ?? '比分路径'}
+                  </small>
+                </article>
+              ))}
+            </div>
+            <div className="quant-score-public-notes" aria-label="比分风险提示">
+              {activeScoreModelNotes.map((note) => (
+                <span key={note}>{note}</span>
+              ))}
+            </div>
           </section>
 
           <section className="share-actions-panel" aria-label="分享当前重点比赛">
@@ -4500,10 +4269,10 @@ function App() {
             </div>
           </section>
 
-          <section className="play-reference-panel v1-priority-panel" aria-label="主推比分与进球方向">
+          <section className="play-reference-panel v1-priority-panel" aria-label="比分候选与进球方向">
             <div className="section-title compact-title">
-              <span>主推 / 辅推</span>
-              <h2>比分 + 进球方向</h2>
+              <span>候选 / 备选</span>
+              <h2>比分候选 + 进球方向</h2>
             </div>
 
             <div className="play-grid v1-play-grid">
@@ -4512,11 +4281,11 @@ function App() {
                 <span>比分方向</span>
                 <div className="score-reference-list">
                   <p>
-                    <span>主推比分</span>
+                    <span>候选比分</span>
                     <strong>{activePublicDisplay.scoreReference.main}</strong>
                   </p>
                   <p>
-                    <span>辅推比分</span>
+                    <span>备选比分</span>
                     <strong>{activePublicDisplay.scoreReference.backup}</strong>
                   </p>
                   {shouldShowUpsetScore(activeMatch) && (

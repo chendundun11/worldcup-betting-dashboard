@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { buildV3InternalAnalysis } from '../services/scoringV3Internal.js'
 import {
   getLedger,
@@ -139,19 +139,39 @@ function StatusRow({ label, value }) {
   )
 }
 
+function getMatchStateKey(match) {
+  return match ? `${match.id ?? ''}:${match.uiKey ?? ''}` : 'none'
+}
+
+function createMatchFormState(matchKey) {
+  return {
+    matchKey,
+    homeScore: '',
+    awayScore: '',
+    settlement: null,
+    notice: '',
+  }
+}
+
 function InternalV3Panel({ activeMatch, matches = [] }) {
   const [ledger, setLedger] = useState(() => getLedger())
-  const [homeScore, setHomeScore] = useState('')
-  const [awayScore, setAwayScore] = useState('')
-  const [settlement, setSettlement] = useState(null)
-  const [notice, setNotice] = useState('')
+  const activeMatchKey = getMatchStateKey(activeMatch)
+  const [matchFormState, setMatchFormState] = useState(() =>
+    createMatchFormState(activeMatchKey),
+  )
+  const currentMatchFormState =
+    matchFormState.matchKey === activeMatchKey
+      ? matchFormState
+      : createMatchFormState(activeMatchKey)
+  const { homeScore, awayScore, settlement, notice } = currentMatchFormState
 
-  useEffect(() => {
-    setSettlement(null)
-    setNotice('')
-    setHomeScore('')
-    setAwayScore('')
-  }, [activeMatch?.id, activeMatch?.uiKey])
+  function updateMatchFormState(patch) {
+    setMatchFormState((current) => ({
+      ...(current.matchKey === activeMatchKey ? current : createMatchFormState(activeMatchKey)),
+      ...patch,
+      matchKey: activeMatchKey,
+    }))
+  }
 
   const summary = useMemo(() => getLedgerSummary(ledger), [ledger])
   const analysis = useMemo(
@@ -169,7 +189,7 @@ function InternalV3Panel({ activeMatch, matches = [] }) {
 
   function handleSettle() {
     if (homeScore === '' || awayScore === '') {
-      setNotice('请先输入实际比分。')
+      updateMatchFormState({ notice: '请先输入实际比分。' })
       return
     }
 
@@ -182,16 +202,20 @@ function InternalV3Panel({ activeMatch, matches = [] }) {
       ledger,
     )
 
-    setSettlement(result)
     setLedger(result.ledger)
-    setNotice('本场已结算并写入本地记录。')
+    updateMatchFormState({
+      settlement: result,
+      notice: '本场已结算并写入本地记录。',
+    })
   }
 
   function handleReset() {
     const nextLedger = resetLedger()
     setLedger(nextLedger)
-    setSettlement(null)
-    setNotice('内部资金池已重置。')
+    updateMatchFormState({
+      settlement: null,
+      notice: '内部资金池已重置。',
+    })
   }
 
   const consistencyRows = [
@@ -269,7 +293,7 @@ function InternalV3Panel({ activeMatch, matches = [] }) {
               主队进球{' '}
               <input
                 min="0"
-                onChange={(event) => setHomeScore(event.target.value)}
+                onChange={(event) => updateMatchFormState({ homeScore: event.target.value })}
                 style={styles.input}
                 type="number"
                 value={homeScore}
@@ -279,7 +303,7 @@ function InternalV3Panel({ activeMatch, matches = [] }) {
               客队进球{' '}
               <input
                 min="0"
-                onChange={(event) => setAwayScore(event.target.value)}
+                onChange={(event) => updateMatchFormState({ awayScore: event.target.value })}
                 style={styles.input}
                 type="number"
                 value={awayScore}

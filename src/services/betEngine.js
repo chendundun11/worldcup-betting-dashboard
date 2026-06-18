@@ -1,5 +1,6 @@
 import { SQUAD_INSIGHTS } from '../data/squadInsights.js'
 import { TEAM_PROFILES } from '../data/teamProfiles.js'
+import { buildQuantScorePicks } from './quantScoreEngine.js'
 
 const ENGINE_VERSION = 'bet-engine-v1-static-prematch'
 const DEFAULT_BANKROLL = 10000
@@ -1631,37 +1632,161 @@ function parseScoreReference(value) {
     .filter(Boolean)
 }
 
-function buildScorePicks(match, mainPick) {
+function parseScoreCandidate(score) {
+  const match = String(score ?? '').match(/^(\d+)-(\d+)$/)
+  if (!match) return null
+  const home = Number(match[1])
+  const away = Number(match[2])
+  if (!Number.isInteger(home) || !Number.isInteger(away)) return null
+  return {
+    total: home + away,
+    outcome: home > away ? 'home' : away > home ? 'away' : 'draw',
+  }
+}
+
+function buildPublicScoreModelSummary(model) {
+  if (!model) return null
+  const candidatesByScore = new Map(
+    (model.distribution ?? []).map((candidate) => [candidate.score, candidate]),
+  )
+  const publicCandidates = [
+    { score: model.primaryScore },
+    { score: model.secondaryScore },
+    ...(model.distribution ?? []),
+  ]
+    .filter((candidate) => candidate?.score)
+    .filter(
+      (candidate, index, candidates) =>
+        candidates.findIndex((item) => item.score === candidate.score) === index,
+    )
+    .slice(0, 4)
+    .map((candidate, index) => {
+      const rankedCandidate = candidatesByScore.get(candidate.score) ?? candidate
+      const parsedCandidate = parseScoreCandidate(rankedCandidate.score)
+      return {
+        rank: index + 1,
+        score: rankedCandidate.score,
+        total: rankedCandidate.total ?? parsedCandidate?.total ?? null,
+        outcome: rankedCandidate.outcome ?? parsedCandidate?.outcome ?? null,
+        rating: rankedCandidate.rating,
+      }
+    })
+
+  return {
+    version: model.version,
+    primaryScore: model.primaryScore,
+    secondaryScore: model.secondaryScore,
+    totalGoalsText: model.totalGoalsText,
+    overUnder: model.overUnder,
+    expectedGoals: {
+      home: round(model.expectedGoals?.homeXg),
+      away: round(model.expectedGoals?.awayXg),
+      total: round(model.expectedGoals?.expectedTotal),
+      edge: round(model.expectedGoals?.directionEdge),
+    },
+    candidates: publicCandidates,
+    notes: (model.riskNotes ?? []).slice(0, 2),
+  }
+}
+
+function getPublicQuantMainPick(preferredOutcome) {
+  if (preferredOutcome === 'home') return '主队胜'
+  if (preferredOutcome === 'away') return '客队胜'
+  if (preferredOutcome === 'draw') return '平局'
+  return ''
+}
+
+function getPublicQuantGameType(match, scoreResult) {
+  const odds = getOdds(match)
+  const scoreParts = scoreResult?.scoreParts ?? {}
+  const valueEdge = scoreResult?.valueEdge ?? {}
+  const totalGoals = valueEdge.totalGoals ?? {}
+  const absolutePowerDiff = Math.abs(getPowerDiff(match))
+  const favorite = odds.hasOneXTwo ? getFavoriteOutcome(odds) : null
+  const favoriteIsOverheated =
+    favorite &&
+    favorite !== 'draw' &&
+    odds[favorite] <= 1.55 &&
+    (valueEdge.edges?.[favorite] ?? 0) < 0.02
+
+  if (!odds.hasOneXTwo) return '信息不足局'
+  if (favoriteIsOverheated) return '强队过热局'
+  if (scoreParts.upsetElasticity >= 3) return '冷门波动局'
+  if (
+    valueEdge.bestOutcome === 'draw' ||
+    (odds.draw > 1 && odds.draw <= 3.25) ||
+    (absolutePowerDiff <= 4 && scoreParts.directionClarity <= 9)
+  ) {
+    return '平局保护局'
+  }
+  if (totalGoals.bestDirection === 'under25' && totalGoals.bestEdge >= 0.015) {
+    return '低比分胶着局'
+  }
+  if (totalGoals.bestDirection === 'over25' && totalGoals.bestEdge >= 0.02) {
+    return '对攻大球局'
+  }
+  if (absolutePowerDiff >= 10 && scoreParts.directionClarity >= 14) return '强队压制局'
+
+  return ''
+}
+
+function buildScorePicks(match, mainPick, scoreResult = null) {
   const explicitScores = parseScoreReference(match?.localOdds?.scoreReference)
   const scoreLeans = Array.isArray(match?.scoreLeans)
     ? match.scoreLeans.map((item) => item.score).filter(Boolean)
     : []
-  const scores = [...new Set([...explicitScores, ...scoreLeans])].slice(0, 2)
+  const preferredOutcome =
+    mainPick.direction && mainPick.direction !== 'none'
+      ? mainPick.direction
+      : scoreResult?.valueEdge?.bestOutcome
+  const { model, picks } = buildQuantScorePicks(match, {
+    gameType: getPublicQuantGameType(match, scoreResult),
+    mainPick: getPublicQuantMainPick(preferredOutcome),
+    preferredOutcome,
+    sourceScores: [...explicitScores, ...scoreLeans],
+  })
+  const scores = picks.map((pick) => pick.score)
 
   if (scores.length) {
-    return scores.map((score) => ({
-      score,
-      stake: 0,
-      highVariance: true,
-      note: '比分仅作为小额弹性参考。',
-    }))
+    return {
+      publicScoreModel: buildPublicScoreModelSummary(model),
+      scorePicks: scores.map((score, index) => ({
+        score,
+        stake: 0,
+        highVariance: true,
+        modelRank: index + 1,
+        scoreModel: model.version,
+        note: model.note,
+      })),
+    }
   }
 
   if (mainPick.direction === 'away') {
-    return [
-      { score: '0-1', stake: 0, highVariance: true, note: '比分仅作为小额弹性参考。' },
-      { score: '1-2', stake: 0, highVariance: true, note: '比分仅作为小额弹性参考。' },
-    ]
+    return {
+      publicScoreModel: null,
+      scorePicks: [
+        { score: '0-1', stake: 0, highVariance: true, note: '比分仅作为小额弹性参考。' },
+        { score: '1-2', stake: 0, highVariance: true, note: '比分仅作为小额弹性参考。' },
+      ],
+    }
   }
 
   if (mainPick.direction === 'home') {
-    return [
-      { score: '1-0', stake: 0, highVariance: true, note: '比分仅作为小额弹性参考。' },
-      { score: '2-1', stake: 0, highVariance: true, note: '比分仅作为小额弹性参考。' },
-    ]
+    return {
+      publicScoreModel: null,
+      scorePicks: [
+        { score: '1-0', stake: 0, highVariance: true, note: '比分仅作为小额弹性参考。' },
+        { score: '2-1', stake: 0, highVariance: true, note: '比分仅作为小额弹性参考。' },
+      ],
+    }
   }
 
-  return [{ score: '1-1', stake: 0, highVariance: true, note: '比分仅作为小额弹性参考。' }]
+  return {
+    publicScoreModel: null,
+    scorePicks: [
+      { score: '1-1', stake: 0, highVariance: true, note: '比分仅作为小额弹性参考。' },
+    ],
+  }
 }
 
 function getModelProbabilityQuality(match, valueEdge) {
@@ -1855,11 +1980,11 @@ export function buildBetPlan(match, options = {}) {
   }
   const mainPick = buildMainPick(match, directionScoreResult)
   const secondaryPick = buildSecondaryPick(match, directionScoreResult)
-  const scorePicks = buildScorePicks(match, mainPick)
+  const scorePickBundle = buildScorePicks(match, mainPick, scoreResult)
   const stakeResult = buildStakePlan(
     scoreResult.betScore,
     bankroll,
-    { mainPick, secondaryPick, scorePicks },
+    { mainPick, secondaryPick, scorePicks: scorePickBundle.scorePicks },
     { ...scoreResult.scoreParts, maxStakePerMatch },
   )
   const heatWarning = buildHeatWarning(match, scoreResult)
@@ -1886,6 +2011,7 @@ export function buildBetPlan(match, options = {}) {
     mainPick,
     secondaryPick,
     scorePicks: stakeResult.scorePicks,
+    publicScoreModel: scorePickBundle.publicScoreModel,
     upsetPick,
     totalStake: stakeResult.totalStake,
     stakePlan: stakeResult.stakePlan,

@@ -154,6 +154,8 @@ export function selectFocusMatch(matches = [], betHistory = [], now = new Date()
 }
 
 export function getFocusMatches(matches = [], betHistory = [], now = new Date(), limit = 3) {
+  void betHistory
+
   const nowMs = toNowMs(now)
   const entries = normalizeMatches(matches)
   const unfinishedEntries = entries.filter(({ match }) => !isFinishedMatch(match))

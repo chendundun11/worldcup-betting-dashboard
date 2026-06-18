@@ -79,6 +79,13 @@ const FILTERS = [
   { key: 'low', label: '低额' },
 ]
 
+const DETAIL_TABS = [
+  { key: 'execute', label: '执行台' },
+  { key: 'analysis', label: '分析链' },
+  { key: 'audit', label: '审计' },
+  { key: 'ledger', label: '账本' },
+]
+
 const RESET_CONFIRM_MESSAGE = '确认重置 V5 账本？这会清空资金记录、复盘记录和赔率覆盖。'
 
 const PLAN_LOADING_STEPS = [
@@ -118,6 +125,13 @@ function formatOverUnderDisplay(value) {
   return value ?? '-'
 }
 
+function getScoreOutcomeLabel(outcome) {
+  if (outcome === 'home') return '主胜'
+  if (outcome === 'away') return '客胜'
+  if (outcome === 'draw') return '平局'
+  return '未知'
+}
+
 function formatPotentialProfit(value) {
   const number = Number(value)
   if (!Number.isFinite(number)) return '+0'
@@ -149,15 +163,18 @@ function getRowStatusLabel(row) {
 }
 
 function buildRow(match, record, ledger, oddsOverrides = {}) {
+  const hasCurrentScoreModel = Boolean(record?.analysisSnapshot?.predictions?.scoreModel)
   const analysis =
-    record?.analysisSnapshot ??
-    buildInternalV4Analysis(match, { bankroll: ledger?.currentBankroll })
+    hasCurrentScoreModel && record?.analysisSnapshot
+      ? record.analysisSnapshot
+      : buildInternalV4Analysis(match, { bankroll: ledger?.currentBankroll })
   const rawStakePlan =
-    record?.stakePlanSnapshot ??
-    buildInternalStakePlan(analysis, ledger, {
-      match,
-      oddsOverrides,
-    })
+    hasCurrentScoreModel && record?.stakePlanSnapshot
+      ? record.stakePlanSnapshot
+      : buildInternalStakePlan(analysis, ledger, {
+          match,
+          oddsOverrides,
+        })
   const stakePlan = refreshStakePlanOddsV5(rawStakePlan, match, oddsOverrides)
   const scoreProvider = getInternalScoreProviderV5(match)
 
@@ -212,6 +229,7 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
   const [editingOddsKey, setEditingOddsKey] = useState(null)
   const [oddsDrafts, setOddsDrafts] = useState({})
   const [startupSyncComplete, setStartupSyncComplete] = useState(false)
+  const [detailTab, setDetailTab] = useState('execute')
 
   useEffect(() => {
     const timer = window.setTimeout(() => setStartupSyncComplete(true), 4200)
@@ -219,35 +237,54 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
   }, [])
 
   useEffect(() => {
-    if (!matches.length) return
-    const baseLedger = getInternalLedgerV4()
-    const scopedMatches = selectMatchesByPlanScopeV5(matches, planScope, {
-      ledger: baseLedger,
-    })
-
-    if (isFormalPlanScopeV5(planScope) && !startupSyncComplete) {
-      setLedger(baseLedger)
-      setScanResult(null)
-      setNotice(`${getPlanScopeLabelV5(planScope)}计划生成中...`)
-      return
-    }
-
-    if (!isFormalPlanScopeV5(planScope)) {
-      setLedger(baseLedger)
-      setScanResult({
-        scanned: scopedMatches.length,
-        planned: 0,
-        updated: 0,
-        settled: 0,
-        foundScores: 0,
-        skipped: scopedMatches.length,
-        pending: 0,
-        upcoming: 0,
-        blockedFuture: 0,
-        blockedUntrustedScore: 0,
-        results: [],
-        previewOnly: isPreviewPlanScopeV5(planScope),
+    if (!matches.length) return undefined
+    const syncTimer = window.setTimeout(() => {
+      const baseLedger = getInternalLedgerV4()
+      const scopedMatches = selectMatchesByPlanScopeV5(matches, planScope, {
+        ledger: baseLedger,
       })
+
+      if (isFormalPlanScopeV5(planScope) && !startupSyncComplete) {
+        setLedger(baseLedger)
+        setScanResult(null)
+        setNotice(`${getPlanScopeLabelV5(planScope)}计划生成中...`)
+        return
+      }
+
+      if (!isFormalPlanScopeV5(planScope)) {
+        setLedger(baseLedger)
+        setScanResult({
+          scanned: scopedMatches.length,
+          planned: 0,
+          updated: 0,
+          settled: 0,
+          foundScores: 0,
+          skipped: scopedMatches.length,
+          pending: 0,
+          upcoming: 0,
+          blockedFuture: 0,
+          blockedUntrustedScore: 0,
+          results: [],
+          previewOnly: isPreviewPlanScopeV5(planScope),
+        })
+        setSelectedRecordId((current) =>
+          scopedMatches.some((match) => getRecordIdV4(match) === current)
+            ? current
+            : scopedMatches[0]
+              ? getRecordIdV4(scopedMatches[0])
+              : null,
+        )
+        setNotice(`${getPlanScopeLabelV5(planScope)}：预览模式不计入资金暴露。`)
+        return
+      }
+
+      const result = autoReviewFinishedMatches(scopedMatches, baseLedger, {
+        planScope,
+        oddsOverrides,
+      })
+      const savedLedger = saveInternalLedgerV4(result.ledger)
+      setLedger(savedLedger)
+      setScanResult(result)
       setSelectedRecordId((current) =>
         scopedMatches.some((match) => getRecordIdV4(match) === current)
           ? current
@@ -255,27 +292,12 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
             ? getRecordIdV4(scopedMatches[0])
             : null,
       )
-      setNotice(`${getPlanScopeLabelV5(planScope)}：预览模式不计入资金暴露。`)
-      return
-    }
+      setNotice(
+        `${getPlanScopeLabelV5(planScope)}自动扫描完成：扫描 ${result.scanned}，计划 ${result.planned + result.updated}，找到真实比分 ${result.foundScores}，自动结算 ${result.settled}，跳过 ${result.skipped}。`,
+      )
+    }, 0)
 
-    const result = autoReviewFinishedMatches(scopedMatches, baseLedger, {
-      planScope,
-      oddsOverrides,
-    })
-    const savedLedger = saveInternalLedgerV4(result.ledger)
-    setLedger(savedLedger)
-    setScanResult(result)
-    setSelectedRecordId((current) =>
-      scopedMatches.some((match) => getRecordIdV4(match) === current)
-        ? current
-        : scopedMatches[0]
-          ? getRecordIdV4(scopedMatches[0])
-          : null,
-    )
-    setNotice(
-      `${getPlanScopeLabelV5(planScope)}自动扫描完成：扫描 ${result.scanned}，计划 ${result.planned + result.updated}，找到真实比分 ${result.foundScores}，自动结算 ${result.settled}，跳过 ${result.skipped}。`,
-    )
+    return () => window.clearTimeout(syncTimer)
   }, [matches, oddsOverrides, planScope, startupSyncComplete])
 
   const scopedMatches = useMemo(
@@ -335,6 +357,7 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
     setHomeScore('')
     setAwayScore('')
     setEditingOddsKey(null)
+    setDetailTab('execute')
     return savedScope
   }
 
@@ -710,25 +733,34 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
 
       {!isPlanInitializing ? (
         <>
-      <section className="internal-v4-funds" aria-label="V5 顶部资金统计">
-        <Metric label="初始资金" value={summary.initialBankroll} />
-        <Metric label="当前资金" value={summary.currentBankroll} />
-        <Metric label="可用资金" tone={getTone(summary.availableBankroll)} value={summary.availableBankroll} />
-        <Metric label="已结算总盈亏" tone={getTone(summary.settledProfit)} value={formatAmount(summary.settledProfit)} />
-        <Metric label="未结算暴露" value={summary.pendingExposure} />
-        <Metric label="计划投入" value={summary.totalPlannedStake} />
-        <Metric label="范围比赛数" value={summary.totalMatches} />
-        <Metric label="待结算" value={summary.pendingCount} />
-        <Metric label="已结算" value={summary.settledCount} />
-        <Metric label="最大回撤" value={summary.maxDrawdown} />
-      </section>
+      <details className="internal-v4-metrics-drawer">
+        <summary>
+          <span>资金全量指标</span>
+          <strong>
+            当前资金 {summary.currentBankroll} · 可用 {summary.availableBankroll} · 暴露{' '}
+            {summary.pendingExposure}
+          </strong>
+        </summary>
+        <section className="internal-v4-funds" aria-label="V5 顶部资金统计">
+          <Metric label="初始资金" value={summary.initialBankroll} />
+          <Metric label="当前资金" value={summary.currentBankroll} />
+          <Metric label="可用资金" tone={getTone(summary.availableBankroll)} value={summary.availableBankroll} />
+          <Metric label="已结算总盈亏" tone={getTone(summary.settledProfit)} value={formatAmount(summary.settledProfit)} />
+          <Metric label="未结算暴露" value={summary.pendingExposure} />
+          <Metric label="计划投入" value={summary.totalPlannedStake} />
+          <Metric label="范围比赛数" value={summary.totalMatches} />
+          <Metric label="待结算" value={summary.pendingCount} />
+          <Metric label="已结算" value={summary.settledCount} />
+          <Metric label="最大回撤" value={summary.maxDrawdown} />
+        </section>
 
-      <section className="internal-v4-review-stats" aria-label="复盘统计">
-        <Metric label="已结算胜场" value={summary.winCount} />
-        <Metric label="已结算负场" value={summary.lossCount} />
-        <Metric label="手动结算" value={summary.manualSettledCount} />
-        <Metric label="自动结算" value={summary.autoSettledCount} />
-      </section>
+        <section className="internal-v4-review-stats" aria-label="复盘统计">
+          <Metric label="已结算胜场" value={summary.winCount} />
+          <Metric label="已结算负场" value={summary.lossCount} />
+          <Metric label="手动结算" value={summary.manualSettledCount} />
+          <Metric label="自动结算" value={summary.autoSettledCount} />
+        </section>
+      </details>
 
       <section className="internal-v4-workspace">
         <aside className="internal-v4-sidebar" aria-label="V5 比赛列表">
@@ -754,17 +786,22 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
           </div>
 
           {scanResult ? (
-            <div className="internal-v4-scan">
-              <strong>自动复盘扫描结果</strong>
-              <span>扫描比赛 {scanResult.scanned ?? 0}</span>
-              <span>找到真实比分 {scanResult.foundScores ?? 0}</span>
-              <span>生成/更新计划 {(scanResult.planned ?? 0) + (scanResult.updated ?? 0)}</span>
-              <span>自动结算 {scanResult.settled}</span>
-              <span>待结算 {scanResult.pending}</span>
-              <span>待赛 {scanResult.upcoming}</span>
-              <span>跳过 {scanResult.skipped ?? 0}</span>
-              <span>无可信比分 {scanResult.blockedUntrustedScore}</span>
-            </div>
+            <details className="internal-v4-scan-drawer">
+              <summary>
+                自动扫描：{scanResult.scanned ?? 0} 场 · 结算 {scanResult.settled ?? 0}
+              </summary>
+              <div className="internal-v4-scan">
+                <strong>自动复盘扫描结果</strong>
+                <span>扫描比赛 {scanResult.scanned ?? 0}</span>
+                <span>找到真实比分 {scanResult.foundScores ?? 0}</span>
+                <span>生成/更新计划 {(scanResult.planned ?? 0) + (scanResult.updated ?? 0)}</span>
+                <span>自动结算 {scanResult.settled}</span>
+                <span>待结算 {scanResult.pending}</span>
+                <span>待赛 {scanResult.upcoming}</span>
+                <span>跳过 {scanResult.skipped ?? 0}</span>
+                <span>无可信比分 {scanResult.blockedUntrustedScore}</span>
+              </div>
+            </details>
           ) : null}
 
           <div className="internal-v4-match-list">
@@ -776,6 +813,7 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
                   setSelectedRecordId(row.recordId)
                   setHomeScore('')
                   setAwayScore('')
+                  setDetailTab('execute')
                 }}
                 type="button"
               >
@@ -814,6 +852,47 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
             </strong>
           </div>
 
+          <section className="internal-v4-command-card" aria-label="当前场执行摘要">
+            <div>
+              <span>主方向</span>
+              <strong>{selectedAnalysis?.decision?.mainPick ?? '-'}</strong>
+              <small>{selectedAnalysis?.decision?.directionStrength ?? '-'}</small>
+            </div>
+            <div>
+              <span>比分路径</span>
+              <strong>
+                {selectedAnalysis?.predictions?.primaryScore ?? '-'} /{' '}
+                {selectedAnalysis?.predictions?.secondaryScore ?? '-'}
+              </strong>
+              <small>{selectedAnalysis?.predictions?.totalGoalsText ?? '-'}</small>
+            </div>
+            <div>
+              <span>大小球</span>
+              <strong>{formatOverUnderDisplay(selectedAnalysis?.predictions?.overUnder)}</strong>
+              <small>信心 {selectedAnalysis?.confidence?.overUnderConfidence ?? '-'}</small>
+            </div>
+            <div>
+              <span>内部信心</span>
+              <strong>{selectedAnalysis?.confidence?.internalConfidence ?? '-'}</strong>
+              <small>{selectedAnalysis?.decision?.grade ?? '-'} 档</small>
+            </div>
+          </section>
+
+          <nav className="internal-v4-detail-tabs" aria-label="当前比赛详情视图">
+            {DETAIL_TABS.map((item) => (
+              <button
+                className={detailTab === item.key ? 'active' : ''}
+                key={item.key}
+                onClick={() => setDetailTab(item.key)}
+                type="button"
+              >
+                {item.label}
+              </button>
+            ))}
+          </nav>
+
+          {detailTab === 'execute' ? (
+            <>
           <section className="internal-v4-section" aria-label="当前比赛 V5 内部判断">
             <div className="internal-v4-section-title">
               <Target size={18} />
@@ -851,62 +930,6 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
               <Metric label="大小球信心" value={selectedAnalysis?.confidence?.overUnderConfidence ?? '-'} />
               <Metric label="数据稳定" value={selectedAnalysis?.confidence?.dataConfidence ?? '-'} />
               <Metric label="类型修正" value={selectedAnalysis?.confidence?.gameTypeModifier ?? '-'} />
-            </div>
-          </section>
-
-          <section className="internal-v4-section" aria-label="12 维评分">
-            <div className="internal-v4-section-title">
-              <Activity size={18} />
-              <h3>12 维评分</h3>
-            </div>
-            <div className="internal-v4-dimension-grid">
-              {SCORE_DIMENSION_KEYS_V4.map((key) => (
-                <p key={key}>
-                  <span>{SCORE_DIMENSION_LABELS_V4[key]}</span>
-                  <strong>{selectedAnalysis?.score?.dimensions?.[key] ?? '-'}</strong>
-                  <small>
-                    {selectedAnalysis?.score?.dimensionAudit?.items?.[key]?.state ?? '待评估'}
-                  </small>
-                </p>
-              ))}
-            </div>
-          </section>
-
-          <section className="internal-v4-section" aria-label="规则解释链条">
-            <div className="internal-v4-section-title">
-              <ShieldAlert size={18} />
-              <h3>规则解释链条</h3>
-              <span>方向 / 比分 / 总进球 / 大小球 / 资金</span>
-            </div>
-            <div className="internal-v4-explanation-list">
-              {(selectedAnalysis?.explanations ?? []).map((item) => (
-                <p key={item.key}>
-                  <strong>{item.label}</strong>
-                  <span>{item.text}</span>
-                </p>
-              ))}
-            </div>
-          </section>
-
-          <section className="internal-v4-section" aria-label="触发规则">
-            <div className="internal-v4-section-title">
-              <ShieldAlert size={18} />
-              <h3>触发规则</h3>
-            </div>
-            <div className="internal-v4-rule-list">
-              {triggeredRules.length ? (
-                triggeredRules.slice(0, 10).map((rule) => (
-                  <p key={rule.id}>
-                    <strong>{rule.label}</strong>
-                    <span>{rule.reason}</span>
-                  </p>
-                ))
-              ) : (
-                <p>
-                  <strong>基础计划</strong>
-                  <span>当前按默认低额观察公式生成。</span>
-                </p>
-              )}
             </div>
           </section>
 
@@ -994,44 +1017,6 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
             ) : null}
           </section>
 
-          <section className="internal-v4-section" aria-label="资金公式说明">
-            <div className="internal-v4-section-title">
-              <Check size={18} />
-              <h3>公式说明</h3>
-            </div>
-            <div className="internal-v4-formula-grid">
-              <Metric label="有效资金" value={selectedStakePlan?.effectiveBankroll ?? '-'} />
-              <Metric label="基础比例" value={formatRate(selectedStakePlan?.baseRate)} />
-              <Metric label="信心因子" value={selectedStakePlan?.confidenceFactor ?? '-'} />
-              <Metric label="回撤因子" value={selectedStakePlan?.drawdownFactor ?? '-'} />
-              <Metric label="暴露因子" value={selectedStakePlan?.exposureFactor ?? '-'} />
-              <Metric label="一致性因子" value={selectedStakePlan?.consistencyFactor ?? '-'} />
-            </div>
-            <div className="internal-v4-formula-explain">
-              <strong>金额公式</strong>
-              <span>{selectedStakePlan?.formulaExplanation?.summary ?? '-'}</span>
-              {selectedStakePlan?.formulaExplanation?.compressionNote ? (
-                <em>{selectedStakePlan.formulaExplanation.compressionNote}</em>
-              ) : null}
-            </div>
-          </section>
-
-          <section className="internal-v4-section" aria-label="一致性检查">
-            <div className="internal-v4-section-title">
-              <Check size={18} />
-              <h3>一致性检查</h3>
-              <span>冲突级别 {selectedAnalysis?.consistency?.severity ?? '-'}</span>
-            </div>
-            <div className="internal-v4-check-list">
-              {(selectedAnalysis?.consistency?.checks ?? []).map((check) => (
-                <p className={check.passed ? 'passed' : 'failed'} key={check.id}>
-                  <span>{check.passed ? '通过' : '冲突'}</span>
-                  <strong>{check.label}</strong>
-                </p>
-              ))}
-            </div>
-          </section>
-
           <section className="internal-v4-section" aria-label="复盘结算">
             <div className="internal-v4-section-title">
               <Activity size={18} />
@@ -1104,7 +1089,151 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
               </div>
             ) : null}
           </section>
+            </>
+          ) : null}
 
+          {detailTab === 'analysis' ? (
+            <>
+          <section className="internal-v4-section" aria-label="量化比分分布">
+            <div className="internal-v4-section-title">
+              <Activity size={18} />
+              <h3>量化比分分布</h3>
+              <span>{selectedAnalysis?.predictions?.scoreModel?.version ?? 'quant-score'}</span>
+            </div>
+            <div className="internal-v4-score-model">
+              <article className="internal-v4-xg-card">
+                <span>期望进球</span>
+                <strong>
+                  {selectedAnalysis?.predictions?.scoreModel?.expectedGoals?.homeXg ?? '-'} -{' '}
+                  {selectedAnalysis?.predictions?.scoreModel?.expectedGoals?.awayXg ?? '-'}
+                </strong>
+                <p>
+                  总期望 {selectedAnalysis?.predictions?.scoreModel?.expectedGoals?.expectedTotal ?? '-'} ·
+                  方向差 {selectedAnalysis?.predictions?.scoreModel?.expectedGoals?.directionEdge ?? '-'} ·
+                  大小球差 {selectedAnalysis?.predictions?.scoreModel?.expectedGoals?.overUnderEdge ?? '-'}
+                </p>
+              </article>
+              <div className="internal-v4-score-candidate-grid">
+                {(selectedAnalysis?.predictions?.scoreModel?.distribution ?? []).slice(0, 6).map((item) => (
+                  <p key={`${item.rank}-${item.score}`}>
+                    <span>#{item.rank} · {getScoreOutcomeLabel(item.outcome)}</span>
+                    <strong>{item.score}</strong>
+                    <small>
+                      总进球 {item.total} · 评分 {item.rating}
+                      {item.sourceBoost ? ' · 来源加权' : ''}
+                    </small>
+                  </p>
+                ))}
+              </div>
+            </div>
+            <div className="internal-v4-score-notes">
+              {(selectedAnalysis?.predictions?.scoreModel?.riskNotes ?? []).map((note) => (
+                <span key={note}>{note}</span>
+              ))}
+            </div>
+          </section>
+
+          <section className="internal-v4-section" aria-label="12 维评分">
+            <div className="internal-v4-section-title">
+              <Activity size={18} />
+              <h3>12 维评分</h3>
+            </div>
+            <div className="internal-v4-dimension-grid">
+              {SCORE_DIMENSION_KEYS_V4.map((key) => (
+                <p key={key}>
+                  <span>{SCORE_DIMENSION_LABELS_V4[key]}</span>
+                  <strong>{selectedAnalysis?.score?.dimensions?.[key] ?? '-'}</strong>
+                  <small>
+                    {selectedAnalysis?.score?.dimensionAudit?.items?.[key]?.state ?? '待评估'}
+                  </small>
+                </p>
+              ))}
+            </div>
+          </section>
+
+          <section className="internal-v4-section" aria-label="规则解释链条">
+            <div className="internal-v4-section-title">
+              <ShieldAlert size={18} />
+              <h3>规则解释链条</h3>
+              <span>方向 / 比分 / 总进球 / 大小球 / 资金</span>
+            </div>
+            <div className="internal-v4-explanation-list">
+              {(selectedAnalysis?.explanations ?? []).map((item) => (
+                <p key={item.key}>
+                  <strong>{item.label}</strong>
+                  <span>{item.text}</span>
+                </p>
+              ))}
+            </div>
+          </section>
+
+          <section className="internal-v4-section" aria-label="触发规则">
+            <div className="internal-v4-section-title">
+              <ShieldAlert size={18} />
+              <h3>触发规则</h3>
+            </div>
+            <div className="internal-v4-rule-list">
+              {triggeredRules.length ? (
+                triggeredRules.slice(0, 10).map((rule) => (
+                  <p key={rule.id}>
+                    <strong>{rule.label}</strong>
+                    <span>{rule.reason}</span>
+                  </p>
+                ))
+              ) : (
+                <p>
+                  <strong>基础计划</strong>
+                  <span>当前按默认低额观察公式生成。</span>
+                </p>
+              )}
+            </div>
+          </section>
+            </>
+          ) : null}
+
+          {detailTab === 'audit' ? (
+            <>
+          <section className="internal-v4-section" aria-label="资金公式说明">
+            <div className="internal-v4-section-title">
+              <Check size={18} />
+              <h3>公式说明</h3>
+            </div>
+            <div className="internal-v4-formula-grid">
+              <Metric label="有效资金" value={selectedStakePlan?.effectiveBankroll ?? '-'} />
+              <Metric label="基础比例" value={formatRate(selectedStakePlan?.baseRate)} />
+              <Metric label="信心因子" value={selectedStakePlan?.confidenceFactor ?? '-'} />
+              <Metric label="回撤因子" value={selectedStakePlan?.drawdownFactor ?? '-'} />
+              <Metric label="暴露因子" value={selectedStakePlan?.exposureFactor ?? '-'} />
+              <Metric label="一致性因子" value={selectedStakePlan?.consistencyFactor ?? '-'} />
+            </div>
+            <div className="internal-v4-formula-explain">
+              <strong>金额公式</strong>
+              <span>{selectedStakePlan?.formulaExplanation?.summary ?? '-'}</span>
+              {selectedStakePlan?.formulaExplanation?.compressionNote ? (
+                <em>{selectedStakePlan.formulaExplanation.compressionNote}</em>
+              ) : null}
+            </div>
+          </section>
+
+          <section className="internal-v4-section" aria-label="一致性检查">
+            <div className="internal-v4-section-title">
+              <Check size={18} />
+              <h3>一致性检查</h3>
+              <span>冲突级别 {selectedAnalysis?.consistency?.severity ?? '-'}</span>
+            </div>
+            <div className="internal-v4-check-list">
+              {(selectedAnalysis?.consistency?.checks ?? []).map((check) => (
+                <p className={check.passed ? 'passed' : 'failed'} key={check.id}>
+                  <span>{check.passed ? '通过' : '冲突'}</span>
+                  <strong>{check.label}</strong>
+                </p>
+              ))}
+            </div>
+          </section>
+            </>
+          ) : null}
+
+          {detailTab === 'ledger' ? (
           <section className="internal-v4-section" aria-label="ledger JSON">
             <div className="internal-v4-section-title">
               <Download size={18} />
@@ -1118,6 +1247,7 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
               value={jsonBuffer}
             />
           </section>
+          ) : null}
         </section>
       </section>
 

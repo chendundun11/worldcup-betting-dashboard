@@ -5,12 +5,12 @@ import {
   GRADES_V4,
   INTERNAL_V4_VERSION,
   MAIN_PICKS_V4,
-  OVER_UNDER_PICKS_V4,
   POOL_STATUS_V4,
   SCORE_DIMENSION_KEYS_V4,
   SCORE_DIMENSION_LABELS_V4,
 } from './internalTypesV4.js'
 import { evaluateInternalRulesV4 } from './internalRulesV4.js'
+import { buildQuantScoreModel } from '../../services/quantScoreEngine.js'
 import {
   clampNumber,
   getMatchNameV4,
@@ -201,60 +201,18 @@ function getMainPick(facts, dimensions, gameType) {
   return mapOutcomeToMainPickV4(outcome, Math.abs(facts.directionEdge))
 }
 
-function getScorePair(mainPick, gameType) {
-  const homeWin = mainPick === '主队胜'
-  const awayWin = mainPick === '客队胜'
-  const homeSide = homeWin || mainPick === '主队不败'
-  const awaySide = awayWin || mainPick === '客队不败'
+function getScorePair(match, mainPick, gameType, facts) {
+  const scoreModel = buildQuantScoreModel(match, {
+    facts,
+    gameType,
+    mainPick,
+  })
 
-  if (mainPick === '平局') {
-    if (gameType === '对攻大球局') return { primaryScore: '1-1', secondaryScore: '2-1' }
-    return { primaryScore: '1-1', secondaryScore: '0-0' }
+  return {
+    primaryScore: scoreModel.primaryScore,
+    secondaryScore: scoreModel.secondaryScore,
+    scoreModel,
   }
-
-  if (gameType === '平局保护局') {
-    if (homeWin) return { primaryScore: '2-1', secondaryScore: '1-1' }
-    if (awayWin) return { primaryScore: '1-2', secondaryScore: '1-1' }
-    if (homeSide) return { primaryScore: '1-1', secondaryScore: '2-1' }
-    if (awaySide) return { primaryScore: '1-1', secondaryScore: '1-2' }
-    return { primaryScore: '1-1', secondaryScore: '0-0' }
-  }
-
-  if (gameType === '低比分胶着局') {
-    if (homeSide) return { primaryScore: '1-0', secondaryScore: '1-1' }
-    if (awaySide) return { primaryScore: '0-1', secondaryScore: '0-0' }
-    return { primaryScore: '1-1', secondaryScore: '0-0' }
-  }
-
-  if (gameType === '对攻大球局') {
-    if (homeSide) return { primaryScore: '2-1', secondaryScore: '2-2' }
-    if (awaySide) return { primaryScore: '1-2', secondaryScore: '2-2' }
-    return { primaryScore: '2-2', secondaryScore: '1-1' }
-  }
-
-  if (gameType === '信息不足局') {
-    if (homeWin) return { primaryScore: '1-0', secondaryScore: '1-1' }
-    if (awayWin) return { primaryScore: '0-1', secondaryScore: '1-1' }
-    if (homeSide) return { primaryScore: '1-0', secondaryScore: '1-1' }
-    if (awaySide) return { primaryScore: '0-1', secondaryScore: '1-1' }
-    return { primaryScore: '1-1', secondaryScore: '0-0' }
-  }
-
-  if (gameType === '强队压制局') {
-    if (homeSide) return { primaryScore: '2-0', secondaryScore: '2-1' }
-    if (awaySide) return { primaryScore: '0-2', secondaryScore: '1-2' }
-    return { primaryScore: '1-1', secondaryScore: '2-1' }
-  }
-
-  if (gameType === '强队过热局' || gameType === '冷门波动局' || gameType === '方向冲突局') {
-    if (homeWin) return { primaryScore: '1-0', secondaryScore: '1-1' }
-    if (awayWin) return { primaryScore: '0-1', secondaryScore: '1-1' }
-    if (homeSide) return { primaryScore: '1-0', secondaryScore: '1-1' }
-    if (awaySide) return { primaryScore: '0-1', secondaryScore: '1-1' }
-    return { primaryScore: '1-1', secondaryScore: '0-0' }
-  }
-
-  return { primaryScore: '1-1', secondaryScore: '0-0' }
 }
 
 function getOverUnderFromScores(primaryScore, secondaryScore) {
@@ -382,6 +340,7 @@ function buildDimensionAudit(roundedDimensions) {
 
 function buildExplanationChain(facts, gameType, mainPick, predictions, confidence, grade) {
   const directionSide = facts.directionEdge >= 0 ? '主队侧' : '客队侧'
+  const expectedGoals = predictions.scoreModel?.expectedGoals
   const overUnderReason =
     predictions.overUnder === '2.5球分界'
       ? '大小球差值接近中线，只保留观察金额。'
@@ -398,7 +357,7 @@ function buildExplanationChain(facts, gameType, mainPick, predictions, confidenc
     {
       key: 'score',
       label: '比分判断',
-      text: `${gameType} 输出 ${predictions.primaryScore} / ${predictions.secondaryScore}，避免重复比分并覆盖保护路径。`,
+      text: `${gameType} 输出 ${predictions.primaryScore} / ${predictions.secondaryScore}，期望进球 ${expectedGoals?.homeXg ?? '-'}-${expectedGoals?.awayXg ?? '-'}，候选分布覆盖保护路径。`,
     },
     {
       key: 'totalGoals',
@@ -429,20 +388,16 @@ export function buildInternalV4Analysis(match, context = {}) {
   const poolStatus = getPoolStatus(grade)
   const directionStrength = getDirectionStrengthLabel(confidence.directionConfidence)
   const mainPick = getMainPick(facts, dimensions, gameType)
-  const scorePair = getScorePair(mainPick, gameType)
+  const scorePair = getScorePair(match, mainPick, gameType, facts)
   const overUnder = getOverUnderFromScores(scorePair.primaryScore, scorePair.secondaryScore)
   const predictions = {
     primaryScore: scorePair.primaryScore,
     secondaryScore: scorePair.secondaryScore,
-    totalGoalsText:
-      overUnder === '大2.5'
-        ? '3球以上'
-        : overUnder === '小2.5'
-          ? '0-2球'
-          : '2-3球',
+    totalGoalsText: scorePair.scoreModel.totalGoalsText,
     overUnderText: overUnder,
     overUnderValue: 2.5,
     overUnder,
+    scoreModel: scorePair.scoreModel,
   }
   const consistency = buildConsistency(gameType, mainPick, predictions)
   const normalizedMatch = normalizeMatchForV4(match)

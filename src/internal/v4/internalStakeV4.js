@@ -200,7 +200,7 @@ function getConfidenceUsed(analysis, key) {
   return analysis?.confidence?.overUnderConfidence ?? 0
 }
 
-function getItemReason(analysis, key, amount, formula) {
+function getItemReason(analysis, key, amount) {
   const confidence = getConfidenceUsed(analysis, key)
   if (key === 'mainDirection') {
     return `方向信心 ${confidence}，${analysis?.decision?.fundingTier ?? 'D'}档主仓。`
@@ -254,7 +254,7 @@ export function buildInternalStakePlan(v4Analysis, ledger, options = {}) {
       stake,
       odds: 1,
       potentialProfit: 0,
-      reason: getItemReason(v4Analysis, key, stake, formula),
+      reason: getItemReason(v4Analysis, key, stake),
       confidenceUsed: Math.round(getConfidenceUsed(v4Analysis, key)),
       status: isBoundaryOverUnder ? 'observation' : 'pending',
     }
