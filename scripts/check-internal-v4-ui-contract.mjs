@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 const componentSource = readFileSync('src/components/InternalCommandCenterV4.jsx', 'utf8')
 const cssSource = readFileSync('src/components/InternalCommandCenterV4.css', 'utf8')
 const engineSource = readFileSync('src/internal/v4/internalEngineV4.js', 'utf8')
+const stakeSource = readFileSync('src/internal/v4/internalStakeV4.js', 'utf8')
 
 for (const tab of ['execute', 'analysis', 'audit', 'ledger']) {
   assert.match(
@@ -51,6 +52,11 @@ assert.match(componentSource, /internal-v4-score-candidate-grid/)
 assert.match(componentSource, /scoreModel\?\.distribution/)
 assert.match(engineSource, /buildQuantScoreModel/)
 assert.match(engineSource, /predictions\s*=\s*\{[\s\S]*scoreModel:/)
+assert.doesNotMatch(
+  `${componentSource}\n${engineSource}\n${stakeSource}`,
+  /主推比分|备用比分|辅推比分/,
+  'Internal V4 must use candidate/protection score wording.',
+)
 
 const executePanelMatch = componentSource.match(
   /detailTab\s*===\s*['"]execute['"][\s\S]*?detailTab\s*===\s*['"]analysis['"]/,

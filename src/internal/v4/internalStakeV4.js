@@ -206,10 +206,10 @@ function getItemReason(analysis, key, amount) {
     return `方向信心 ${confidence}，${analysis?.decision?.fundingTier ?? 'D'}档主仓。`
   }
   if (key === 'primaryScore') {
-    return `比分信心 ${confidence}，覆盖主推比分路径。`
+    return `比分信心 ${confidence}，覆盖候选比分路径。`
   }
   if (key === 'secondaryScore') {
-    return `比分信心 ${confidence}，覆盖相邻保护路径。`
+    return `比分信心 ${confidence}，覆盖保护比分路径。`
   }
   if (analysis?.predictions?.overUnder === '2.5球分界') {
     return `大小球分界，仅保留不超过 5% 的观察金额；本项 ${amount}。`

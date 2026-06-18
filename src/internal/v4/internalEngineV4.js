@@ -270,12 +270,12 @@ function buildConsistency(gameType, mainPick, predictions) {
   const checks = [
     {
       id: 'primary-direction',
-      label: '主推比分与主方向一致',
+      label: '候选比分与主方向一致',
       passed: primaryDirectionAligned,
     },
     {
       id: 'secondary-direction',
-      label: '备用比分覆盖主方向或保护路径',
+      label: '保护比分覆盖主方向或保护路径',
       passed: secondaryDirectionAligned || gameType === '平局保护局' || gameType === '信息不足局',
     },
     {

@@ -903,8 +903,8 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
               <Metric label="方向强度" value={selectedAnalysis?.decision?.directionStrength ?? '-'} />
               <Metric label="资金档位" value={selectedAnalysis?.decision?.grade ?? '-'} />
               <Metric label="比赛类型" value={selectedAnalysis?.classification?.gameType ?? '-'} />
-              <Metric label="主推比分" value={selectedAnalysis?.predictions?.primaryScore ?? '-'} />
-              <Metric label="备用比分" value={selectedAnalysis?.predictions?.secondaryScore ?? '-'} />
+              <Metric label="候选比分" value={selectedAnalysis?.predictions?.primaryScore ?? '-'} />
+              <Metric label="保护比分" value={selectedAnalysis?.predictions?.secondaryScore ?? '-'} />
               <Metric label="总进球" value={selectedAnalysis?.predictions?.totalGoalsText ?? '-'} />
               <Metric
                 label="大小球"
