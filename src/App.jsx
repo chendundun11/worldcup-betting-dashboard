@@ -3836,7 +3836,7 @@ function App() {
           <div className="section-title tail-score-radar-title">
             <span>高比分尾部雷达</span>
             <h2>4+ 进球路径</h2>
-            <p>只展示公开量化候选，不展示金额或后台记录。</p>
+            <p>只展示公开量化候选，不展示金额或后台记录；4+ 是尾部保护路径，不等于主进球方向。</p>
           </div>
 
           <div className="tail-score-radar-grid">
