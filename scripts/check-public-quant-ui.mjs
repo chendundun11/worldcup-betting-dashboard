@@ -30,6 +30,7 @@ const sensitivePublicModelFields =
 
 assert(appText.includes('quant-score-public-panel'), 'Public page must render quant score panel.')
 assert(appText.includes('tail-score-radar-panel'), 'Public page must render high-goal tail radar.')
+assert(appText.includes('尾部保护路径'), 'High-goal tail radar must explain tail protection.')
 assert(appText.includes('data-score={candidate.score}'), 'Public score cards must expose data-score.')
 assert(appText.includes('aria-label={`第${candidate.rank}候选比分'), 'Public score cards need clear aria labels.')
 assert(appText.includes('公开方向保持谨慎'), 'Cautious public copy must explain score candidates.')
