@@ -28,6 +28,8 @@ const sensitivePublicModelFields =
   /stake|bankroll|profit|ledger|pendingExposure|settledProfit|内部资金|模拟资金|本场投入|账本/i
 
 assert(appText.includes('quant-score-public-panel'), 'Public page must render quant score panel.')
+assert(appText.includes('data-score={candidate.score}'), 'Public score cards must expose data-score.')
+assert(appText.includes('aria-label={`第${candidate.rank}候选比分'), 'Public score cards need clear aria labels.')
 assert(appText.includes('公开方向保持谨慎'), 'Cautious public copy must explain score candidates.')
 assert(!forbiddenPublicCopy.test(appText), 'Public copy must use candidate score wording.')
 assert(appCss.includes('.quant-score-public-panel'), 'Quant public panel styles must exist.')

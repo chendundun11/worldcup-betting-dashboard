@@ -4060,23 +4060,31 @@ function App() {
               <p>{activeScoreModelLine}</p>
             </div>
             <div className="quant-score-public-grid">
-              {activeScoreCandidates.map((candidate) => (
-                <article
-                  className={
-                    candidate.rank === 1
-                      ? 'quant-score-public-card primary'
-                      : 'quant-score-public-card'
-                  }
-                  key={`public-score-${candidate.rank}-${candidate.score}`}
-                >
-                  <span>#{candidate.rank}</span>
-                  <strong>{candidate.score}</strong>
-                  <small>
-                    {candidate.total ?? parseScoreValue(candidate.score)?.total ?? '-'}球 ·{' '}
-                    {publicOutcomeLabels[candidate.outcome] ?? '比分路径'}
-                  </small>
-                </article>
-              ))}
+              {activeScoreCandidates.map((candidate) => {
+                const total = candidate.total ?? parseScoreValue(candidate.score)?.total ?? '-'
+                const outcomeLabel = publicOutcomeLabels[candidate.outcome] ?? '比分路径'
+
+                return (
+                  <article
+                    aria-label={`第${candidate.rank}候选比分 ${candidate.score}，${total}球，${outcomeLabel}`}
+                    className={
+                      candidate.rank === 1
+                        ? 'quant-score-public-card primary'
+                        : 'quant-score-public-card'
+                    }
+                    data-rank={candidate.rank}
+                    data-score={candidate.score}
+                    data-total={total}
+                    key={`public-score-${candidate.rank}-${candidate.score}`}
+                  >
+                    <span className="quant-score-public-rank">#{candidate.rank}</span>
+                    <strong className="quant-score-public-score">{candidate.score}</strong>
+                    <small className="quant-score-public-meta">
+                      {total}球 · {outcomeLabel}
+                    </small>
+                  </article>
+                )
+              })}
             </div>
             <div className="quant-score-public-notes" aria-label="比分风险提示">
               {activeScoreModelNotes.map((note) => (
