@@ -6,6 +6,7 @@ const CREATED_AT = '2026-06-01T00:00:00.000Z'
 const AMOUNT_KEYS = ['totalStake', 'stakePlan', 'bankroll', 'stake']
 const SCORE_KEYS = ['score', 'label', 'reason', 'confidence', 'type']
 const UI_KEYS = ['selectedIndex', 'sourceIndex', 'showInternalEngine']
+const VERBOSE = process.env.CHECK_SNAPSHOT_VERBOSE === '1'
 
 function assert(condition, message) {
   if (!condition) throw new Error(message)
@@ -247,15 +248,17 @@ for (const scorePayload of [arrayScorePayload, objectScorePayload]) {
   )
 }
 
-console.log(
-  JSON.stringify(
-    {
-      topLevelKeys: Object.keys(payload),
-      publicKeys: Object.keys(payload.publicMatchSnapshot),
-      internalKeys: Object.keys(payload.internalSnapshot),
-    },
-    null,
-    2,
-  ),
-)
+if (VERBOSE) {
+  console.log(
+    JSON.stringify(
+      {
+        topLevelKeys: Object.keys(payload),
+        publicKeys: Object.keys(payload.publicMatchSnapshot),
+        internalKeys: Object.keys(payload.internalSnapshot),
+      },
+      null,
+      2,
+    ),
+  )
+}
 console.log('Snapshot payload checks passed.')
