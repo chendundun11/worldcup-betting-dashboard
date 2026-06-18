@@ -36,7 +36,17 @@ const results = []
 
 try {
   for (let iteration = 1; iteration <= ITERATIONS; iteration += 1) {
-    if (iteration > 1 && DELAY_MS > 0) await sleep(DELAY_MS)
+    if (iteration > 1 && DELAY_MS > 0) {
+      console.log(
+        JSON.stringify({
+          checkedAt: new Date().toISOString(),
+          delayMs: DELAY_MS,
+          nextIteration: iteration,
+          type: 'soak-wait',
+        }),
+      )
+      await sleep(DELAY_MS)
+    }
 
     for (const [viewportName, viewport] of viewports) {
       for (const [routeName, url] of routes) {
@@ -75,6 +85,18 @@ try {
           viewport: viewportName,
         }
         results.push(result)
+
+        console.log(
+          JSON.stringify({
+            checkedAt: new Date().toISOString(),
+            consoleMessages: messages.length,
+            iteration,
+            overflowX,
+            route: routeName,
+            type: 'soak-progress',
+            viewport: viewportName,
+          }),
+        )
 
         assert(overflowX === 0, `${routeName}/${viewportName}: horizontal overflow ${overflowX}`)
         assert(
