@@ -54,23 +54,23 @@
   box-shadow: var(--shadow-lg);
 }
 
-.main-layout {
+.tail-score-radar-panel {
   order: 2;
 }
 
-.daily-ai-spotlight {
+.main-layout {
   order: 3;
 }
 
-.overview-grid {
+.daily-ai-spotlight {
   order: 4;
 }
 
-.featured-matches-panel {
+.overview-grid {
   order: 5;
 }
 
-.tail-score-radar-panel {
+.featured-matches-panel {
   order: 6;
 }
 
