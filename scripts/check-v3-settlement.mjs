@@ -75,7 +75,7 @@ function makeAnalysis({
     },
     {
       key: 'primaryScore',
-      label: '主推比分',
+      label: '候选比分',
       pick: primaryScore,
       stake: stakes.primaryScore ?? 0,
       odds: odds.primaryScore ?? 7.5,
@@ -84,7 +84,7 @@ function makeAnalysis({
     },
     {
       key: 'secondaryScore',
-      label: '备用比分',
+      label: '保护比分',
       pick: secondaryScore,
       stake: stakes.secondaryScore ?? 0,
       odds: odds.secondaryScore ?? 8.5,

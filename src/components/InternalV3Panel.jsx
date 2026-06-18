@@ -274,8 +274,8 @@ function InternalV3Panel({ activeMatch, matches = [] }) {
 
         <article style={styles.section}>
           <h3 style={styles.sectionTitle}>预测与一致性检查</h3>
-          <StatusRow label="主推比分" value={analysis.predictions.primaryScore} />
-          <StatusRow label="备用比分" value={analysis.predictions.secondaryScore} />
+          <StatusRow label="候选比分" value={analysis.predictions.primaryScore} />
+          <StatusRow label="保护比分" value={analysis.predictions.secondaryScore} />
           <StatusRow label="总进球" value={analysis.predictions.totalGoals} />
           <StatusRow label="大小球" value={analysis.predictions.overUnder} />
           {consistencyRows.map(([label, passed]) => (

@@ -250,7 +250,7 @@ C:\Users\chend\Desktop\新建文件夹\worldcup-betting-dashboard\scripts\douyin
 `contentScore` 满分 100，按本地启发式评分：
 
 - 比赛名清楚：20
-- 主推清楚：15
+- 主方向清楚：15
 - 比分清楚：15
 - 大小球清楚：10
 - 风险提示清楚：10
