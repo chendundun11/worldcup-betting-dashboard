@@ -583,63 +583,111 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
   return (
     <main className="internal-v4-shell">
       <header className="internal-v4-topbar">
-        <div>
+        <div className="internal-v4-title-block">
           <span className="internal-v4-eyebrow">Internal V5 Staking Engine</span>
           <h1>V5 内部资金引擎</h1>
           <p>{INTERNAL_V5_SUBTITLE}</p>
           <p>{INTERNAL_V4_DISCLAIMER}</p>
         </div>
 
-        <div className="internal-v4-scope-bar" aria-label="计划范围">
-          <span>计划范围</span>
-          {PLAN_SCOPE_OPTIONS_V5.map((item) => (
-            <button
-              className={planScope === item.key ? 'active' : ''}
-              key={item.key}
-              onClick={() => activatePlanScope(item.key)}
-              type="button"
-            >
-              {item.label}
-            </button>
-          ))}
-          <small>
-            {isPlanInitializing
-              ? `${getPlanScopeLabelV5(planScope)}计划生成中...`
-              : scopedMatches.length
-                ? `${getPlanScopeLabelV5(planScope)} · ${scopedMatches.length} 场`
+        <div className="internal-v4-command-panel">
+          <div className="internal-v4-scope-bar" aria-label="计划范围">
+            <span>计划范围</span>
+            <div className="internal-v4-scope-options">
+              {PLAN_SCOPE_OPTIONS_V5.map((item) => (
+                <button
+                  className={planScope === item.key ? 'active' : ''}
+                  key={item.key}
+                  onClick={() => activatePlanScope(item.key)}
+                  type="button"
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+            <small>
+              {isPlanInitializing
+                ? `${getPlanScopeLabelV5(planScope)}计划生成中...`
+                : scopedMatches.length
+                  ? `${getPlanScopeLabelV5(planScope)} · ${scopedMatches.length} 场`
                 : `${getPlanScopeLabelV5(planScope)}暂无比赛`}
-          </small>
-        </div>
+            </small>
+          </div>
 
-        <div className="internal-v4-actions" aria-label="V5 内部操作">
-          <button disabled={isPlanInitializing} onClick={handleAutoScan} type="button">
-            <Activity size={16} />
-            扫描赛果并复盘
-          </button>
-          <button disabled={isPlanInitializing} onClick={handleRefreshPlans} type="button">
-            <RefreshCw size={16} />
-            刷新当前范围计划
-          </button>
-          <button disabled={isPlanInitializing} onClick={handleExport} type="button">
-            <Download size={16} />
-            导出账本 JSON
-          </button>
-          <button disabled={isPlanInitializing} onClick={handleImport} type="button">
-            <Upload size={16} />
-            导入 JSON
-          </button>
-          <button disabled={isPlanInitializing} onClick={handleClearPending} type="button">
-            <Trash2 size={16} />
-            清空未结算
-          </button>
-          <button disabled={isPlanInitializing} onClick={handleClearLegacy} type="button">
-            <Trash2 size={16} />
-            清空旧 V4
-          </button>
-          <button className="danger" disabled={isPlanInitializing} onClick={handleReset} type="button">
-            <RotateCcw size={16} />
-            reset
-          </button>
+          {!isPlanInitializing ? (
+            <section className="internal-v4-command-summary" aria-label="V5 当前操作摘要">
+              <article>
+                <span>当前范围</span>
+                <strong>{getPlanScopeLabelV5(planScope)}</strong>
+                <small>{scopedMatches.length} 场比赛进入视野</small>
+              </article>
+              <article>
+                <span>可用资金</span>
+                <strong className={getTone(summary.availableBankroll)}>
+                  {summary.availableBankroll}
+                </strong>
+                <small>当前资金扣除本范围未结算暴露</small>
+              </article>
+              <article>
+                <span>未结算暴露</span>
+                <strong>{summary.pendingExposure}</strong>
+                <small>只统计当前计划范围</small>
+              </article>
+              <article>
+                <span>扫描状态</span>
+                <strong>{scanResult ? `已扫 ${scanResult.scanned ?? 0}` : '待扫描'}</strong>
+                <small>
+                  {scanResult
+                    ? `真实比分 ${scanResult.foundScores ?? 0} · 自动结算 ${scanResult.settled ?? 0}`
+                    : '点击扫描后才写入复盘结果'}
+                </small>
+              </article>
+            </section>
+          ) : null}
+
+          <div className="internal-v4-action-deck" aria-label="V5 内部操作">
+            <div className="internal-v4-action-group primary">
+              <span>日常动作</span>
+              <button disabled={isPlanInitializing} onClick={handleAutoScan} type="button">
+                <Activity size={16} />
+                扫描赛果并复盘
+              </button>
+              <button disabled={isPlanInitializing} onClick={handleRefreshPlans} type="button">
+                <RefreshCw size={16} />
+                刷新当前范围计划
+              </button>
+            </div>
+
+            <div className="internal-v4-action-group">
+              <span>账本备份</span>
+              <button disabled={isPlanInitializing} onClick={handleExport} type="button">
+                <Download size={16} />
+                导出 JSON
+              </button>
+              <button disabled={isPlanInitializing} onClick={handleImport} type="button">
+                <Upload size={16} />
+                导入 JSON
+              </button>
+            </div>
+
+            <details className="internal-v4-danger-zone">
+              <summary>危险操作</summary>
+              <div className="internal-v4-danger-actions">
+                <button disabled={isPlanInitializing} onClick={handleClearPending} type="button">
+                  <Trash2 size={16} />
+                  清空未结算
+                </button>
+                <button disabled={isPlanInitializing} onClick={handleClearLegacy} type="button">
+                  <Trash2 size={16} />
+                  清空旧 V4
+                </button>
+                <button className="danger" disabled={isPlanInitializing} onClick={handleReset} type="button">
+                  <RotateCcw size={16} />
+                  reset
+                </button>
+              </div>
+            </details>
+          </div>
         </div>
       </header>
 
@@ -667,11 +715,11 @@ function InternalCommandCenterV4({ activeMatch = null, matches = [] }) {
         <Metric label="当前资金" value={summary.currentBankroll} />
         <Metric label="可用资金" tone={getTone(summary.availableBankroll)} value={summary.availableBankroll} />
         <Metric label="已结算总盈亏" tone={getTone(summary.settledProfit)} value={formatAmount(summary.settledProfit)} />
-        <Metric label="当前计划范围未结算暴露" value={summary.pendingExposure} />
-        <Metric label="当前计划范围计划投入" value={summary.totalPlannedStake} />
-        <Metric label="当前计划范围比赛数" value={summary.totalMatches} />
-        <Metric label="当前计划范围待结算" value={summary.pendingCount} />
-        <Metric label="当前计划范围已结算" value={summary.settledCount} />
+        <Metric label="未结算暴露" value={summary.pendingExposure} />
+        <Metric label="计划投入" value={summary.totalPlannedStake} />
+        <Metric label="范围比赛数" value={summary.totalMatches} />
+        <Metric label="待结算" value={summary.pendingCount} />
+        <Metric label="已结算" value={summary.settledCount} />
         <Metric label="最大回撤" value={summary.maxDrawdown} />
       </section>
 

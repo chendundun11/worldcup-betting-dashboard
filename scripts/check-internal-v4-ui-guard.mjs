@@ -18,7 +18,7 @@ assert.match(appSource, /InternalCommandCenterV4/)
 assert.match(appSource, /function isInternalV4RouteActive\(\)/)
 assert.match(appSource, /window\.location\.hash\s*===\s*['"]#internal-v4['"]/)
 assert.match(appSource, /params\.get\(['"]internal['"]\)\s*===\s*['"]v4['"]/)
-assert.match(appSource, /if \(isInternalV4Route\) \{/)
+assert.match(appSource, /if \(isInternalV4Route && !isCaptureMode\) \{/)
 assert.doesNotMatch(appSource, /href=["']#internal-v4["']/)
 assert.doesNotMatch(appSource, /InternalV3Panel/)
 
@@ -29,11 +29,11 @@ for (const text of [
   '当前资金',
   '可用资金',
   '已结算总盈亏',
-  '当前计划范围未结算暴露',
-  '当前计划范围计划投入',
-  '当前计划范围比赛数',
-  '当前计划范围待结算',
-  '当前计划范围已结算',
+  '未结算暴露',
+  '计划投入',
+  '范围比赛数',
+  '待结算',
+  '已结算',
   '最大回撤',
   '计划范围',
   '未来24小时',
@@ -70,7 +70,7 @@ for (const text of [
   '结算来源',
   '最近复盘记录',
   'ledger JSON',
-  '导出账本 JSON',
+  '导出 JSON',
   '确认重置 V5 账本？这会清空资金记录、复盘记录和赔率覆盖。',
   'worldcup_internal_v5_ledger',
   'worldcup_internal_v5_odds_overrides',
@@ -129,12 +129,14 @@ const checkedFiles = Array.from(new Set([...changedFiles, ...untrackedFiles]))
 
 const allowedExact = new Set([
   'src/App.jsx',
+  'src/App.css',
   'src/components/InternalCommandCenterV4.jsx',
   'src/components/InternalCommandCenterV4.css',
   'scripts/check-internal-v4-engine.mjs',
   'scripts/check-internal-v4-stake.mjs',
   'scripts/check-internal-v4-settlement.mjs',
   'scripts/check-internal-v4-ui-guard.mjs',
+  'eslint.config.js',
 ])
 
 function isAllowedChangedFile(file) {

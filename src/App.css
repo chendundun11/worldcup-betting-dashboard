@@ -2487,6 +2487,8 @@
 }
 
 .detail-block {
+  max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
   padding: 16px;
   border: 1px solid rgba(148, 163, 184, 0.1);
@@ -2525,8 +2527,8 @@
 }
 
 .revaluation-row {
-  grid-template-columns: 0.8fr 0.8fr 0.8fr 0.8fr minmax(280px, 1.8fr);
-  min-width: 900px;
+  grid-template-columns: repeat(4, minmax(90px, 0.8fr)) minmax(180px, 1.8fr);
+  min-width: 0;
 }
 
 .detail-head,
@@ -3041,21 +3043,24 @@
   inset: 0;
   z-index: 40;
   display: grid;
-  place-items: center;
+  align-items: end;
+  justify-items: center;
   padding: 18px;
-  background: rgba(2, 6, 18, 0.72);
-  backdrop-filter: blur(14px);
+  background:
+    linear-gradient(180deg, rgba(2, 6, 18, 0.18), rgba(2, 6, 18, 0.78));
+  backdrop-filter: blur(6px);
 }
 
 .onboarding-dialog {
   display: grid;
-  gap: 14px;
-  width: min(560px, 100%);
-  max-height: min(720px, calc(100vh - 36px));
-  padding: 22px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px 18px;
+  width: min(920px, 100%);
+  max-height: min(360px, calc(100vh - 36px));
+  padding: 18px;
   overflow-y: auto;
   border: 1px solid rgba(45, 212, 191, 0.28);
-  border-radius: 24px;
+  border-radius: 18px;
   background:
     linear-gradient(180deg, rgba(17, 25, 42, 0.98), rgba(7, 12, 23, 0.98)),
     rgba(7, 12, 23, 0.96);
@@ -3065,6 +3070,7 @@
 .onboarding-dialog-head {
   display: flex;
   align-items: center;
+  grid-column: 1 / -1;
   gap: 10px;
   color: var(--mint);
 }
@@ -3073,26 +3079,27 @@
   margin: 0;
   color: var(--text-strong);
   font-family: var(--display);
-  font-size: 30px;
+  font-size: 24px;
   line-height: 1.1;
   letter-spacing: 0;
 }
 
 .onboarding-dialog-body {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .onboarding-dialog-body p {
   margin: 0;
   color: var(--text-soft);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 850;
-  line-height: 1.75;
+  line-height: 1.62;
 }
 
 .onboarding-close-button {
-  width: 100%;
+  align-self: end;
+  width: min(240px, 100%);
   padding: 0 16px;
   border-radius: 16px;
 }
@@ -3421,6 +3428,26 @@
     min-height: auto;
     margin: 0;
     padding: 14px;
+  }
+
+  .onboarding-overlay {
+    padding: 12px;
+  }
+
+  .onboarding-dialog {
+    grid-template-columns: 1fr;
+    max-height: min(560px, calc(100vh - 24px));
+    padding: 14px;
+    border-radius: 18px;
+  }
+
+  .onboarding-dialog-head h2 {
+    font-size: 22px;
+  }
+
+  .onboarding-close-button {
+    width: 100%;
+    min-height: 46px;
   }
 
   .hero-plain-note,

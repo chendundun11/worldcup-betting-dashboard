@@ -1,7 +1,7 @@
 .internal-v4-shell {
   background:
-    linear-gradient(135deg, rgba(8, 10, 13, 0.96), rgba(21, 24, 24, 0.98)),
-    #101212;
+    linear-gradient(135deg, rgba(7, 10, 14, 0.98), rgba(16, 20, 24, 0.98)),
+    #0d1117;
   color: #f2f5f1;
   min-height: 100vh;
   padding: 24px;
@@ -14,11 +14,21 @@
 
 .internal-v4-topbar {
   align-items: flex-start;
-  display: flex;
-  gap: 20px;
-  justify-content: space-between;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(280px, 0.74fr) minmax(620px, 1.26fr);
   margin: 0 auto 18px;
   max-width: 1440px;
+}
+
+.internal-v4-title-block {
+  align-self: start;
+  background:
+    linear-gradient(180deg, rgba(18, 24, 30, 0.92), rgba(12, 17, 22, 0.92)),
+    rgba(14, 18, 22, 0.88);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 8px;
+  padding: 18px;
 }
 
 .internal-v4-eyebrow,
@@ -45,7 +55,7 @@
 }
 
 .internal-v4-topbar h1 {
-  font-size: 32px;
+  font-size: clamp(30px, 3vw, 48px);
   line-height: 1.1;
 }
 
@@ -55,21 +65,26 @@
   margin: 8px 0 0;
 }
 
-.internal-v4-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: flex-end;
-  max-width: 720px;
+.internal-v4-command-panel {
+  display: grid;
+  gap: 12px;
 }
 
 .internal-v4-scope-bar {
-  align-items: center;
+  align-items: start;
+  background: rgba(17, 24, 31, 0.78);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: auto 1fr auto;
+  padding: 12px;
+}
+
+.internal-v4-scope-options {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  justify-content: flex-end;
-  max-width: 760px;
 }
 
 .internal-v4-scope-bar > span,
@@ -79,7 +94,7 @@
   font-weight: 800;
 }
 
-.internal-v4-actions button,
+.internal-v4-action-deck button,
 .internal-v4-scope-bar button,
 .internal-v4-filter button,
 .internal-v4-match-list button,
@@ -87,8 +102,8 @@
 .internal-v4-odds-actions button,
 .internal-v4-odds-edit button {
   align-items: center;
-  background: #1f2623;
-  border: 1px solid rgba(176, 191, 180, 0.26);
+  background: #1b2226;
+  border: 1px solid rgba(148, 163, 184, 0.24);
   border-radius: 7px;
   color: #f2f5f1;
   cursor: pointer;
@@ -102,24 +117,93 @@
   padding: 8px 11px;
 }
 
-.internal-v4-actions button:hover,
+.internal-v4-action-deck button:hover,
 .internal-v4-scope-bar button:hover,
 .internal-v4-filter button:hover,
 .internal-v4-match-list button:hover,
 .internal-v4-settle-form button:hover,
 .internal-v4-odds-actions button:hover,
 .internal-v4-odds-edit button:hover {
-  border-color: rgba(74, 222, 128, 0.7);
+  border-color: rgba(56, 189, 248, 0.72);
 }
 
-.internal-v4-actions button:disabled {
+.internal-v4-action-deck button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }
 
-.internal-v4-actions button.danger {
+.internal-v4-action-deck button.danger {
   border-color: rgba(248, 113, 113, 0.55);
   color: #fecaca;
+}
+
+.internal-v4-action-deck {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(260px, 1.1fr) minmax(220px, 0.86fr) minmax(150px, 0.52fr);
+}
+
+.internal-v4-action-group,
+.internal-v4-danger-zone {
+  background: rgba(17, 24, 31, 0.78);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.internal-v4-action-group {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.internal-v4-action-group > span {
+  color: #8fb3ce;
+  font-size: 12px;
+  font-weight: 800;
+  grid-column: 1 / -1;
+}
+
+.internal-v4-action-group.primary button:first-of-type {
+  background: #1f3f46;
+  border-color: rgba(56, 189, 248, 0.42);
+}
+
+.internal-v4-danger-zone {
+  color: #f2f5f1;
+}
+
+.internal-v4-danger-zone summary {
+  color: #fca5a5;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+  list-style: none;
+  min-height: 38px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+}
+
+.internal-v4-danger-zone summary::-webkit-details-marker {
+  display: none;
+}
+
+.internal-v4-danger-zone summary::before {
+  content: "!";
+  display: inline-grid;
+  height: 20px;
+  margin-right: 7px;
+  place-items: center;
+  width: 20px;
+  border: 1px solid rgba(248, 113, 113, 0.42);
+  border-radius: 999px;
+}
+
+.internal-v4-danger-actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .internal-v4-loading {
@@ -180,9 +264,53 @@
 .internal-v4-funds {
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(10, minmax(110px, 1fr));
+  grid-template-columns: repeat(5, minmax(130px, 1fr));
   margin: 0 auto 18px;
   max-width: 1440px;
+}
+
+.internal-v4-command-summary {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1.05fr 1fr 1fr 1.2fr;
+  margin: 0 auto 10px;
+  max-width: 1440px;
+}
+
+.internal-v4-command-panel .internal-v4-command-summary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  max-width: none;
+}
+
+.internal-v4-command-summary article {
+  background:
+    linear-gradient(180deg, rgba(19, 26, 33, 0.94), rgba(13, 18, 23, 0.94)),
+    rgba(13, 18, 23, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  min-height: 96px;
+  padding: 14px;
+}
+
+.internal-v4-command-summary span {
+  color: #a8bac9;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.internal-v4-command-summary strong {
+  color: #f8fafc;
+  font-size: clamp(20px, 2vw, 24px);
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.internal-v4-command-summary small {
+  color: #9aa8b5;
+  line-height: 1.45;
 }
 
 .internal-v4-review-stats {
@@ -194,8 +322,8 @@
 }
 
 .internal-v4-metric {
-  background: #171b1a;
-  border: 1px solid rgba(176, 191, 180, 0.18);
+  background: #151b1f;
+  border: 1px solid rgba(148, 163, 184, 0.16);
   border-radius: 8px;
   display: grid;
   gap: 5px;
@@ -238,8 +366,8 @@
 .internal-v4-detail,
 .internal-v4-recent,
 .internal-v4-empty {
-  background: rgba(18, 21, 20, 0.9);
-  border: 1px solid rgba(176, 191, 180, 0.2);
+  background: rgba(15, 20, 24, 0.94);
+  border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 8px;
 }
 
@@ -732,6 +860,16 @@
 }
 
 @media (max-width: 1180px) {
+  .internal-v4-topbar {
+    grid-template-columns: 1fr;
+  }
+
+  .internal-v4-action-deck,
+  .internal-v4-command-summary,
+  .internal-v4-command-panel .internal-v4-command-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .internal-v4-funds {
     grid-template-columns: repeat(5, minmax(120px, 1fr));
   }
@@ -762,22 +900,41 @@
     padding: 14px;
   }
 
-  .internal-v4-topbar,
+  .internal-v4-title-block {
+    padding: 14px;
+  }
+
   .internal-v4-footer {
     display: grid;
   }
 
-  .internal-v4-actions {
-    justify-content: stretch;
+  .internal-v4-topbar {
+    gap: 12px;
+    margin-bottom: 12px;
   }
 
   .internal-v4-scope-bar {
-    justify-content: stretch;
+    grid-template-columns: 1fr;
   }
 
-  .internal-v4-actions button,
-  .internal-v4-scope-bar button {
-    flex: 1 1 180px;
+  .internal-v4-scope-options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .internal-v4-action-deck,
+  .internal-v4-command-summary,
+  .internal-v4-command-panel .internal-v4-command-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .internal-v4-action-group {
+    grid-template-columns: 1fr;
+  }
+
+  .internal-v4-danger-zone summary {
+    justify-content: center;
+    min-height: 42px;
   }
 
   .internal-v4-funds,

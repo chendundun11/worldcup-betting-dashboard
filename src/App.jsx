@@ -3778,9 +3778,9 @@ function App() {
     setShowOnboardingNotice(false)
 
     window.requestAnimationFrame(() => {
-      focusSectionRef.current?.scrollIntoView({
+      window.scrollTo({
         behavior: 'smooth',
-        block: 'start',
+        top: 0,
       })
     })
   }
