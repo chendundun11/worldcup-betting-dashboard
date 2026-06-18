@@ -42,6 +42,9 @@
   - 同时检查内部 V5 桌面/手机/320 窄屏：执行台皮肤、非空比赛范围、当前比赛、tab 状态、关键控件溢出和横向溢出。
 - `npm run check:quality`
   - 跑 lint、build、量化引擎、内部引擎、回归、API、文案和海报相关检查。
+- `npm run check:soak`
+  - 打开公开页、内部 V5 和设计工作台的桌面/手机视图。
+  - 检查运行时 console warning/error 和横向溢出，支持 `SOAK_ITERATIONS` / `SOAK_DELAY_MS` 做长时间观察。
 
 新增/调整的关键文件：
 
@@ -51,6 +54,7 @@
 - `public/codex-workbench.html`
 - `scripts/check-public-v5-visual.mjs`
 - `scripts/capture-public-v5-screenshots.mjs`
+- `scripts/check-runtime-soak.mjs`
 - `scripts/check-browser-smoke.mjs`
 - `package.json`
 

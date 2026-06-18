@@ -14,6 +14,7 @@
     "check:api": "node scripts/check-snapshot-api.mjs && node scripts/check-snapshot-api-behavior.mjs && node scripts/check-db-migration.mjs",
     "check:visual": "node scripts/check-public-v5-visual.mjs",
     "check:browser": "node scripts/check-browser-smoke.mjs && npm run check:visual",
+    "check:soak": "node scripts/check-runtime-soak.mjs",
     "capture:visual": "node scripts/capture-public-v5-screenshots.mjs",
     "check:quality": "npm run lint && npm run build && npm run check:quant && npm run check:internal && npm run check:regression && npm run check:api && node scripts/check-copy-guard.mjs && node scripts/check-poster-presentation.mjs && node scripts/check-share-poster.mjs && node scripts/check-ai-analysis.mjs && node scripts/check-snapshot-payload.mjs && node scripts/check-snapshot-row-mapper.mjs && node scripts/check-internal-v5-plan-scope.mjs && node scripts/check-match-focus.mjs",
     "preview": "vite preview"

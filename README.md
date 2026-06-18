@@ -39,6 +39,7 @@ npm run check:regression
 npm run check:api
 npm run check:browser
 npm run check:visual
+npm run check:soak
 npm run capture:visual
 node scripts/check-copy-guard.mjs
 npm audit
@@ -84,6 +85,12 @@ Run those from a clean worktree when working specifically on that area.
 `npm run check:browser` is also intentionally separate because it requires a running dev or preview server. By default it checks `http://127.0.0.1:5177/`; override with `DASHBOARD_URL` when needed. It includes the interaction smoke test and the Public V5 visual guard.
 
 `npm run capture:visual` saves local Public/Internal V5 screenshots under `.codex/visual-audits/public-v5/` for manual review.
+
+`npm run check:soak` opens the public page, internal V5 page, and design workbench on desktop/mobile viewports and fails on console warnings/errors or horizontal overflow. For a longer run:
+
+```bash
+SOAK_ITERATIONS=4 SOAK_DELAY_MS=900000 npm run check:soak
+```
 
 Production preview smoke:
 
