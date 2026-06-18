@@ -3,6 +3,9 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const FOOTBALL_DATA_BASE_URL = 'https://api.football-data.org/v4'
+const matchesData = JSON.parse(
+  fs.readFileSync(path.join(__dirname, 'src', 'data', 'matches.json'), 'utf8'),
+)
 
 function parseEnvLine(line) {
   const trimmedLine = line.trim()
@@ -66,11 +69,11 @@ const loadedEnvFiles = loadLocalEnv()
 
 const PORT = Number(process.env.LOCAL_API_PORT || process.env.PORT || 3001)
 
-function createMeta(dataSource, fallbackReason = null) {
+function createMeta(dataSource, fallbackReason = null, provider = process.env.FOOTBALL_API_PROVIDER || 'football-data') {
   return {
     dataSource,
     fallbackReason,
-    provider: process.env.FOOTBALL_API_PROVIDER || 'football-data',
+    provider,
   }
 }
 
@@ -82,7 +85,7 @@ function sendJson(response, statusCode, body, headers = {}) {
   response.end(
     JSON.stringify({
       ...body,
-      meta: createMeta(body.dataSource, body.fallbackReason),
+      meta: createMeta(body.dataSource, body.fallbackReason, body.provider),
     }),
   )
 }
@@ -160,6 +163,59 @@ function getResult(status, score, winner) {
   return 'draw'
 }
 
+function normalizeMockStatus(status) {
+  return ['scheduled', 'live', 'finished'].includes(status) ? status : 'scheduled'
+}
+
+function normalizeMockScore(score) {
+  if (!score) return null
+
+  return {
+    home: Number(score.home) || 0,
+    away: Number(score.away) || 0,
+  }
+}
+
+function normalizeMockMatch(match) {
+  const status = normalizeMockStatus(match.status)
+  const score = normalizeMockScore(match.score)
+
+  return {
+    id: match.id,
+    homeTeam: match.homeTeamId,
+    awayTeam: match.awayTeamId,
+    kickoffTime: match.kickoff,
+    status,
+    minute: status === 'live' ? match.minute ?? null : null,
+    score,
+    result: getResult(status, score),
+    source: 'mock',
+    odds: match.odds,
+    contextRisk: match.contextRisk ?? 50,
+    stage: match.stage ?? '',
+    venue: match.venue ?? '',
+    headline: match.headline ?? '',
+  }
+}
+
+function createMockMatchSnapshot(fallbackReason, extra = {}) {
+  return {
+    dataSource: 'mock',
+    fallbackReason,
+    provider: 'mock',
+    matchDay: matchesData.matchDay,
+    updatedAt: new Date().toISOString(),
+    matches: matchesData.matches.map(normalizeMockMatch),
+    ...extra,
+  }
+}
+
+function sendMockMatches(response, fallbackReason, extra = {}) {
+  sendJson(response, 200, createMockMatchSnapshot(fallbackReason, extra), {
+    'Cache-Control': 'no-store',
+  })
+}
+
 function normalizeTeam(team) {
   return team?.name ?? team?.shortName ?? team?.tla ?? String(team?.id ?? '')
 }
@@ -229,12 +285,7 @@ async function handleMatches(request, response) {
   const token = process.env.FOOTBALL_API_KEY
 
   if (!token) {
-    sendJson(response, 500, {
-      dataSource: 'fallback',
-      fallbackReason: 'API_KEY_MISSING',
-      provider: process.env.FOOTBALL_API_PROVIDER || 'football-data',
-      updatedAt: new Date().toISOString(),
-      matches: [],
+    sendMockMatches(response, 'API_KEY_MISSING', {
       error: 'FOOTBALL_API_KEY is not configured',
     })
     return
@@ -249,13 +300,9 @@ async function handleMatches(request, response) {
 
     if (!footballResponse.ok) {
       const details = await footballResponse.text()
-      sendJson(response, footballResponse.status, {
-        dataSource: 'fallback',
-        fallbackReason: 'API_FAILED',
-        provider: process.env.FOOTBALL_API_PROVIDER || 'football-data',
-        updatedAt: new Date().toISOString(),
-        matches: [],
+      sendMockMatches(response, footballResponse.status === 429 ? 'API_RATE_LIMITED' : 'API_FAILED', {
         error: 'football-data.org request failed',
+        statusCode: footballResponse.status,
         details,
       })
       return
@@ -264,12 +311,7 @@ async function handleMatches(request, response) {
     const payload = await footballResponse.json()
 
     if (!Array.isArray(payload.matches)) {
-      sendJson(response, 502, {
-        dataSource: 'fallback',
-        fallbackReason: 'INVALID_RESPONSE',
-        provider: process.env.FOOTBALL_API_PROVIDER || 'football-data',
-        updatedAt: new Date().toISOString(),
-        matches: [],
+      sendMockMatches(response, 'INVALID_RESPONSE', {
         error: 'football-data.org returned an invalid response',
       })
       return
@@ -292,12 +334,7 @@ async function handleMatches(request, response) {
       { 'Cache-Control': 's-maxage=60, stale-while-revalidate=300' },
     )
   } catch (error) {
-    sendJson(response, 500, {
-      dataSource: 'fallback',
-      fallbackReason: 'API_FAILED',
-      provider: process.env.FOOTBALL_API_PROVIDER || 'football-data',
-      updatedAt: new Date().toISOString(),
-      matches: [],
+    sendMockMatches(response, 'API_FAILED', {
       error: 'Unable to fetch football-data.org matches',
       details: error instanceof Error ? error.message : String(error),
     })
