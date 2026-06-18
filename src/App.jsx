@@ -3534,43 +3534,44 @@ function App() {
   function handleCloseOnboardingNotice() {
     markOnboardingNoticeDismissed()
     setShowOnboardingNotice(false)
-
-    window.requestAnimationFrame(() => {
-      window.scrollTo({
-        behavior: 'smooth',
-        top: 0,
-      })
-    })
   }
 
   return (
     <main className="rookie-dashboard">
       {showOnboardingNotice ? (
-        <div className="onboarding-overlay" role="presentation">
-          <section
-            aria-labelledby="onboarding-notice-title"
-            aria-modal="true"
-            className="onboarding-dialog"
-            role="dialog"
+        <section
+          aria-labelledby="onboarding-notice-title"
+          aria-live="polite"
+          className="onboarding-banner"
+          role="region"
+        >
+          <div className="onboarding-banner-head">
+            <ShieldAlert size={22} />
+            <h2 id="onboarding-notice-title">{ONBOARDING_NOTICE_TITLE}</h2>
+          </div>
+          <div className="onboarding-banner-body">
+            {ONBOARDING_NOTICE_BODY.slice(0, 2).map((paragraph) => (
+              <p key={paragraph}>{paragraph}</p>
+            ))}
+          </div>
+          {ONBOARDING_NOTICE_BODY.length > 2 ? (
+            <details className="onboarding-banner-details">
+              <summary>查看参考标准</summary>
+              <div className="onboarding-banner-detail-body">
+                {ONBOARDING_NOTICE_BODY.slice(2).map((paragraph) => (
+                  <p key={paragraph}>{paragraph}</p>
+                ))}
+              </div>
+            </details>
+          ) : null}
+          <button
+            className="onboarding-close-button"
+            onClick={handleCloseOnboardingNotice}
+            type="button"
           >
-            <div className="onboarding-dialog-head">
-              <ShieldAlert size={22} />
-              <h2 id="onboarding-notice-title">{ONBOARDING_NOTICE_TITLE}</h2>
-            </div>
-            <div className="onboarding-dialog-body">
-              {ONBOARDING_NOTICE_BODY.map((paragraph) => (
-                <p key={paragraph}>{paragraph}</p>
-              ))}
-            </div>
-            <button
-              className="onboarding-close-button"
-              onClick={handleCloseOnboardingNotice}
-              type="button"
-            >
-              {ONBOARDING_NOTICE_CLOSE_TEXT}
-            </button>
-          </section>
-        </div>
+            {ONBOARDING_NOTICE_CLOSE_TEXT}
+          </button>
+        </section>
       ) : null}
 
       <section className="hero-card">

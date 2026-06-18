@@ -66,6 +66,8 @@ try {
 
         return {
           hasFourNil: bodyText.includes('4-0'),
+          hasOnboardingBanner: Boolean(document.querySelector('.onboarding-banner')),
+          hasOnboardingOverlay: Boolean(document.querySelector('.onboarding-overlay')),
           mainTop: main ? Math.round(main.top + window.scrollY) : null,
           oldCopy: hasAny(bodyText, oldTerms),
           overflowX: document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -84,6 +86,8 @@ try {
 
     assert(publicAudit.tailScores.includes('4-0'), `${viewport.name}: public radar must show 4-0`)
     assert(publicAudit.hasFourNil, `${viewport.name}: public page must include 4-0`)
+    assert(publicAudit.hasOnboardingBanner, `${viewport.name}: onboarding banner must render`)
+    assert(!publicAudit.hasOnboardingOverlay, `${viewport.name}: onboarding must not be a full overlay`)
     assert(publicAudit.tailTop < publicAudit.mainTop, `${viewport.name}: radar must stay above main`)
     assert(publicAudit.oldCopy === false, `${viewport.name}: public page has old score copy`)
     assert(publicAudit.sensitive === false, `${viewport.name}: public page has sensitive copy`)

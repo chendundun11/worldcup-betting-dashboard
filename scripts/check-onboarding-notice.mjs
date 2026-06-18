@@ -59,15 +59,21 @@ assert(
 )
 markOnboardingNoticeDismissed(throwingStorage, now)
 
-const publicText = [
-  readFileSync('src/App.jsx', 'utf8'),
-  readFileSync('src/App.css', 'utf8'),
-  readFileSync('src/services/onboardingNotice.js', 'utf8'),
-].join('\n')
+const appSource = readFileSync('src/App.jsx', 'utf8')
+const appCss = readFileSync('src/App.css', 'utf8')
+const noticeSource = readFileSync('src/services/onboardingNotice.js', 'utf8')
+const publicText = [appSource, appCss, noticeSource].join('\n')
+const onboardingStart = appSource.indexOf('showOnboardingNotice')
+const onboardingEnd = appSource.indexOf('<section className="hero-card"')
+const onboardingSource = appSource.slice(onboardingStart, onboardingEnd)
 
 assert(publicText.includes(ONBOARDING_NOTICE_TITLE), 'App must include onboarding title.')
 assert(publicText.includes(ONBOARDING_NOTICE_CLOSE_TEXT), 'App must include close button.')
 assert(publicText.includes('setShowOnboardingNotice(false)'), 'Onboarding must be closable.')
+assert(publicText.includes('onboarding-banner'), 'Onboarding must render as a non-blocking banner.')
+assert(!publicText.includes('onboarding-overlay'), 'Onboarding must not use a full-screen overlay.')
+assert(!onboardingSource.includes('aria-modal'), 'Onboarding must not block the page as a modal.')
+assert(!onboardingSource.includes('role="dialog"'), 'Onboarding must not use dialog semantics.')
 
 for (const [label, pattern] of Object.entries({
   weatherClaim: /已接入实时天气|实时天气已接入/,
